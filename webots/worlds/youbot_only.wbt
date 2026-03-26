@@ -1,0 +1,82 @@
+#VRML_SIM R2025a utf8
+
+EXTERNPROTO "https://raw.githubusercontent.com/cyberbotics/webots/R2025a/projects/objects/backgrounds/protos/TexturedBackground.proto"
+EXTERNPROTO "https://raw.githubusercontent.com/cyberbotics/webots/R2025a/projects/objects/backgrounds/protos/TexturedBackgroundLight.proto"
+EXTERNPROTO "https://raw.githubusercontent.com/cyberbotics/webots/R2025a/projects/objects/floors/protos/Floor.proto"
+EXTERNPROTO "https://raw.githubusercontent.com/cyberbotics/webots/R2025a/projects/robots/kuka/youbot/protos/Youbot.proto"
+
+WorldInfo {
+  info [
+    "Clean KUKA youBot world without extra objects."
+  ]
+  title "KUKA youBot Only"
+  basicTimeStep 16
+  dragTorqueScale 15
+  contactProperties [
+    ContactProperties {
+      material1 "InteriorWheelMat"
+      coulombFriction [
+        0, 2, 0
+      ]
+      frictionRotation -0.785398 0
+      bounce 0
+      forceDependentSlip [
+        10, 0
+      ]
+    }
+    ContactProperties {
+      material1 "ExteriorWheelMat"
+      coulombFriction [
+        0, 2, 0
+      ]
+      frictionRotation 0.785398 0
+      bounce 0
+      forceDependentSlip [
+        10, 0
+      ]
+    }
+  ]
+}
+Viewpoint {
+  orientation 0.004584234541884879 0.07284066341352129 -0.9973330549756904 2.1280836999662087
+  position 9.788568898480051 72.63448183278625 1.9437884633839841
+  follow "youBot"
+}
+TexturedBackground {
+}
+TexturedBackgroundLight {
+}
+Floor {
+  size 300 300
+}
+Youbot {
+  translation 0 0 0.102838
+  controller "youbot_web"
+  supervisor TRUE
+  bodySlot [
+    DEF FRONT_LIDAR Lidar {
+      translation 0.24 0 0.18
+      name "front_lidar"
+      horizontalResolution 181
+      fieldOfView 3.14159
+      numberOfLayers 1
+      near 0.05
+      minRange 0.08
+      maxRange 7
+      type "fixed"
+      defaultFrequency 12
+      children [
+        Shape {
+          appearance PBRAppearance {
+            baseColor 0.12 0.12 0.12
+            roughness 1
+            metalness 0
+          }
+          geometry Box {
+            size 0.05 0.04 0.04
+          }
+        }
+      ]
+    }
+  ]
+}

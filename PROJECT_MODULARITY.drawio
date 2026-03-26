@@ -1,0 +1,155 @@
+<mxfile host="app.diagrams.net" agent="Codex" version="24.7.17">
+  <diagram id="modules" name="Modules">
+    <mxGraphModel dx="1422" dy="794" grid="1" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="1600" pageHeight="900" math="0" shadow="0">
+      <root>
+        <mxCell id="0" />
+        <mxCell id="1" parent="0" />
+        <mxCell id="2" value="GPO-main modules" style="text;html=1;strokeColor=none;fillColor=none;align=left;verticalAlign=middle;fontSize=24;fontStyle=1;" vertex="1" parent="1">
+          <mxGeometry x="20" y="10" width="300" height="30" as="geometry" />
+        </mxCell>
+        <mxCell id="3" value="Frontend" style="swimlane;rounded=1;horizontal=0;startSize=30;fillColor=#eff6ff;strokeColor=#60a5fa;fontStyle=1;" vertex="1" parent="1">
+          <mxGeometry x="20" y="60" width="300" height="420" as="geometry" />
+        </mxCell>
+        <mxCell id="4" value="src/main.jsx&#xa;src/App.jsx" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#ffffff;strokeColor=#93c5fd;" vertex="1" parent="3">
+          <mxGeometry x="20" y="20" width="260" height="60" as="geometry" />
+        </mxCell>
+        <mxCell id="5" value="src/pages/Dashboard.jsx&#xa;main orchestration" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#dbeafe;strokeColor=#3b82f6;" vertex="1" parent="3">
+          <mxGeometry x="20" y="100" width="260" height="70" as="geometry" />
+        </mxCell>
+        <mxCell id="6" value="src/components/dashboard/*&#xa;PlannerCanvas&#xa;PlannerLeftSidebar&#xa;PlannerRightSidebar" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#ffffff;strokeColor=#93c5fd;" vertex="1" parent="3">
+          <mxGeometry x="20" y="190" width="260" height="90" as="geometry" />
+        </mxCell>
+        <mxCell id="7" value="src/lib/plannerModel.js&#xa;derived UI model" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#ffffff;strokeColor=#93c5fd;" vertex="1" parent="3">
+          <mxGeometry x="20" y="300" width="260" height="60" as="geometry" />
+        </mxCell>
+        <mxCell id="8" value="src/lib/zonePlanner.js&#xa;geometry + rerouting" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#ffffff;strokeColor=#93c5fd;" vertex="1" parent="3">
+          <mxGeometry x="20" y="380" width="260" height="60" as="geometry" />
+        </mxCell>
+        <mxCell id="9" value="Runtime / Bridge" style="swimlane;rounded=1;horizontal=0;startSize=30;fillColor=#f8fafc;strokeColor=#94a3b8;fontStyle=1;" vertex="1" parent="1">
+          <mxGeometry x="360" y="60" width="320" height="420" as="geometry" />
+        </mxCell>
+        <mxCell id="10" value="ws-bridge.cjs&#xa;HTTP solver API&#xa;WS telemetry and route" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#ffffff;strokeColor=#94a3b8;" vertex="1" parent="9">
+          <mxGeometry x="20" y="20" width="280" height="80" as="geometry" />
+        </mxCell>
+        <mxCell id="11" value="bridge-config.cjs&#xa;runtime ports / host" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#ffffff;strokeColor=#94a3b8;" vertex="1" parent="9">
+          <mxGeometry x="20" y="120" width="280" height="60" as="geometry" />
+        </mxCell>
+        <mxCell id="12" value="web_state/*&#xa;route.csv / route.json&#xa;limit_zones.* / robot_state.json" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#e2e8f0;strokeColor=#64748b;" vertex="1" parent="9">
+          <mxGeometry x="20" y="200" width="280" height="90" as="geometry" />
+        </mxCell>
+        <mxCell id="13" value="shared/coordinate-contract.json&#xa;common telemetry / route format" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#ecfeff;strokeColor=#22d3ee;" vertex="1" parent="9">
+          <mxGeometry x="20" y="310" width="280" height="70" as="geometry" />
+        </mxCell>
+        <mxCell id="14" value="Native Solver" style="swimlane;rounded=1;horizontal=0;startSize=30;fillColor=#fefce8;strokeColor=#eab308;fontStyle=1;" vertex="1" parent="1">
+          <mxGeometry x="720" y="60" width="300" height="220" as="geometry" />
+        </mxCell>
+        <mxCell id="15" value="native/apps/gpo_route_solver.cpp" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#ffffff;strokeColor=#facc15;" vertex="1" parent="14">
+          <mxGeometry x="20" y="20" width="260" height="60" as="geometry" />
+        </mxCell>
+        <mxCell id="16" value="native/src/*&#xa;ga_tabu.cpp&#xa;annealing.cpp&#xa;scatter.cpp&#xa;cuckoo.cpp&#xa;common.cpp" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#ffffff;strokeColor=#facc15;" vertex="1" parent="14">
+          <mxGeometry x="20" y="100" width="260" height="90" as="geometry" />
+        </mxCell>
+        <mxCell id="17" value="Webots" style="swimlane;rounded=1;horizontal=0;startSize=30;fillColor=#f0fdf4;strokeColor=#4ade80;fontStyle=1;" vertex="1" parent="1">
+          <mxGeometry x="720" y="320" width="300" height="220" as="geometry" />
+        </mxCell>
+        <mxCell id="18" value="webots/worlds/youbot_only.wbt&#xa;world + youBot + lidar" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#ffffff;strokeColor=#86efac;" vertex="1" parent="17">
+          <mxGeometry x="20" y="20" width="260" height="60" as="geometry" />
+        </mxCell>
+        <mxCell id="19" value="webots/controllers/youbot_web/youbot_web.c&#xa;route / zones / telemetry / lidar trace" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#ffffff;strokeColor=#86efac;" vertex="1" parent="17">
+          <mxGeometry x="20" y="100" width="260" height="80" as="geometry" />
+        </mxCell>
+        <mxCell id="20" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;strokeColor=#2563eb;" edge="1" parent="1" source="4" target="5">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="21" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;strokeColor=#2563eb;" edge="1" parent="1" source="5" target="6">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="22" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;strokeColor=#2563eb;" edge="1" parent="1" source="5" target="7">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="23" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;strokeColor=#2563eb;" edge="1" parent="1" source="5" target="8">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="24" value="HTTP / WS" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;strokeColor=#475569;" edge="1" parent="1" source="5" target="10">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="25" value="shared contract" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;strokeColor=#0891b2;" edge="1" parent="1" source="10" target="13">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="26" value="spawn solver" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;strokeColor=#a16207;" edge="1" parent="1" source="10" target="15">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="27" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;strokeColor=#a16207;" edge="1" parent="1" source="15" target="16">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="28" value="route / zones / robot state" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;strokeColor=#475569;" edge="1" parent="1" source="10" target="12">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="29" value="reads / writes" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;strokeColor=#16a34a;" edge="1" parent="1" source="12" target="19">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="30" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;strokeColor=#16a34a;" edge="1" parent="1" source="18" target="19">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="31" value="telemetry back to UI" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;strokeColor=#475569;" edge="1" parent="1" source="10" target="5">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+      </root>
+    </mxGraphModel>
+  </diagram>
+  <diagram id="flow" name="Key Flow">
+    <mxGraphModel dx="1422" dy="794" grid="1" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="1800" pageHeight="900" math="0" shadow="0">
+      <root>
+        <mxCell id="0f" />
+        <mxCell id="1f" parent="0f" />
+        <mxCell id="f1" value="User sets visit points and limit zones" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#dbeafe;strokeColor=#3b82f6;" vertex="1" parent="1f">
+          <mxGeometry x="30" y="140" width="180" height="70" as="geometry" />
+        </mxCell>
+        <mxCell id="f2" value="Dashboard + plannerModel" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#dbeafe;strokeColor=#3b82f6;" vertex="1" parent="1f">
+          <mxGeometry x="260" y="140" width="180" height="70" as="geometry" />
+        </mxCell>
+        <mxCell id="f3" value="routeAlgorithms -&gt; ws-bridge HTTP" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#e2e8f0;strokeColor=#64748b;" vertex="1" parent="1f">
+          <mxGeometry x="490" y="140" width="190" height="70" as="geometry" />
+        </mxCell>
+        <mxCell id="f4" value="native solver" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#fef3c7;strokeColor=#d97706;" vertex="1" parent="1f">
+          <mxGeometry x="730" y="140" width="150" height="70" as="geometry" />
+        </mxCell>
+        <mxCell id="f5" value="zonePlanner builds obstacle-aware route" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#e0f2fe;strokeColor=#0284c7;" vertex="1" parent="1f">
+          <mxGeometry x="930" y="140" width="220" height="70" as="geometry" />
+        </mxCell>
+        <mxCell id="f6" value="ws-bridge writes web_state and forwards route" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#e2e8f0;strokeColor=#64748b;" vertex="1" parent="1f">
+          <mxGeometry x="1200" y="140" width="220" height="70" as="geometry" />
+        </mxCell>
+        <mxCell id="f7" value="Webots controller drives youBot" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#dcfce7;strokeColor=#16a34a;" vertex="1" parent="1f">
+          <mxGeometry x="1470" y="140" width="200" height="70" as="geometry" />
+        </mxCell>
+        <mxCell id="f8" value="front lidar scans real obstacles" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#dcfce7;strokeColor=#16a34a;" vertex="1" parent="1f">
+          <mxGeometry x="1470" y="280" width="200" height="70" as="geometry" />
+        </mxCell>
+        <mxCell id="f9" value="robot_state.json with pose + obstacleTrace" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#dcfce7;strokeColor=#16a34a;" vertex="1" parent="1f">
+          <mxGeometry x="1200" y="280" width="220" height="70" as="geometry" />
+        </mxCell>
+        <mxCell id="f10" value="ws-bridge polls state and broadcasts telemetry" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#e2e8f0;strokeColor=#64748b;" vertex="1" parent="1f">
+          <mxGeometry x="930" y="280" width="220" height="70" as="geometry" />
+        </mxCell>
+        <mxCell id="f11" value="dashboardTelemetry + PlannerCanvas render robot and detected obstacle trace" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#dbeafe;strokeColor=#3b82f6;" vertex="1" parent="1f">
+          <mxGeometry x="610" y="280" width="270" height="70" as="geometry" />
+        </mxCell>
+        <mxCell id="f12" value="User sees updated route, robot and detected obstacles" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#dbeafe;strokeColor=#3b82f6;" vertex="1" parent="1f">
+          <mxGeometry x="300" y="280" width="260" height="70" as="geometry" />
+        </mxCell>
+        <mxCell id="ef1" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;strokeColor=#334155;endArrow=blockThin;" edge="1" parent="1f" source="f1" target="f2"><mxGeometry relative="1" as="geometry" /></mxCell>
+        <mxCell id="ef2" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;strokeColor=#334155;endArrow=blockThin;" edge="1" parent="1f" source="f2" target="f3"><mxGeometry relative="1" as="geometry" /></mxCell>
+        <mxCell id="ef3" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;strokeColor=#334155;endArrow=blockThin;" edge="1" parent="1f" source="f3" target="f4"><mxGeometry relative="1" as="geometry" /></mxCell>
+        <mxCell id="ef4" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;strokeColor=#334155;endArrow=blockThin;" edge="1" parent="1f" source="f4" target="f5"><mxGeometry relative="1" as="geometry" /></mxCell>
+        <mxCell id="ef5" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;strokeColor=#334155;endArrow=blockThin;" edge="1" parent="1f" source="f5" target="f6"><mxGeometry relative="1" as="geometry" /></mxCell>
+        <mxCell id="ef6" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;strokeColor=#334155;endArrow=blockThin;" edge="1" parent="1f" source="f6" target="f7"><mxGeometry relative="1" as="geometry" /></mxCell>
+        <mxCell id="ef7" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;strokeColor=#334155;endArrow=blockThin;" edge="1" parent="1f" source="f7" target="f8"><mxGeometry relative="1" as="geometry" /></mxCell>
+        <mxCell id="ef8" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;strokeColor=#334155;endArrow=blockThin;" edge="1" parent="1f" source="f8" target="f9"><mxGeometry relative="1" as="geometry" /></mxCell>
+        <mxCell id="ef9" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;strokeColor=#334155;endArrow=blockThin;" edge="1" parent="1f" source="f9" target="f10"><mxGeometry relative="1" as="geometry" /></mxCell>
+        <mxCell id="ef10" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;strokeColor=#334155;endArrow=blockThin;" edge="1" parent="1f" source="f10" target="f11"><mxGeometry relative="1" as="geometry" /></mxCell>
+        <mxCell id="ef11" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;strokeColor=#334155;endArrow=blockThin;" edge="1" parent="1f" source="f11" target="f12"><mxGeometry relative="1" as="geometry" /></mxCell>
+      </root>
+    </mxGraphModel>
+  </diagram>
+</mxfile>

@@ -1,0 +1,17 @@
+{
+  "version": 1,
+  "worldPlane": {
+    "axes": ["x", "y"],
+    "heightAxis": "z",
+    "units": "meters"
+  },
+  "routeCsv": {
+    "header": ["x", "y", "headingDeg"]
+  },
+  "telemetry": {
+    "messageType": "telemetry",
+    "poseKey": "pose",
+    "navigationKey": "navigation",
+    "poseFields": ["x", "y", "z", "yaw"]
+  }
+}
