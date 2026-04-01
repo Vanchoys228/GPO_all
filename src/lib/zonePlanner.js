@@ -17,16 +17,25 @@ export const DRAWING_TOP = (CANVAS_HEIGHT - DRAWING_HEIGHT) / 2;
 export const POINT_KIND_META = {
   visit: {
     key: "visit",
-    label: "РўРѕС‡РєРё РґР»СЏ РїРѕСЃРµС‰РµРЅРёСЏ",
+    label: "Точки посещения",
     shortLabel: "V",
     color: "#dc2626",
     bg: "bg-rose-50",
     border: "border-rose-200",
     text: "text-rose-700",
   },
+  charge: {
+    key: "charge",
+    label: "Станция зарядки",
+    shortLabel: "C",
+    color: "#f59e0b",
+    bg: "bg-amber-50",
+    border: "border-amber-200",
+    text: "text-amber-700",
+  },
   limit: {
     key: "limit",
-    label: "РћРіСЂР°РЅРёС‡РёРІР°СЋС‰РёР№ РєРѕРЅС‚СѓСЂ",
+    label: "Ограничивающий контур",
     shortLabel: "Z",
     color: "#2563eb",
     bg: "bg-blue-50",
@@ -35,14 +44,18 @@ export const POINT_KIND_META = {
   },
 };
 
-export const POINT_KIND_OPTIONS = [POINT_KIND_META.visit, POINT_KIND_META.limit];
+export const POINT_KIND_OPTIONS = [
+  POINT_KIND_META.visit,
+  POINT_KIND_META.charge,
+  POINT_KIND_META.limit,
+];
 
 export const POINT_TASKS = [
-  "РћР¶РёРґР°РЅРёРµ 2 СЃРµРє",
-  "РЎРєР°РЅРёСЂРѕРІР°РЅРёРµ",
-  "Р—Р°Р±СЂР°С‚СЊ РѕР±СЉРµРєС‚",
-  "РЎР±СЂРѕСЃРёС‚СЊ РѕР±СЉРµРєС‚",
-  "РЎРґРµР»Р°С‚СЊ С„РѕС‚Рѕ",
+  "Ожидание 2 сек",
+  "Сканирование",
+  "Забрать объект",
+  "Сбросить объект",
+  "Сделать фото",
 ];
 
 export const DEFAULT_POINT_TASK = POINT_TASKS[0];

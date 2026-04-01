@@ -21,6 +21,7 @@ export default function PlannerRightSidebar({
   activeLimitZoneId,
   zoneEntries,
   visitEntries,
+  chargeEntries,
   plannedVisitEntries,
   expandedPoint,
   hoveredPointIndex,
@@ -42,21 +43,15 @@ export default function PlannerRightSidebar({
   onDeletePoint,
   onUpdatePointTask,
 }) {
-  const plannedVisitLookup = new Map(
-    plannedVisitEntries.map((entry) => [entry.index, entry])
-  );
+  const plannedVisitLookup = new Map(plannedVisitEntries.map((entry) => [entry.index, entry]));
 
   return (
     <aside className="w-[330px] overflow-auto border-l border-sky-100 bg-gradient-to-b from-sky-50 via-white to-cyan-50 p-4 space-y-4 xl:w-[350px]">
       <div className={zonePanelCardCls}>
         <div className="flex items-start justify-between gap-3">
           <div>
-            <div className="text-xs uppercase tracking-[0.18em] text-sky-700">
-              Активная зона
-            </div>
-            <div className="mt-1 text-lg font-semibold text-slate-900">
-              {activeZoneName}
-            </div>
+            <div className="text-xs uppercase tracking-[0.18em] text-sky-700">Активная зона</div>
+            <div className="mt-1 text-lg font-semibold text-slate-900">{activeZoneName}</div>
           </div>
           <div className="text-right text-xs text-slate-500">
             <div>{activeZone?.closed ? "Замкнута" : "Открыта"}</div>
@@ -65,23 +60,16 @@ export default function PlannerRightSidebar({
         </div>
         <div className="mt-3 text-xs text-slate-600 space-y-1">
           <div>В открытую зону можно добавлять и двигать точки.</div>
-          <div>Замкнутая зона участвует в обходе маршрута.</div>
-          <div>
-            Если точка посещения попала внутрь, маршрут вынесет ее к ближайшей
-            безопасной позиции.
-          </div>
+          <div>Замкнутая зона участвует в расчете безопасного маршрута.</div>
+          <div>Точки внутри замкнутого контура автоматически выносятся в безопасную позицию.</div>
         </div>
       </div>
 
       <div className={zonePanelCardCls}>
         <div className="flex items-center justify-between gap-3 mb-3">
           <div>
-            <h3 className="text-sm font-semibold text-slate-900">
-              Ограничивающие зоны
-            </h3>
-            <div className="mt-1 text-xs text-slate-500">
-              Панель управления контурами и их статусами
-            </div>
+            <h3 className="text-sm font-semibold text-slate-900">Ограничивающие зоны</h3>
+            <div className="mt-1 text-xs text-slate-500">Управление контурами и их статусом</div>
           </div>
           <button
             onClick={onCreateZone}
@@ -108,17 +96,11 @@ export default function PlannerRightSidebar({
                     onClick={() => onSelectZone(zone.id)}
                   >
                     <div className="flex items-center gap-2">
-                      <span
-                        className={`inline-block w-3 h-3 rounded-full ${zone.color.badge}`}
-                      />
-                      <span className="text-sm font-semibold text-slate-900">
-                        {zone.name}
-                      </span>
+                      <span className={`inline-block w-3 h-3 rounded-full ${zone.color.badge}`} />
+                      <span className="text-sm font-semibold text-slate-900">{zone.name}</span>
                       <span
                         className={`inline-flex rounded-full px-2 py-0.5 text-[10px] font-semibold ${
-                          zone.closed
-                            ? "bg-emerald-100 text-emerald-700"
-                            : "bg-amber-100 text-amber-700"
+                          zone.closed ? "bg-emerald-100 text-emerald-700" : "bg-amber-100 text-amber-700"
                         }`}
                       >
                         {zone.closed ? "Замкнута" : "Открыта"}
@@ -126,31 +108,18 @@ export default function PlannerRightSidebar({
                     </div>
                     <div className="mt-2 grid grid-cols-2 gap-2 text-xs text-slate-500">
                       <div>Точек: {zone.points.length}</div>
-                      <div>
-                        {zone.points.length >= 3
-                          ? "Контур готов"
-                          : "Нужно 3 точки"}
-                      </div>
+                      <div>{zone.points.length >= 3 ? "Контур готов" : "Нужно 3 точки"}</div>
                     </div>
                   </button>
                 </div>
                 <div className="mt-3 flex flex-wrap gap-2">
-                  <button
-                    onClick={() => onToggleZoneClosed(zone.id)}
-                    className={zonePrimaryButtonCls}
-                  >
+                  <button onClick={() => onToggleZoneClosed(zone.id)} className={zonePrimaryButtonCls}>
                     {zone.closed ? "Открыть" : "Замкнуть"}
                   </button>
-                  <button
-                    onClick={() => onClearZone(zone.id)}
-                    className={zoneNeutralButtonCls}
-                  >
+                  <button onClick={() => onClearZone(zone.id)} className={zoneNeutralButtonCls}>
                     Очистить
                   </button>
-                  <button
-                    onClick={() => onRemoveZone(zone.id)}
-                    className={zoneDangerButtonCls}
-                  >
+                  <button onClick={() => onRemoveZone(zone.id)} className={zoneDangerButtonCls}>
                     Удалить
                   </button>
                 </div>
@@ -162,7 +131,7 @@ export default function PlannerRightSidebar({
 
       <div className={zonePanelCardCls}>
         <div className="flex items-center justify-between gap-3 mb-3">
-          <h3 className="text-sm font-semibold">Точки для посещения</h3>
+          <h3 className="text-sm font-semibold">Точки посещения</h3>
           <span className="text-xs text-stone-500">{visitEntries.length} шт.</span>
         </div>
         <div className="space-y-2">
@@ -174,17 +143,14 @@ export default function PlannerRightSidebar({
             return (
               <div key={entry.index}>
                 <div
-                  className={`${rowCls} ${
-                    hovered ? "border-sky-300 bg-sky-50 shadow-sm" : ""
-                  }`}
+                  className={`${rowCls} ${hovered ? "border-sky-300 bg-sky-50 shadow-sm" : ""}`}
                   onClick={() => onToggleExpandedPoint(expanded ? null : entry.index)}
                   onMouseEnter={() => onHoverPoint(entry.index)}
                   onMouseLeave={() => onHoverPoint(null)}
                 >
                   <div className="min-w-0">
                     <div className="text-sm font-medium">
-                      V{entry.order} ({entry.point.x.toFixed(2)},{" "}
-                      {entry.point.y.toFixed(2)})
+                      V{entry.order} ({entry.point.x.toFixed(2)}, {entry.point.y.toFixed(2)})
                     </div>
                     <div className="inline-flex mt-1 px-2 py-0.5 rounded-full border text-[11px] bg-rose-50 border-rose-200 text-rose-700">
                       {POINT_KIND_META.visit.label}
@@ -212,8 +178,7 @@ export default function PlannerRightSidebar({
                     </div>
                     {plannedEntry?.adjusted && (
                       <div className="text-xs text-amber-700">
-                        Безопасная точка маршрута: x=
-                        {plannedEntry.plannedPoint.x.toFixed(4)}, y=
+                        Безопасная точка маршрута: x={plannedEntry.plannedPoint.x.toFixed(4)}, y=
                         {plannedEntry.plannedPoint.y.toFixed(4)}
                       </div>
                     )}
@@ -222,9 +187,7 @@ export default function PlannerRightSidebar({
                       <select
                         className={selectCls}
                         value={entry.point.task || DEFAULT_POINT_TASK}
-                        onChange={(event) =>
-                          onUpdatePointTask(entry.index, event.target.value)
-                        }
+                        onChange={(event) => onUpdatePointTask(entry.index, event.target.value)}
                       >
                         {POINT_TASKS.map((task) => (
                           <option key={task} value={task}>
@@ -239,8 +202,48 @@ export default function PlannerRightSidebar({
             );
           })}
           {!visitEntries.length && (
+            <div className="text-sm text-stone-500">Добавьте на карте точки, которые нужно посетить.</div>
+          )}
+        </div>
+      </div>
+
+      <div className={zonePanelCardCls}>
+        <div className="flex items-center justify-between gap-3 mb-3">
+          <h3 className="text-sm font-semibold">Станции зарядки</h3>
+          <span className="text-xs text-stone-500">{chargeEntries.length} шт.</span>
+        </div>
+        <div className="space-y-2">
+          {chargeEntries.map((entry) => (
+            <div
+              key={entry.index}
+              className={`${rowCls} ${
+                hoveredPointIndex === entry.index ? "border-amber-300 bg-amber-50 shadow-sm" : ""
+              }`}
+              onMouseEnter={() => onHoverPoint(entry.index)}
+              onMouseLeave={() => onHoverPoint(null)}
+            >
+              <div className="min-w-0">
+                <div className="text-sm font-medium">
+                  C{entry.order} ({entry.point.x.toFixed(2)}, {entry.point.y.toFixed(2)})
+                </div>
+                <div className="inline-flex mt-1 px-2 py-0.5 rounded-full border text-[11px] bg-amber-50 border-amber-200 text-amber-700">
+                  {POINT_KIND_META.charge.label}
+                </div>
+              </div>
+              <button
+                onClick={(event) => {
+                  event.stopPropagation();
+                  onDeletePoint(entry.index);
+                }}
+                className="flex items-center justify-center w-7 h-7 rounded-md border border-red-300 text-red-600 bg-red-50 hover:bg-red-600 hover:text-white transition"
+              >
+                x
+              </button>
+            </div>
+          ))}
+          {!chargeEntries.length && (
             <div className="text-sm text-stone-500">
-              Добавьте на карте точки, которые нужно посетить.
+              Добавьте станции зарядки, чтобы робот мог выполнять длинные маршруты.
             </div>
           )}
         </div>
@@ -263,18 +266,9 @@ export default function PlannerRightSidebar({
           </div>
         </div>
         <div className="mt-3 text-xs text-stone-500 space-y-1">
-          <div>
-            Точки посещения внутри замкнутой зоны не блокируют маршрут, а
-            автоматически выносятся наружу.
-          </div>
           <div>В обходе участвуют только замкнутые зоны.</div>
-          <div>
-            Любую точку можно перетащить мышкой по карте, чтобы быстро
-            поправить контур.
-          </div>
-          <div>
-            Если обход построить нельзя, маршрут не отправляется.
-          </div>
+          <div>Любую точку можно перетащить мышкой прямо на карте.</div>
+          <div>Если безопасный обход построить нельзя, маршрут не отправляется.</div>
         </div>
       </div>
 

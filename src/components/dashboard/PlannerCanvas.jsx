@@ -7,13 +7,11 @@ import {
   drawPlannerBackground,
   worldToCanvas,
 } from "../../lib/zonePlanner";
-import {
-  INITIAL_TELEMETRY,
-  normalizeAngle,
-} from "../../lib/dashboardTelemetry";
+import { INITIAL_TELEMETRY, normalizeAngle } from "../../lib/dashboardTelemetry";
 
 const INITIAL_DRAW_STATE = {
   visitEntries: [],
+  chargeEntries: [],
   plannedVisitEntryMap: new Map(),
   zoneEntries: [],
   optimizedRoute: [],
@@ -45,6 +43,7 @@ export default function PlannerCanvas({
   useEffect(() => {
     drawStateRef.current = {
       visitEntries: plannerModel.visitEntries,
+      chargeEntries: plannerModel.chargeEntries,
       plannedVisitEntryMap: plannerModel.plannedVisitEntryMap,
       zoneEntries: plannerModel.zoneEntries,
       optimizedRoute,
@@ -55,6 +54,7 @@ export default function PlannerCanvas({
   }, [
     hoveredPointIndex,
     optimizedRoute,
+    plannerModel.chargeEntries,
     plannerModel.plannedVisitEntryMap,
     plannerModel.routeBlocked,
     plannerModel.visitEntries,
@@ -168,16 +168,40 @@ export default function PlannerCanvas({
         ctx.stroke();
       }
 
+      state.chargeEntries.forEach((entry) => {
+        const point = worldToCanvas(entry.point.x, entry.point.y);
+        const hovered = state.hoveredPointIndex === entry.index;
+
+        if (hovered) {
+          ctx.strokeStyle = "rgba(245, 158, 11, 0.8)";
+          ctx.lineWidth = 4;
+          ctx.beginPath();
+          ctx.arc(point.x, point.y, 18, 0, Math.PI * 2);
+          ctx.stroke();
+        }
+
+        ctx.fillStyle = POINT_KIND_META.charge.color;
+        ctx.beginPath();
+        ctx.arc(point.x, point.y, 11, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.strokeStyle = "rgba(120, 53, 15, 0.7)";
+        ctx.lineWidth = 2;
+        ctx.stroke();
+
+        ctx.fillStyle = "#fff";
+        ctx.font = "700 11px 'Segoe UI', sans-serif";
+        ctx.textAlign = "center";
+        ctx.textBaseline = "middle";
+        ctx.fillText(`C${entry.order}`, point.x, point.y);
+      });
+
       state.visitEntries.forEach((entry) => {
         const plannedEntry = state.plannedVisitEntryMap.get(entry.index);
         const point = worldToCanvas(entry.point.x, entry.point.y);
         const hovered = state.hoveredPointIndex === entry.index;
 
         if (plannedEntry?.adjusted) {
-          const projected = worldToCanvas(
-            plannedEntry.plannedPoint.x,
-            plannedEntry.plannedPoint.y
-          );
+          const projected = worldToCanvas(plannedEntry.plannedPoint.x, plannedEntry.plannedPoint.y);
           ctx.setLineDash([5, 5]);
           ctx.strokeStyle = "#f59e0b";
           ctx.lineWidth = 2;
@@ -199,11 +223,7 @@ export default function PlannerCanvas({
           ctx.font = "700 11px 'Segoe UI', sans-serif";
           ctx.textAlign = "left";
           ctx.textBaseline = "bottom";
-          ctx.fillText(
-            `V${entry.order} -> S${entry.order}`,
-            projected.x + 12,
-            projected.y - 8
-          );
+          ctx.fillText(`V${entry.order} -> S${entry.order}`, projected.x + 12, projected.y - 8);
 
           if (hovered) {
             ctx.strokeStyle = "rgba(245, 158, 11, 0.9)";
@@ -251,10 +271,7 @@ export default function PlannerCanvas({
       ctx.lineWidth = 4;
       ctx.beginPath();
       ctx.moveTo(robot.x, robot.y);
-      ctx.lineTo(
-        robot.x + Math.cos(current.yaw) * 24,
-        robot.y - Math.sin(current.yaw) * 24
-      );
+      ctx.lineTo(robot.x + Math.cos(current.yaw) * 24, robot.y - Math.sin(current.yaw) * 24);
       ctx.stroke();
 
       raf = window.requestAnimationFrame(loop);

@@ -7,7 +7,7 @@ import {
 } from "./plannerModel";
 
 describe("buildPlannerModel", () => {
-  it("builds a consistent planner model for zones, visits and route checks", () => {
+  it("builds a consistent planner model for zones, visits, charging and route checks", () => {
     const limitZones = [{ ...INITIAL_ZONE, closed: true }];
     const points = [
       { kind: "limit", zoneId: INITIAL_ZONE.id, x: -1, y: -1 },
@@ -16,6 +16,7 @@ describe("buildPlannerModel", () => {
       { kind: "limit", zoneId: INITIAL_ZONE.id, x: -1, y: 1 },
       { kind: "visit", x: 0, y: 0, task: "wait" },
       { kind: "visit", x: 3, y: 0, task: "scan" },
+      { kind: "charge", x: -3, y: -2 },
     ];
     const optimizedRoute = [
       { x: -2, y: 0 },
@@ -33,13 +34,13 @@ describe("buildPlannerModel", () => {
     expect(model.zoneEntries).toHaveLength(1);
     expect(model.polygons).toHaveLength(1);
     expect(model.visitEntries).toHaveLength(2);
+    expect(model.chargeEntries).toHaveLength(1);
+    expect(model.chargePoints).toEqual([{ x: -3, y: -2 }]);
     expect(model.visitsInsideLimit).toHaveLength(1);
     expect(model.adjustedVisits).toHaveLength(1);
     expect(model.routeBlocked).toBe(true);
     expect(model.activeZoneName).toBe("Зона 1");
-    expect(model.plannedVisitEntries[0].plannedPoint).not.toEqual(
-      model.visitEntries[0].point
-    );
+    expect(model.plannedVisitEntries[0].plannedPoint).not.toEqual(model.visitEntries[0].point);
   });
 
   it("creates a live preview obstacle from the first open-zone point", () => {

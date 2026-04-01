@@ -240,11 +240,9 @@ export const ALGORITHM_OPTIONS = Object.values(ALGORITHMS).map((item) => ({
   label: item.label,
 }));
 
-export const getAlgorithmLabel = (key) =>
-  ALGORITHMS[key]?.label || ALGORITHMS.ga_tabu.label;
+export const getAlgorithmLabel = (key) => ALGORITHMS[key]?.label || ALGORITHMS.ga_tabu.label;
 
-export const getAlgorithmFields = (key) =>
-  ALGORITHMS[key]?.fields || ALGORITHMS.ga_tabu.fields;
+export const getAlgorithmFields = (key) => ALGORITHMS[key]?.fields || ALGORITHMS.ga_tabu.fields;
 
 export const getDefaultAlgorithmParams = (key) => ({
   ...(ALGORITHMS[key]?.defaults || ALGORITHMS.ga_tabu.defaults),

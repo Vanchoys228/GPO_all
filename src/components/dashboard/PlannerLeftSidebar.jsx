@@ -1,7 +1,4 @@
-import {
-  ALGORITHM_OPTIONS,
-  TASK_OPTIONS,
-} from "../../lib/routeAlgorithms";
+import { ALGORITHM_OPTIONS, TASK_OPTIONS } from "../../lib/routeAlgorithms";
 import {
   POINT_KIND_OPTIONS,
   ROUTE_CLEARANCE_MARGIN,
@@ -12,7 +9,6 @@ const cardCls =
   "rounded-2xl bg-white/95 backdrop-blur border border-stone-200 shadow-[0_18px_40px_rgba(15,23,42,0.06)] p-4";
 const inputCls =
   "w-full rounded-xl border border-stone-300 bg-white px-3 py-2 text-sm text-stone-900 shadow-sm transition focus:border-sky-400 focus:outline-none focus:ring-2 focus:ring-sky-100";
-const selectCls = inputCls;
 const subtleButtonCls =
   "rounded-xl border border-stone-300 bg-stone-100 px-3 py-2 text-sm font-semibold text-stone-800 shadow-sm transition hover:bg-stone-200 hover:border-stone-400";
 const neutralButtonCls =
@@ -22,12 +18,14 @@ export default function PlannerLeftSidebar({
   activePointKind,
   onActivePointKindChange,
   onClearVisitPoints,
+  onClearChargePoints,
   onClearLimitPoints,
   routeTaskKey,
   onRouteTaskChange,
   algorithmKey,
   onAlgorithmChange,
   status,
+  energyWarning,
   routeBlocked,
   algorithmFields,
   selectedAlgorithmParams,
@@ -39,26 +37,24 @@ export default function PlannerLeftSidebar({
   hasRoute,
   routeLength,
   visitCount,
+  chargeCount,
   zoneCount,
   polygonCount,
   adjustedVisitCount,
   activeZoneName,
+  batteryRangeMeters,
+  onBatteryRangeChange,
 }) {
   return (
     <aside className="w-[310px] overflow-auto border-r border-stone-200 bg-gradient-to-b from-stone-100 via-white to-slate-100 p-4 space-y-4 xl:w-[330px]">
       <div className={cardCls}>
         <div className="text-[11px] uppercase tracking-[0.22em] text-stone-500 mb-2">
-          Старая карта
+          Карта маршрута
         </div>
-        <h2 className="text-2xl font-bold leading-tight">
-          Маршрутный планировщик на координатной сетке
-        </h2>
+        <h2 className="text-2xl font-bold leading-tight">Планировщик маршрута робота</h2>
         <p className="mt-2 text-sm text-stone-600">
-          Карта снова нейтральная, как раньше. Можно создавать несколько
-          отдельных ограничивающих зон, замыкать их кнопкой и перетаскивать
-          точки мышкой прямо на холсте. Если точка посещения оказалась внутри
-          замкнутой зоны, маршрут автоматически переносит ее к ближайшей
-          безопасной позиции снаружи.
+          Добавляйте точки посещения, станции зарядки и ограничивающие зоны.
+          Маршрут строится с учетом запретных контуров и запаса хода.
         </p>
       </div>
 
@@ -67,9 +63,7 @@ export default function PlannerLeftSidebar({
           <h3 className="text-sm font-semibold">Легенда и обзор</h3>
           <span
             className={`inline-flex rounded-full px-2.5 py-1 text-[11px] font-semibold ${
-              routeBlocked
-                ? "bg-rose-100 text-rose-700"
-                : "bg-teal-100 text-teal-700"
+              routeBlocked ? "bg-rose-100 text-rose-700" : "bg-teal-100 text-teal-700"
             }`}
           >
             {routeBlocked ? "маршрут задевает контур" : "маршрут свободен"}
@@ -82,11 +76,15 @@ export default function PlannerLeftSidebar({
             <span>Точки посещения</span>
           </div>
           <div className="flex items-center gap-2">
+            <span className="inline-block h-3 w-3 rounded-full bg-amber-500" />
+            <span>Станции зарядки</span>
+          </div>
+          <div className="flex items-center gap-2">
             <span className="inline-block h-3 w-3 rotate-45 bg-blue-600" />
             <span>Ограничивающая зона</span>
           </div>
           <div className="flex items-center gap-2">
-            <span className="inline-block h-3 w-3 rounded-full bg-amber-500" />
+            <span className="inline-block h-3 w-3 rounded-full bg-yellow-500" />
             <span>Автосдвинутая безопасная точка</span>
           </div>
           <div className="flex items-center gap-2">
@@ -105,6 +103,10 @@ export default function PlannerLeftSidebar({
             <div className="mt-1 text-base font-semibold text-stone-900">{visitCount}</div>
           </div>
           <div className="rounded-xl border border-stone-200 bg-stone-50 px-3 py-2">
+            <div className="text-stone-500">Станций зарядки</div>
+            <div className="mt-1 text-base font-semibold text-stone-900">{chargeCount}</div>
+          </div>
+          <div className="rounded-xl border border-stone-200 bg-stone-50 px-3 py-2">
             <div className="text-stone-500">Запретных зон</div>
             <div className="mt-1 text-base font-semibold text-stone-900">{zoneCount}</div>
           </div>
@@ -112,11 +114,9 @@ export default function PlannerLeftSidebar({
             <div className="text-stone-500">Готовых контуров</div>
             <div className="mt-1 text-base font-semibold text-stone-900">{polygonCount}</div>
           </div>
-          <div className="rounded-xl border border-stone-200 bg-stone-50 px-3 py-2">
-            <div className="text-stone-500">Сдвинутых точек</div>
-            <div className="mt-1 text-base font-semibold text-stone-900">
-              {adjustedVisitCount}
-            </div>
+          <div className="rounded-xl border border-stone-200 bg-stone-50 px-3 py-2 col-span-2">
+            <div className="text-stone-500">Точек с автосдвигом</div>
+            <div className="mt-1 text-base font-semibold text-stone-900">{adjustedVisitCount}</div>
           </div>
         </div>
 
@@ -152,9 +152,12 @@ export default function PlannerLeftSidebar({
             );
           })}
         </div>
-        <div className="mt-3 grid grid-cols-2 gap-2 text-xs">
+        <div className="mt-3 grid grid-cols-1 gap-2 text-xs">
           <button onClick={onClearVisitPoints} className={subtleButtonCls}>
             Очистить маршрутные
+          </button>
+          <button onClick={onClearChargePoints} className={subtleButtonCls}>
+            Очистить зарядки
           </button>
           <button onClick={onClearLimitPoints} className={subtleButtonCls}>
             Очистить зоны
@@ -165,7 +168,7 @@ export default function PlannerLeftSidebar({
       <div className={cardCls}>
         <div className="text-xs text-stone-600 mb-1">Задача маршрута</div>
         <select
-          className={selectCls}
+          className={inputCls}
           value={routeTaskKey}
           onChange={(event) => onRouteTaskChange(event.target.value)}
         >
@@ -177,7 +180,7 @@ export default function PlannerLeftSidebar({
         </select>
         <div className="text-xs text-stone-600 mt-3 mb-1">Алгоритм</div>
         <select
-          className={selectCls}
+          className={inputCls}
           value={algorithmKey}
           onChange={(event) => onAlgorithmChange(event.target.value)}
         >
@@ -188,12 +191,32 @@ export default function PlannerLeftSidebar({
           ))}
         </select>
         {status && (
-          <div
-            className={`mt-3 text-sm ${
-              routeBlocked ? "text-rose-700" : "text-emerald-700"
-            }`}
-          >
+          <div className={`mt-3 text-sm ${routeBlocked ? "text-rose-700" : "text-emerald-700"}`}>
             {status}
+          </div>
+        )}
+      </div>
+
+      <div className={cardCls}>
+        <h3 className="text-sm font-semibold mb-3">Энергия и дальность</h3>
+        <label>
+          <div className="text-xs text-stone-600 mb-1">Запас хода (м)</div>
+          <input
+            type="number"
+            min={1}
+            max={10000}
+            step={1}
+            value={batteryRangeMeters}
+            className={inputCls}
+            onChange={(event) => onBatteryRangeChange(event.target.value)}
+          />
+        </label>
+        <div className="mt-2 text-xs text-stone-600">
+          Планировщик автоматически вставляет заезды на станции зарядки, если без этого маршрут недостижим.
+        </div>
+        {energyWarning && (
+          <div className="mt-3 rounded-xl border border-rose-200 bg-rose-50 px-3 py-2 text-xs text-rose-700">
+            {energyWarning}
           </div>
         )}
       </div>
@@ -220,17 +243,14 @@ export default function PlannerLeftSidebar({
 
       <div className={cardCls}>
         <div className="mb-3 rounded-xl border border-teal-200 bg-teal-50 px-3 py-2 text-xs text-teal-800">
-          Маршрут строится с зазором {ROUTE_CLEARANCE_MARGIN.toFixed(2)} м от
-          контура, а целевые точки держатся минимум на{" "}
-          {SAFE_POINT_MARGIN.toFixed(2)} м от запретной зоны.
+          Маршрут строится с зазором {ROUTE_CLEARANCE_MARGIN.toFixed(2)} м от контура,
+          а целевые точки держатся минимум на {SAFE_POINT_MARGIN.toFixed(2)} м от запретной зоны.
         </div>
         <button
           onClick={onOptimizeRoute}
           disabled={isOptimizing}
           className={`w-full h-11 rounded-xl text-white font-semibold transition ${
-            isOptimizing
-              ? "bg-orange-400 cursor-wait"
-              : "bg-orange-600 hover:bg-orange-700"
+            isOptimizing ? "bg-orange-400 cursor-wait" : "bg-orange-600 hover:bg-orange-700"
           }`}
         >
           {isOptimizing ? "Строим маршрут..." : "Построить маршрут"}
@@ -239,9 +259,7 @@ export default function PlannerLeftSidebar({
           onClick={onSendRoute}
           disabled={isOptimizing}
           className={`mt-2 w-full h-11 rounded-xl text-white font-semibold transition ${
-            isOptimizing
-              ? "bg-emerald-400 cursor-not-allowed"
-              : "bg-emerald-600 hover:bg-emerald-700"
+            isOptimizing ? "bg-emerald-400 cursor-not-allowed" : "bg-emerald-600 hover:bg-emerald-700"
           }`}
         >
           Отправить маршрут

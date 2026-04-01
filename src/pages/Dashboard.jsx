@@ -31,9 +31,27 @@ import {
   INITIAL_ZONE,
   rotateClosedRouteToNearestPoint,
 } from "../lib/plannerModel";
+import {
+  DEFAULT_BATTERY_RANGE_METERS,
+  planRouteWithCharging,
+} from "../lib/chargingPlanner";
 import PlannerCanvas from "../components/dashboard/PlannerCanvas";
 import PlannerLeftSidebar from "../components/dashboard/PlannerLeftSidebar";
 import PlannerRightSidebar from "../components/dashboard/PlannerRightSidebar";
+
+const ENERGY_SHORTAGE_FALLBACK =
+  "Запаса хода не хватает: добавьте станции зарядки или увеличьте запас.";
+
+const getEnergyWarningText = (routeBuildResult) => {
+  if (!routeBuildResult || routeBuildResult.ok) return "";
+  if (routeBuildResult.reason === "insufficient_range") {
+    return routeBuildResult.error || ENERGY_SHORTAGE_FALLBACK;
+  }
+  if (routeBuildResult.reason === "invalid_battery_range") {
+    return routeBuildResult.error || "Проверьте корректность запаса хода.";
+  }
+  return "";
+};
 
 const getCanvasEventPosition = (canvas, event) => {
   const rect = canvas.getBoundingClientRect();
@@ -100,6 +118,43 @@ const sendRouteChannelPayload = (routeWsRef, payload, { onSent, onError } = {}) 
   };
 };
 
+const buildRouteWithEnergyStops = ({
+  seedRoute,
+  polygons,
+  chargingStations,
+  batteryRangeMeters,
+}) => {
+  const safeRoute = buildObstacleAwareRoute(seedRoute, polygons);
+  if (!safeRoute) {
+    return {
+      ok: false,
+      reason: "obstacle_routing_failed",
+      error: "Не удалось безопасно провести маршрут через текущие ограничивающие зоны.",
+    };
+  }
+
+  const chargingResult = planRouteWithCharging({
+    route: safeRoute,
+    stations: chargingStations,
+    polygons,
+    batteryRange: batteryRangeMeters,
+  });
+  if (!chargingResult.ok) {
+    return {
+      ok: false,
+      reason: chargingResult.reason || "charging_planning_failed",
+      error: chargingResult.error || "Маршрут недостижим при текущем запасе хода.",
+    };
+  }
+
+  return {
+    ok: true,
+    route: chargingResult.route,
+    stationStopCount: chargingResult.stationStopCount || 0,
+    routeDistance: chargingResult.routeDistance,
+  };
+};
+
 export default function Dashboard() {
   const canvasRef = useRef(null);
   const routeWsRef = useRef(null);
@@ -114,6 +169,7 @@ export default function Dashboard() {
   const [routeSeed, setRouteSeed] = useState([]);
   const [optimizedRoute, setOptimizedRoute] = useState([]);
   const [status, setStatus] = useState("");
+  const [energyWarning, setEnergyWarning] = useState("");
   const [expandedPoint, setExpandedPoint] = useState(null);
   const [hoveredPointIndex, setHoveredPointIndex] = useState(null);
   const [telemetryWsUp, setTelemetryWsUp] = useState(false);
@@ -124,6 +180,9 @@ export default function Dashboard() {
   const [routeTaskKey, setRouteTaskKey] = useState("tsp");
   const [algorithmKey, setAlgorithmKey] = useState("ga_tabu");
   const [activePointKind, setActivePointKind] = useState("visit");
+  const [batteryRangeMeters, setBatteryRangeMeters] = useState(
+    DEFAULT_BATTERY_RANGE_METERS
+  );
   const [limitZones, setLimitZones] = useState([INITIAL_ZONE]);
   const [activeLimitZoneId, setActiveLimitZoneId] = useState(INITIAL_ZONE.id);
   const [nextZoneNumber, setNextZoneNumber] = useState(2);
@@ -166,6 +225,13 @@ export default function Dashboard() {
       })),
     }))
   );
+  const chargePointsRoutingText = JSON.stringify(
+    plannerModel.chargePoints.map((point) => ({
+      x: Number(point.x.toFixed(4)),
+      y: Number(point.y.toFixed(4)),
+    }))
+  );
+  const autoRouteSyncToken = `${zoneSyncPayloadText}|${chargePointsRoutingText}|${batteryRangeMeters}`;
 
   useEffect(() => {
     let closed = false;
@@ -250,24 +316,66 @@ export default function Dashboard() {
   useEffect(() => {
     if (!routeSeed.length) {
       setOptimizedRoute([]);
+      setEnergyWarning("");
       return;
     }
 
     const previewPolygons = JSON.parse(previewPolygonRoutingText);
-    const nextRoute =
-      buildObstacleAwareRoute(routeSeed, previewPolygons) ||
-      routeSeed.map((point) => ({ ...point }));
-    setOptimizedRoute(nextRoute);
-  }, [routeSeed, previewPolygonRoutingText]);
+    const chargingStations = JSON.parse(chargePointsRoutingText);
+    const nextRoute = buildRouteWithEnergyStops({
+      seedRoute: routeSeed,
+      polygons: previewPolygons,
+      chargingStations,
+      batteryRangeMeters,
+    });
+    if (!nextRoute.ok) {
+      setOptimizedRoute([]);
+      setEnergyWarning(getEnergyWarningText(nextRoute));
+      setStatus(nextRoute.error || "Маршрут недостижим при текущих ограничениях.");
+      return;
+    }
+    setEnergyWarning("");
+    setOptimizedRoute(nextRoute.route);
+  }, [
+    batteryRangeMeters,
+    chargePointsRoutingText,
+    previewPolygonRoutingText,
+    routeSeed,
+  ]);
 
   useEffect(() => {
-    if (lastAutoRouteZoneSyncRef.current === zoneSyncPayloadText) return;
-    lastAutoRouteZoneSyncRef.current = zoneSyncPayloadText;
-    if (routeSeed.length < 2) return;
+    if (lastAutoRouteZoneSyncRef.current === autoRouteSyncToken) return;
+    lastAutoRouteZoneSyncRef.current = autoRouteSyncToken;
+    if (routeSeed.length < 2) {
+      setEnergyWarning("");
+      return;
+    }
 
-    const controllerRoute = buildObstacleAwareRoute(routeSeed, plannerModel.polygons) || routeSeed;
-    const routeForController = sanitizeRouteForController(controllerRoute);
-    if (routeForController.length < 2) return;
+    const controllerPolygonsPayload = JSON.parse(zoneSyncPayloadText);
+    const controllerPolygons = (controllerPolygonsPayload?.zones || []).map((zone) => ({
+      id: zone.id,
+      name: zone.name,
+      points: Array.isArray(zone.points) ? zone.points : [],
+    }));
+    const chargingStations = JSON.parse(chargePointsRoutingText);
+
+    const rebuilt = buildRouteWithEnergyStops({
+      seedRoute: routeSeed,
+      polygons: controllerPolygons,
+      chargingStations,
+      batteryRangeMeters,
+    });
+    if (!rebuilt.ok) {
+      setEnergyWarning(getEnergyWarningText(rebuilt));
+      setStatus(rebuilt.error || "Невозможно безопасно перестроить маршрут.");
+      return;
+    }
+    setEnergyWarning("");
+    const routeForController = sanitizeRouteForController(rebuilt.route);
+    if (routeForController.length < 2) {
+      setStatus("Маршрут стал слишком коротким после перестройки под зоны.");
+      return;
+    }
 
     const payload = {
       type: "route",
@@ -281,12 +389,19 @@ export default function Dashboard() {
 
     sendRouteChannelPayload(routeWsRef, payload, {
       onSent: () => {
-        setStatus(`Маршрут обновлён после изменения ограничивающих зон (${routeForController.length} точек).`);
+        const chargingSuffix = rebuilt.stationStopCount
+          ? `, зарядок: ${rebuilt.stationStopCount}`
+          : "";
+        setStatus(
+          `Маршрут обновлён после изменения ограничивающих зон (${routeForController.length} точек${chargingSuffix}).`
+        );
       },
     });
   }, [
     algorithmKey,
-    plannerModel.polygons,
+    autoRouteSyncToken,
+    batteryRangeMeters,
+    chargePointsRoutingText,
     routeSeed,
     routeTaskKey,
     selectedAlgorithmParams,
@@ -305,20 +420,21 @@ export default function Dashboard() {
     if (dropSolvedRoute) {
       setRouteSeed([]);
       setOptimizedRoute([]);
+      setEnergyWarning("");
     }
   };
 
   const createZone = () => {
     const zone = {
       id: `zone-${nextZoneNumber}`,
-      name: `Р—РѕРЅР° ${nextZoneNumber}`,
+      name: `Зона ${nextZoneNumber}`,
       closed: false,
     };
     setLimitZones((prev) => [...prev, zone]);
     setActiveLimitZoneId(zone.id);
     setNextZoneNumber((prev) => prev + 1);
     setActivePointKind("limit");
-    setStatus(`РЎРѕР·РґР°РЅР° ${zone.name}.`);
+    setStatus(`Создана ${zone.name}.`);
   };
 
   const selectZone = (zoneId) => {
@@ -331,7 +447,7 @@ export default function Dashboard() {
     if (!target) return;
 
     if (!target.closed && target.points.length < 3) {
-      setStatus("Р§С‚РѕР±С‹ Р·Р°РјРєРЅСѓС‚СЊ Р·РѕРЅСѓ, РЅСѓР¶РЅРѕ РјРёРЅРёРјСѓРј С‚СЂРё С‚РѕС‡РєРё.");
+      setStatus("Чтобы замкнуть зону, нужно минимум три точки.");
       return;
     }
 
@@ -343,8 +459,8 @@ export default function Dashboard() {
     clearRouteState({ dropSolvedRoute: false });
     setStatus(
       target.closed
-        ? `${target.name} РѕС‚РєСЂС‹С‚Р° РґР»СЏ СЂРµРґР°РєС‚РёСЂРѕРІР°РЅРёСЏ.`
-        : `${target.name} Р·Р°РјРєРЅСѓС‚Р°.`
+        ? `${target.name} открыта для редактирования.`
+        : `${target.name} замкнута.`
     );
   };
 
@@ -356,7 +472,7 @@ export default function Dashboard() {
       prev.map((zone) => (zone.id === zoneId ? { ...zone, closed: false } : zone))
     );
     clearRouteState({ dropSolvedRoute: false });
-    setStatus("РўРѕС‡РєРё РІС‹Р±СЂР°РЅРЅРѕР№ Р·РѕРЅС‹ РѕС‡РёС‰РµРЅС‹.");
+    setStatus("Точки выбранной зоны очищены.");
   };
 
   const removeZone = (zoneId) => {
@@ -372,7 +488,7 @@ export default function Dashboard() {
     );
     if (activeLimitZoneId === zoneId) setActiveLimitZoneId(nextZones[0].id);
     clearRouteState({ dropSolvedRoute: false });
-    setStatus("РћРіСЂР°РЅРёС‡РёРІР°СЋС‰Р°СЏ Р·РѕРЅР° СѓРґР°Р»РµРЅР°.");
+    setStatus("Ограничивающая зона удалена.");
   };
 
   const updateAlgorithmParam = (field, rawValue) => {
@@ -467,13 +583,13 @@ export default function Dashboard() {
     const point = canvasToWorld(canvasPoint.x, canvasPoint.y);
 
     if (!isInsideMap(point)) {
-      setStatus("РљР»РёРєРЅРёС‚Рµ РІРЅСѓС‚СЂРё СЃС‚Р°СЂРѕР№ РєР°СЂС‚С‹.");
+      setStatus("Кликните внутри рабочей карты.");
       return;
     }
 
     if (activePointKind === "limit" && plannerModel.activeZone?.closed) {
       setStatus(
-        "Р—РѕРЅР° СѓР¶Рµ Р·Р°РјРєРЅСѓС‚Р°. РќР°Р¶РјРёС‚Рµ В«РћС‚РєСЂС‹С‚СЊВ», С‡С‚РѕР±С‹ РґРѕР±Р°РІРёС‚СЊ РёР»Рё РїРѕРїСЂР°РІРёС‚СЊ С‚РѕС‡РєРё."
+        "Зона уже замкнута. Нажмите «Открыть», чтобы добавлять или менять точки."
       );
       return;
     }
@@ -491,30 +607,38 @@ export default function Dashboard() {
     else clearRouteState({ dropSolvedRoute: false });
     setStatus(
       activePointKind === "visit"
-        ? "Р”РѕР±Р°РІР»РµРЅР° С‚РѕС‡РєР° РґР»СЏ РїРѕСЃРµС‰РµРЅРёСЏ."
-        : `Р”РѕР±Р°РІР»РµРЅР° С‚РѕС‡РєР° РІ ${plannerModel.activeZoneName}.`
+        ? "Добавлена точка посещения."
+        : activePointKind === "charge"
+          ? "Добавлена станция зарядки."
+          : `Добавлена точка в ${plannerModel.activeZoneName}.`
     );
   };
 
   const clearPoints = (kind = null) => {
     if (kind === "limit") resetZones();
     setPoints((prev) => (kind ? prev.filter((point) => point.kind !== kind) : []));
-    if (kind === "limit") clearRouteState({ dropSolvedRoute: false });
-    else clearRouteState();
+    if (kind === "visit") clearRouteState();
+    else if (kind === "limit" || kind === "charge") {
+      clearRouteState({ dropSolvedRoute: false });
+    } else {
+      clearRouteState();
+    }
     setStatus(
       kind === "visit"
-        ? "РўРѕС‡РєРё РјР°СЂС€СЂСѓС‚Р° РѕС‡РёС‰РµРЅС‹."
+        ? "Маршрутные точки очищены."
+        : kind === "charge"
+          ? "Станции зарядки очищены."
         : kind === "limit"
-          ? "Р’СЃРµ РѕРіСЂР°РЅРёС‡РёРІР°СЋС‰РёРµ Р·РѕРЅС‹ РѕС‡РёС‰РµРЅС‹."
-          : "Р’СЃРµ С‚РѕС‡РєРё РѕС‡РёС‰РµРЅС‹."
+          ? "Ограничивающие зоны очищены."
+          : "Все точки очищены."
     );
   };
 
   const deletePoint = (index) => {
     const targetPoint = points[index];
     setPoints((prev) => prev.filter((_, pointIndex) => pointIndex !== index));
-    if (targetPoint?.kind === "limit") clearRouteState({ dropSolvedRoute: false });
-    else clearRouteState();
+    if (targetPoint?.kind === "visit") clearRouteState();
+    else clearRouteState({ dropSolvedRoute: false });
   };
 
   const updatePointTask = (index, task) => {
@@ -528,24 +652,35 @@ export default function Dashboard() {
     setRouteTaskKey(nextTaskKey);
     clearRouteState();
     setStatus("");
+    setEnergyWarning("");
   };
 
   const handleAlgorithmChange = (nextAlgorithmKey) => {
     setAlgorithmKey(nextAlgorithmKey);
     clearRouteState();
     setStatus("");
+    setEnergyWarning("");
+  };
+
+  const handleBatteryRangeChange = (rawValue) => {
+    const parsed = Number(rawValue);
+    if (!Number.isFinite(parsed)) return;
+    setBatteryRangeMeters(Math.max(1, Math.min(10000, Math.round(parsed))));
+    clearRouteState({ dropSolvedRoute: false });
+    setEnergyWarning("");
   };
 
   const optimizeRoute = async () => {
     if (isOptimizing) return;
 
     if (plannerModel.visitPoints.length < 2) {
-      setStatus("Р”РѕР±Р°РІСЊС‚Рµ С…РѕС‚СЏ Р±С‹ РґРІРµ С‚РѕС‡РєРё РґР»СЏ РїРѕСЃРµС‰РµРЅРёСЏ.");
+      setStatus("Добавьте хотя бы две точки посещения.");
+      setEnergyWarning("");
       return;
     }
 
     setIsOptimizing(true);
-    setStatus("РЎС‚СЂРѕРёРј РјР°СЂС€СЂСѓС‚...");
+    setStatus("Строим маршрут...");
 
     try {
       const routeAnchor = getRouteAnchor(telemetry);
@@ -561,24 +696,42 @@ export default function Dashboard() {
         solvedRoute = rotateClosedRouteToNearestPoint(solvedRoute, routeAnchor);
       }
 
-      const routed =
-        buildObstacleAwareRoute(solvedRoute, plannerModel.previewPolygons) ||
-        solvedRoute.map((point) => ({ ...point }));
-      const blocked = routeCrossesAnyLimitPolygon(routed, plannerModel.previewPolygons);
+      const routed = buildRouteWithEnergyStops({
+        seedRoute: solvedRoute,
+        polygons: plannerModel.previewPolygons,
+        chargingStations: plannerModel.chargePoints,
+        batteryRangeMeters,
+      });
+      if (!routed.ok) {
+        setRouteSeed(solvedRoute);
+        setOptimizedRoute([]);
+        setEnergyWarning(getEnergyWarningText(routed));
+        setStatus(routed.error || "Не удалось построить достижимый маршрут.");
+        return;
+      }
+      const blocked = routeCrossesAnyLimitPolygon(
+        routed.route,
+        plannerModel.previewPolygons
+      );
       setRouteSeed(solvedRoute);
-      setOptimizedRoute(routed);
+      setOptimizedRoute(routed.route);
+      setEnergyWarning("");
+      const chargingSuffix = routed.stationStopCount
+        ? ` Добавлено заездов на зарядку: ${routed.stationStopCount}.`
+        : "";
       setStatus(
         blocked
-          ? "РњР°СЂС€СЂСѓС‚ РїРѕСЃС‚СЂРѕРµРЅ, РЅРѕ РІСЃРµ РµС‰Рµ РїРµСЂРµСЃРµРєР°РµС‚ РѕРіСЂР°РЅРёС‡РёРІР°СЋС‰РёР№ РєРѕРЅС‚СѓСЂ."
+          ? "Маршрут построен, но всё ещё пересекает ограничивающий контур."
           : plannerModel.adjustedVisits.length
-            ? `РњР°СЂС€СЂСѓС‚ РїРѕСЃС‚СЂРѕРµРЅ: ${getTaskLabel(routeTaskKey)} (${getAlgorithmLabel(algorithmKey)}). ${plannerModel.adjustedVisits.length} С‚РѕС‡РµРє Р°РІС‚РѕРјР°С‚РёС‡РµСЃРєРё СЃРґРІРёРЅСѓС‚С‹ Рє Р±Р»РёР¶Р°Р№С€РµР№ Р±РµР·РѕРїР°СЃРЅРѕР№ РїРѕР·РёС†РёРё.`
-            : `РњР°СЂС€СЂСѓС‚ РїРѕСЃС‚СЂРѕРµРЅ: ${getTaskLabel(routeTaskKey)} (${getAlgorithmLabel(algorithmKey)}).`
+            ? `Маршрут построен: ${getTaskLabel(routeTaskKey)} (${getAlgorithmLabel(algorithmKey)}). ${plannerModel.adjustedVisits.length} точек автоматически сдвинуты к безопасной позиции.${chargingSuffix}`
+            : `Маршрут построен: ${getTaskLabel(routeTaskKey)} (${getAlgorithmLabel(algorithmKey)}).${chargingSuffix}`
       );
     } catch (error) {
       setRouteSeed([]);
       setOptimizedRoute([]);
+      setEnergyWarning("");
       setStatus(
-        error instanceof Error ? error.message : "РќРµ СѓРґР°Р»РѕСЃСЊ РїРѕСЃС‚СЂРѕРёС‚СЊ РјР°СЂС€СЂСѓС‚."
+        error instanceof Error ? error.message : "Не удалось построить маршрут."
       );
     } finally {
       setIsOptimizing(false);
@@ -587,28 +740,38 @@ export default function Dashboard() {
 
   const sendRoute = () => {
     if (!optimizedRoute.length) {
-      setStatus("РЎРЅР°С‡Р°Р»Р° РїРѕСЃС‚СЂРѕР№С‚Рµ РјР°СЂС€СЂСѓС‚.");
+      setStatus("Сначала постройте маршрут.");
       return;
     }
 
     if (plannerModel.routeBlocked) {
-      setStatus("РњР°СЂС€СЂСѓС‚ РІСЃРµ РµС‰Рµ РїРµСЂРµСЃРµРєР°РµС‚ РѕРіСЂР°РЅРёС‡РёРІР°СЋС‰РёР№ РєРѕРЅС‚СѓСЂ.");
+      setStatus("Маршрут всё ещё пересекает ограничивающий контур.");
       return;
     }
 
-    const controllerRouteSource =
-      routeSeed.length > 1
-        ? buildObstacleAwareRoute(routeSeed, plannerModel.polygons) || routeSeed
-        : optimizedRoute;
-    let routeForController = sanitizeRouteForController(controllerRouteSource);
-    if (routeTaskKey === "tsp" && routeForController.length > 1) {
-      routeForController = rotateClosedRouteToNearestPoint(
-        routeForController,
-        getRouteAnchor(telemetry)
-      );
+    let controllerRouteSource = optimizedRoute;
+    let chargingStops = 0;
+    if (routeSeed.length > 1) {
+      const rebuiltForController = buildRouteWithEnergyStops({
+        seedRoute: routeSeed,
+        polygons: plannerModel.polygons,
+        chargingStations: plannerModel.chargePoints,
+        batteryRangeMeters,
+      });
+      if (!rebuiltForController.ok) {
+        setEnergyWarning(getEnergyWarningText(rebuiltForController));
+        setStatus(
+          rebuiltForController.error ||
+            "Невозможно безопасно построить маршрут через текущие зоны."
+        );
+        return;
+      }
+      controllerRouteSource = rebuiltForController.route;
+      chargingStops = rebuiltForController.stationStopCount;
     }
+    const routeForController = sanitizeRouteForController(controllerRouteSource);
     if (routeForController.length < 2) {
-      setStatus("РњР°СЂС€СЂСѓС‚ СЃР»РёС€РєРѕРј РєРѕСЂРѕС‚РєРёР№ РїРѕСЃР»Рµ РѕС‡РёСЃС‚РєРё.");
+      setStatus("Маршрут слишком короткий после очистки.");
       return;
     }
 
@@ -624,7 +787,9 @@ export default function Dashboard() {
 
     const sendPayload = (socket) => {
       socket.send(JSON.stringify(payload));
-      setStatus(`РњР°СЂС€СЂСѓС‚ РѕС‚РїСЂР°РІР»РµРЅ (${routeForController.length} С‚РѕС‡РµРє).`);
+      const chargingSuffix = chargingStops ? `, зарядок: ${chargingStops}` : "";
+      setEnergyWarning("");
+      setStatus(`Маршрут отправлен (${routeForController.length} точек${chargingSuffix}).`);
     };
 
     const ws = routeWsRef.current;
@@ -638,7 +803,7 @@ export default function Dashboard() {
       temp.onclose = () => setRouteWsUp(false);
       temp.onerror = () => {
         setRouteWsUp(false);
-        setStatus("РћС€РёР±РєР° СЃРѕРµРґРёРЅРµРЅРёСЏ СЃ РјР°СЂС€СЂСѓС‚РѕРј.");
+        setStatus("Ошибка соединения с маршрутом.");
       };
       return;
     }
@@ -652,12 +817,14 @@ export default function Dashboard() {
         activePointKind={activePointKind}
         onActivePointKindChange={setActivePointKind}
         onClearVisitPoints={() => clearPoints("visit")}
+        onClearChargePoints={() => clearPoints("charge")}
         onClearLimitPoints={() => clearPoints("limit")}
         routeTaskKey={routeTaskKey}
         onRouteTaskChange={handleRouteTaskChange}
         algorithmKey={algorithmKey}
         onAlgorithmChange={handleAlgorithmChange}
         status={status}
+        energyWarning={energyWarning}
         routeBlocked={plannerModel.routeBlocked}
         algorithmFields={algorithmFields}
         selectedAlgorithmParams={selectedAlgorithmParams}
@@ -669,10 +836,13 @@ export default function Dashboard() {
         hasRoute={optimizedRoute.length > 0}
         routeLength={plannerModel.routeLength}
         visitCount={plannerModel.visitEntries.length}
+        chargeCount={plannerModel.chargeEntries.length}
         zoneCount={plannerModel.zoneEntries.length}
         polygonCount={plannerModel.polygons.length}
         adjustedVisitCount={plannerModel.adjustedVisits.length}
         activeZoneName={plannerModel.activeZoneName}
+        batteryRangeMeters={batteryRangeMeters}
+        onBatteryRangeChange={handleBatteryRangeChange}
       />
 
       <PlannerCanvas
@@ -694,6 +864,7 @@ export default function Dashboard() {
         activeLimitZoneId={activeLimitZoneId}
         zoneEntries={plannerModel.zoneEntries}
         visitEntries={plannerModel.visitEntries}
+        chargeEntries={plannerModel.chargeEntries}
         plannedVisitEntries={plannerModel.plannedVisitEntries}
         expandedPoint={expandedPoint}
         hoveredPointIndex={hoveredPointIndex}

@@ -89,6 +89,7 @@ export const buildPlannerModel = ({
   activeLimitZoneId,
 }) => {
   const visitEntries = [];
+  const chargeEntries = [];
   const zoneEntries = buildZoneEntries(limitZones);
   const zoneLookup = new Map(zoneEntries.map((zone) => [zone.id, zone]));
 
@@ -98,6 +99,15 @@ export const buildPlannerModel = ({
         point,
         index,
         order: visitEntries.length + 1,
+      });
+      return;
+    }
+
+    if (point.kind === "charge") {
+      chargeEntries.push({
+        point,
+        index,
+        order: chargeEntries.length + 1,
       });
       return;
     }
@@ -127,14 +137,14 @@ export const buildPlannerModel = ({
 
   return {
     visitEntries,
+    chargeEntries,
     zoneEntries,
     polygons,
     previewPolygons,
     plannedVisitEntries,
-    plannedVisitEntryMap: new Map(
-      plannedVisitEntries.map((entry) => [entry.index, entry])
-    ),
+    plannedVisitEntryMap: new Map(plannedVisitEntries.map((entry) => [entry.index, entry])),
     visitPoints: plannedVisitEntries.map((entry) => entry.plannedPoint),
+    chargePoints: chargeEntries.map((entry) => ({ x: entry.point.x, y: entry.point.y })),
     visitsInsideLimit: plannedVisitEntries.filter((entry) =>
       pointInAnyPolygon(entry.point, previewPolygons)
     ),
@@ -172,8 +182,7 @@ export const rotateClosedRouteToNearestPoint = (route, anchor) => {
     }
   }
 
-  const rotated =
-    bestIndex === 0 ? cycle : cycle.slice(bestIndex).concat(cycle.slice(0, bestIndex));
+  const rotated = bestIndex === 0 ? cycle : cycle.slice(bestIndex).concat(cycle.slice(0, bestIndex));
 
   if (!closed) return rotated;
   return rotated.concat([rotated[0]]);

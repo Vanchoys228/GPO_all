@@ -26,6 +26,18 @@
 #define POSITION_TOLERANCE 0.05
 #define HEADING_TOLERANCE_RAD 0.08
 #define FINAL_ALIGN_DISTANCE 0.18
+#define TRACK_SLOW_RADIUS 0.28
+#define TURN_ENTER_ERROR_RAD 0.42
+#define TURN_EXIT_ERROR_RAD 0.12
+#define TRACK_REENTER_TURN_RAD 0.56
+#define TURN_HEADING_GAIN 3.8
+#define TRACK_HEADING_GAIN 3.0
+#define FINAL_ALIGN_GAIN 3.4
+#define TRACK_CROSS_TRACK_GAIN 1.25
+#define TRACK_LOOKAHEAD_MIN 0.16
+#define TRACK_LOOKAHEAD_MAX 0.45
+#define TRACK_MIN_LINEAR_SPEED 0.035
+#define MIN_ANGULAR_COMMAND 0.28
 #define START_X 0.0
 #define START_Z 0.0
 #define START_HEIGHT 0.102838
@@ -61,6 +73,13 @@ typedef struct {
   long long last_modified;
 } RouteData;
 
+typedef enum {
+  NAV_MODE_IDLE = 0,
+  NAV_MODE_TURN = 1,
+  NAV_MODE_TRACK = 2,
+  NAV_MODE_FINAL_ALIGN = 3,
+} NavigationMode;
+
 typedef struct {
   char id[64];
   int point_count;
@@ -92,6 +111,7 @@ static WbFieldRef root_children_field;
 static RouteData route_data = {0};
 static ZoneData zone_data = {0};
 static WbNodeRef zone_nodes[MAX_ZONE_NODES];
+static char zone_node_defs[MAX_ZONE_NODES][64];
 static int zone_node_count = 0;
 static ObstacleTracePoint obstacle_trace[MAX_OBSTACLE_TRACE_POINTS];
 static int obstacle_trace_count = 0;
@@ -103,6 +123,10 @@ static int lidar_last_hit_count = 0;
 static int current_waypoint_index = 0;
 static int step_counter = 0;
 static int route_finished = 0;
+static NavigationMode navigation_mode = NAV_MODE_IDLE;
+static int navigation_waypoint_index = -1;
+static double navigation_segment_start_x = START_X;
+static double navigation_segment_start_z = START_Z;
 static char navigation_status[64] = "booting";
 static char navigation_error[160] = "";
 static double distance_to_target = 0.0;
@@ -113,6 +137,7 @@ static const char *STATE_PATH = "..\\..\\..\\web_state\\robot_state.json";
 static const char *STATE_TEMP_PATH = "..\\..\\..\\web_state\\robot_state.tmp";
 
 static int point_near_zone(double x, double y, const LimitZone *zone, double clearance);
+static void reset_navigation_mode();
 
 static double clamp_value(double value, double min_value, double max_value) {
   if (value < min_value) return min_value;
@@ -263,6 +288,7 @@ static void reset_robot_pose() {
   wb_supervisor_field_set_sf_vec3f(translation_field, translation);
   wb_supervisor_field_set_sf_rotation(rotation_field, rotation);
   wb_supervisor_node_reset_physics(self_node);
+  reset_navigation_mode();
   stop_robot();
 }
 
@@ -302,6 +328,53 @@ static void apply_kinematic_step(
   wb_supervisor_field_set_sf_rotation(rotation_field, rotation);
   wb_supervisor_field_set_sf_vec3f(translation_field, translation);
   wb_supervisor_node_reset_physics(self_node);
+}
+
+static double sign_or_one(double value) {
+  return value < 0.0 ? -1.0 : 1.0;
+}
+
+static void reset_navigation_mode() {
+  navigation_mode = NAV_MODE_IDLE;
+  navigation_waypoint_index = -1;
+  navigation_segment_start_x = START_X;
+  navigation_segment_start_z = START_Z;
+}
+
+static void begin_navigation_for_waypoint(int waypoint_index, double current_x, double current_z) {
+  navigation_waypoint_index = waypoint_index;
+  navigation_segment_start_x = current_x;
+  navigation_segment_start_z = current_z;
+  navigation_mode = NAV_MODE_TURN;
+}
+
+static void ensure_navigation_waypoint_initialized(double current_x, double current_z) {
+  if (navigation_waypoint_index != current_waypoint_index) {
+    begin_navigation_for_waypoint(current_waypoint_index, current_x, current_z);
+  }
+}
+
+static double compute_track_heading(double x, double z, const Waypoint *target, double distance_to_target) {
+  const double segment_dx = target->x - navigation_segment_start_x;
+  const double segment_dz = target->z - navigation_segment_start_z;
+  const double segment_length = hypot2(segment_dx, segment_dz);
+  if (segment_length <= EPS) {
+    return atan2(target->z - z, target->x - x);
+  }
+
+  const double ux = segment_dx / segment_length;
+  const double uz = segment_dz / segment_length;
+  const double rel_x = x - navigation_segment_start_x;
+  const double rel_z = z - navigation_segment_start_z;
+  const double along = clamp_value(dot2(rel_x, rel_z, ux, uz), 0.0, segment_length);
+  const double lookahead = clamp_value(distance_to_target * 0.75, TRACK_LOOKAHEAD_MIN, TRACK_LOOKAHEAD_MAX);
+  const double aim_along = clamp_value(along + lookahead, 0.0, segment_length);
+  const double aim_x = navigation_segment_start_x + ux * aim_along;
+  const double aim_z = navigation_segment_start_z + uz * aim_along;
+  const double cross_track = ux * rel_z - uz * rel_x;
+  const double cross_correction = clamp_value(-cross_track * TRACK_CROSS_TRACK_GAIN, -0.40, 0.40);
+
+  return wrap_angle(atan2(aim_z - z, aim_x - x) + cross_correction);
 }
 
 static int point_near_known_dynamic_zone(double x, double y) {
@@ -441,6 +514,31 @@ static double distance_point_to_segment(
   return hypot2(px - closest_x, py - closest_y);
 }
 
+static double distance_between_segments(
+    double ax,
+    double ay,
+    double bx,
+    double by,
+    double cx,
+    double cy,
+    double dx,
+    double dy) {
+  if (segments_intersect(ax, ay, bx, by, cx, cy, dx, dy)) {
+    return 0.0;
+  }
+
+  double min_distance = distance_point_to_segment(ax, ay, cx, cy, dx, dy);
+  const double d2 = distance_point_to_segment(bx, by, cx, cy, dx, dy);
+  const double d3 = distance_point_to_segment(cx, cy, ax, ay, bx, by);
+  const double d4 = distance_point_to_segment(dx, dy, ax, ay, bx, by);
+
+  if (d2 < min_distance) min_distance = d2;
+  if (d3 < min_distance) min_distance = d3;
+  if (d4 < min_distance) min_distance = d4;
+
+  return min_distance;
+}
+
 static int point_in_zone(double x, double y, const LimitZone *zone) {
   if (!zone || zone->point_count < 3) return 0;
   int inside = 0;
@@ -495,15 +593,18 @@ static int segment_blocked_by_zones(
 
     for (int point_index = 0; point_index < zone->point_count; ++point_index) {
       const int next = (point_index + 1) % zone->point_count;
-      if (segments_intersect(
-              ax,
-              ay,
-              bx,
-              by,
-              zone->points[point_index].x,
-              zone->points[point_index].y,
-              zone->points[next].x,
-              zone->points[next].y)) {
+      const double edge_ax = zone->points[point_index].x;
+      const double edge_ay = zone->points[point_index].y;
+      const double edge_bx = zone->points[next].x;
+      const double edge_by = zone->points[next].y;
+
+      if (segments_intersect(ax, ay, bx, by, edge_ax, edge_ay, edge_bx, edge_by)) {
+        return 1;
+      }
+
+      const double distance_to_edge =
+          distance_between_segments(ax, ay, bx, by, edge_ax, edge_ay, edge_bx, edge_by);
+      if (distance_to_edge <= clearance + EPS) {
         return 1;
       }
     }
@@ -598,9 +699,14 @@ static int load_zones(ZoneData *zones) {
 
 static void remove_zone_nodes() {
   for (int i = 0; i < zone_node_count; ++i) {
-    if (zone_nodes[i]) {
-      wb_supervisor_node_remove(zone_nodes[i]);
+    if (zone_node_defs[i][0] != '\0') {
+      WbNodeRef node = wb_supervisor_node_get_from_def(zone_node_defs[i]);
+      if (node) {
+        wb_supervisor_node_remove(node);
+      }
     }
+    zone_nodes[i] = 0;
+    zone_node_defs[i][0] = '\0';
   }
   zone_node_count = 0;
 }
@@ -661,6 +767,8 @@ static void sync_zone_nodes() {
       wb_supervisor_field_import_mf_node_from_string(root_children_field, insert_at, node_string);
       if (zone_node_count < MAX_ZONE_NODES) {
         zone_nodes[zone_node_count] = wb_supervisor_node_get_from_def(def_name);
+        strncpy(zone_node_defs[zone_node_count], def_name, sizeof(zone_node_defs[zone_node_count]) - 1);
+        zone_node_defs[zone_node_count][sizeof(zone_node_defs[zone_node_count]) - 1] = '\0';
         zone_node_count += 1;
       }
     }
@@ -745,6 +853,7 @@ static void maybe_reload_route() {
     route_data = next_route;
     current_waypoint_index = 0;
     route_finished = 0;
+    reset_navigation_mode();
     set_status("route_reloaded");
   }
 }
@@ -754,13 +863,12 @@ static void wait_for_fresh_route() {
   route_data.last_modified = get_file_mtime(ROUTE_PATH);
   current_waypoint_index = 0;
   route_finished = 0;
+  reset_navigation_mode();
   distance_to_target = 0.0;
   clear_error();
   set_status("waiting_for_route");
   stop_robot();
 }
-
-static void get_segment_start(int waypoint_index, double *start_x, double *start_z);
 
 static int waypoint_reached(
     double x,
@@ -789,6 +897,7 @@ static void run_navigation_step() {
   if (route_data.count == 0) {
     set_status("waiting_for_route");
     route_finished = 0;
+    reset_navigation_mode();
     distance_to_target = 0.0;
     stop_robot();
     return;
@@ -796,21 +905,26 @@ static void run_navigation_step() {
 
   if (route_finished) {
     set_status("finished");
+    reset_navigation_mode();
     distance_to_target = 0.0;
     stop_robot();
     return;
   }
 
+  ensure_navigation_waypoint_initialized(x, z);
+
   Waypoint target = route_data.waypoints[current_waypoint_index];
-  const int is_final_waypoint = current_waypoint_index + 1 >= route_data.count;
+  int is_final_waypoint = current_waypoint_index + 1 >= route_data.count;
   if (waypoint_reached(x, z, heading, &target, is_final_waypoint)) {
     if (current_waypoint_index + 1 < route_data.count) {
       ++current_waypoint_index;
+      begin_navigation_for_waypoint(current_waypoint_index, x, z);
       target = route_data.waypoints[current_waypoint_index];
-      set_status("navigating");
+      is_final_waypoint = current_waypoint_index + 1 >= route_data.count;
     } else {
       route_finished = 1;
       set_status("finished");
+      reset_navigation_mode();
       distance_to_target = 0.0;
       stop_robot();
       return;
@@ -838,23 +952,112 @@ static void run_navigation_step() {
   const double dx = target.x - x;
   const double dz = target.z - z;
   distance_to_target = hypot2(dx, dz);
-  double target_heading = atan2(dz, dx);
-  if (is_final_waypoint && target.has_heading && distance_to_target < FINAL_ALIGN_DISTANCE) {
-    target_heading = target.heading_rad;
+  const double heading_to_target = atan2(dz, dx);
+  const double track_heading = compute_track_heading(x, z, &target, distance_to_target);
+  const double heading_error_to_target = wrap_angle(heading_to_target - heading);
+  const double heading_error_on_track = wrap_angle(track_heading - heading);
+
+  if (navigation_mode == NAV_MODE_IDLE) {
+    navigation_mode = NAV_MODE_TURN;
   }
 
-  const double heading_error = wrap_angle(target_heading - heading);
-  const double angular_speed = clamp_value(
-      heading_error * 3.0,
+  if (is_final_waypoint && target.has_heading && distance_to_target <= FINAL_ALIGN_DISTANCE) {
+    navigation_mode = NAV_MODE_FINAL_ALIGN;
+  } else if (!is_final_waypoint && navigation_mode == NAV_MODE_FINAL_ALIGN) {
+    navigation_mode = NAV_MODE_TRACK;
+  }
+
+  double linear_speed = 0.0;
+  double angular_speed = 0.0;
+
+  if (navigation_mode == NAV_MODE_FINAL_ALIGN) {
+    if (!is_final_waypoint || !target.has_heading) {
+      navigation_mode = NAV_MODE_TRACK;
+    } else if (distance_to_target > FINAL_ALIGN_DISTANCE * 1.35) {
+      navigation_mode = NAV_MODE_TURN;
+    } else {
+      const double heading_error = wrap_angle(target.heading_rad - heading);
+      angular_speed = clamp_value(
+          heading_error * FINAL_ALIGN_GAIN,
+          -KINEMATIC_ANGULAR_SPEED,
+          KINEMATIC_ANGULAR_SPEED);
+      if (fabs(heading_error) > HEADING_TOLERANCE_RAD && fabs(angular_speed) < MIN_ANGULAR_COMMAND) {
+        angular_speed = sign_or_one(heading_error) * MIN_ANGULAR_COMMAND;
+      }
+      clear_error();
+      set_status("aligning_final_heading");
+      apply_kinematic_step(x, z, heading, 0.0, angular_speed);
+      return;
+    }
+  }
+
+  if (navigation_mode == NAV_MODE_TRACK &&
+      fabs(heading_error_on_track) > TRACK_REENTER_TURN_RAD &&
+      distance_to_target > TRACK_SLOW_RADIUS) {
+    navigation_mode = NAV_MODE_TURN;
+  }
+
+  if (navigation_mode == NAV_MODE_TURN) {
+    if (fabs(heading_error_to_target) <= TURN_EXIT_ERROR_RAD ||
+        distance_to_target <= TRACK_SLOW_RADIUS * 0.5) {
+      navigation_mode = NAV_MODE_TRACK;
+    } else {
+      angular_speed = clamp_value(
+          heading_error_to_target * TURN_HEADING_GAIN,
+          -KINEMATIC_ANGULAR_SPEED,
+          KINEMATIC_ANGULAR_SPEED);
+      if (fabs(heading_error_to_target) > HEADING_TOLERANCE_RAD &&
+          fabs(angular_speed) < MIN_ANGULAR_COMMAND) {
+        angular_speed = sign_or_one(heading_error_to_target) * MIN_ANGULAR_COMMAND;
+      }
+      clear_error();
+      set_status("turning_to_path");
+      apply_kinematic_step(x, z, heading, 0.0, angular_speed);
+      return;
+    }
+  }
+
+  const double updated_track_heading = compute_track_heading(x, z, &target, distance_to_target);
+  const double updated_heading_error = wrap_angle(updated_track_heading - heading);
+
+  if (fabs(updated_heading_error) > TRACK_REENTER_TURN_RAD &&
+      distance_to_target > TRACK_SLOW_RADIUS) {
+    navigation_mode = NAV_MODE_TURN;
+    angular_speed = clamp_value(
+        updated_heading_error * TURN_HEADING_GAIN,
+        -KINEMATIC_ANGULAR_SPEED,
+        KINEMATIC_ANGULAR_SPEED);
+    if (fabs(angular_speed) < MIN_ANGULAR_COMMAND) {
+      angular_speed = sign_or_one(updated_heading_error) * MIN_ANGULAR_COMMAND;
+    }
+    clear_error();
+    set_status("turning_to_path");
+    apply_kinematic_step(x, z, heading, 0.0, angular_speed);
+    return;
+  }
+
+  angular_speed = clamp_value(
+      updated_heading_error * TRACK_HEADING_GAIN,
       -KINEMATIC_ANGULAR_SPEED,
       KINEMATIC_ANGULAR_SPEED);
-  double linear_speed = 0.0;
-  if (fabs(heading_error) < 0.35) {
-    linear_speed = clamp_value(distance_to_target * 1.6, 0.0, KINEMATIC_LINEAR_SPEED);
+
+  double base_speed = clamp_value(distance_to_target * 1.1, TRACK_MIN_LINEAR_SPEED, KINEMATIC_LINEAR_SPEED);
+  if (distance_to_target < TRACK_SLOW_RADIUS) {
+    base_speed = clamp_value(distance_to_target * 0.95, TRACK_MIN_LINEAR_SPEED, 0.14);
+  }
+
+  double heading_scale = clamp_value(1.0 - fabs(updated_heading_error) / 0.85, 0.22, 1.0);
+  if (fabs(updated_heading_error) > TURN_ENTER_ERROR_RAD) {
+    heading_scale = fmin(heading_scale, 0.35);
+  }
+
+  linear_speed = base_speed * heading_scale;
+  if (distance_to_target <= POSITION_TOLERANCE * 1.4) {
+    linear_speed = fmin(linear_speed, 0.05);
   }
 
   clear_error();
-  set_status("navigating");
+  set_status("tracking_path");
   apply_kinematic_step(x, z, heading, linear_speed, angular_speed);
 }
 
