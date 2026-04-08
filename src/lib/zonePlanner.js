@@ -1,4 +1,6 @@
 ﻿export const CANVAS_WIDTH = 1180;
+import { SURFACE_ZONE_PRESETS, getSurfaceProfileByKey } from "./energyModel";
+
 export const CANVAS_HEIGHT = 920;
 export const MAP_WORLD_WIDTH = 44;
 export const MAP_WORLD_HEIGHT = 34;
@@ -49,6 +51,8 @@ export const POINT_KIND_OPTIONS = [
   POINT_KIND_META.charge,
   POINT_KIND_META.limit,
 ];
+
+export const DEFAULT_SURFACE_ZONES = SURFACE_ZONE_PRESETS;
 
 export const POINT_TASKS = [
   "Ожидание 2 сек",
@@ -598,7 +602,43 @@ export const drawDiamond = (ctx, x, y, radius) => {
   ctx.closePath();
 };
 
-export const drawPlannerBackground = (ctx) => {
+const drawSurfaceZones = (ctx, surfaceZones = DEFAULT_SURFACE_ZONES) => {
+  for (const zone of surfaceZones || []) {
+    if (!Array.isArray(zone?.points) || zone.points.length < 3) continue;
+    const profile = getSurfaceProfileByKey(zone.surfaceKey);
+
+    ctx.beginPath();
+    zone.points.forEach((point, index) => {
+      const canvasPoint = worldToCanvas(point.x, point.y);
+      if (index === 0) ctx.moveTo(canvasPoint.x, canvasPoint.y);
+      else ctx.lineTo(canvasPoint.x, canvasPoint.y);
+    });
+    ctx.closePath();
+    ctx.fillStyle = profile.fill;
+    ctx.fill();
+    ctx.strokeStyle = profile.stroke;
+    ctx.lineWidth = 1.2;
+    ctx.stroke();
+
+    const center = zone.points.reduce(
+      (acc, point) => ({
+        x: acc.x + point.x,
+        y: acc.y + point.y,
+      }),
+      { x: 0, y: 0 }
+    );
+    center.x /= zone.points.length;
+    center.y /= zone.points.length;
+    const centerCanvas = worldToCanvas(center.x, center.y);
+    ctx.fillStyle = "rgba(30, 41, 59, 0.68)";
+    ctx.font = "600 10px 'Segoe UI', sans-serif";
+    ctx.textAlign = "center";
+    ctx.textBaseline = "middle";
+    ctx.fillText(profile.label, centerCanvas.x, centerCanvas.y);
+  }
+};
+
+export const drawPlannerBackground = (ctx, surfaceZones = DEFAULT_SURFACE_ZONES) => {
   const gradient = ctx.createLinearGradient(0, 0, CANVAS_WIDTH, CANVAS_HEIGHT);
   gradient.addColorStop(0, "#fafafa");
   gradient.addColorStop(1, "#e5e7eb");
@@ -610,6 +650,7 @@ export const drawPlannerBackground = (ctx) => {
   ctx.strokeStyle = "#0f172a";
   ctx.lineWidth = 2;
   ctx.strokeRect(DRAWING_LEFT, DRAWING_TOP, DRAWING_WIDTH, DRAWING_HEIGHT);
+  drawSurfaceZones(ctx, surfaceZones);
 
   ctx.strokeStyle = "rgba(148, 163, 184, 0.18)";
   ctx.lineWidth = 1;
@@ -667,7 +708,9 @@ export const drawPlannerBackground = (ctx) => {
 
   ctx.fillStyle = "#334155";
   ctx.font = "600 12px 'Segoe UI', sans-serif";
+  ctx.textAlign = "left";
+  ctx.textBaseline = "alphabetic";
   ctx.fillText("Y", verticalAxisTop.x + 8, verticalAxisTop.y + 18);
   ctx.fillText("X", horizontalAxisRight.x - 18, horizontalAxisRight.y - 8);
-  ctx.fillText("Neutral routing grid", DRAWING_LEFT + 14, DRAWING_TOP - 14);
+  ctx.fillText("Routing grid with surface map", DRAWING_LEFT + 14, DRAWING_TOP - 14);
 };

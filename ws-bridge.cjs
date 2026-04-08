@@ -26,6 +26,7 @@ const ROUTE_CSV_PATH = path.join(WEB_STATE_DIR, "route.csv");
 const LIMIT_ZONES_JSON_PATH = path.join(WEB_STATE_DIR, "limit_zones.json");
 const LIMIT_ZONES_TXT_PATH = path.join(WEB_STATE_DIR, "limit_zones.txt");
 const ROBOT_STATE_PATH = path.join(WEB_STATE_DIR, "robot_state.json");
+const MOTION_PROFILE_PATH = path.join(WEB_STATE_DIR, "motion_profile.txt");
 const ROUTE_CSV_HEADER = coordinateContract.routeCsv.header.join(",");
 const TELEMETRY_MESSAGE_TYPE = coordinateContract.telemetry.messageType;
 const TELEMETRY_POSE_KEY = coordinateContract.telemetry.poseKey;
@@ -60,6 +61,12 @@ const DEFAULT_CUCKOO_PARAMS = {
   max_iterations: 200,
   alpha: 0.12,
   beta: 1.5,
+};
+
+const DEFAULT_MOTION_PROFILE = {
+  cruiseSpeedMps: 0.22,
+  payloadKg: 0,
+  batteryRange: 100,
 };
 
 const clamp = (value, min, max) => Math.max(min, Math.min(value, max));
@@ -222,6 +229,27 @@ const safeJsonParse = (text) => {
   }
 };
 
+const sanitizeMotionProfile = (motion) => {
+  const profile = motion || {};
+  return {
+    cruiseSpeedMps: clamp(
+      normalizeNumber(profile.cruiseSpeedMps, DEFAULT_MOTION_PROFILE.cruiseSpeedMps),
+      0.05,
+      0.8
+    ),
+    payloadKg: clamp(
+      normalizeNumber(profile.payloadKg, DEFAULT_MOTION_PROFILE.payloadKg),
+      0,
+      500
+    ),
+    batteryRange: clamp(
+      normalizeNumber(profile.batteryRange, DEFAULT_MOTION_PROFILE.batteryRange),
+      1,
+      100000
+    ),
+  };
+};
+
 const writeRouteArtifacts = async (payload) => {
   await ensureWebStateDir();
 
@@ -229,6 +257,7 @@ const writeRouteArtifacts = async (payload) => {
   const task = resolveTaskKey(payload?.algorithm?.task);
   const algorithmKey = resolveAlgorithmKey(payload?.algorithm?.key);
   const params = payload?.algorithm?.params || {};
+  const motionProfile = sanitizeMotionProfile(payload?.motion);
 
   const routeJson = {
     type: "route",
@@ -239,6 +268,7 @@ const writeRouteArtifacts = async (payload) => {
       key: algorithmKey,
       params,
     },
+    motion: motionProfile,
     route,
   };
 
@@ -254,10 +284,16 @@ const writeRouteArtifacts = async (payload) => {
     );
     csvLines.push(`${point.x},${point.y},${headingDeg}`);
   }
+  const motionLines = [
+    `cruise_speed_mps ${motionProfile.cruiseSpeedMps}`,
+    `payload_kg ${motionProfile.payloadKg}`,
+    `battery_range ${motionProfile.batteryRange}`,
+  ];
 
   await Promise.all([
     fsp.writeFile(ROUTE_JSON_PATH, JSON.stringify(routeJson, null, 2)),
     fsp.writeFile(ROUTE_CSV_PATH, `${csvLines.join("\n")}\n`),
+    fsp.writeFile(MOTION_PROFILE_PATH, `${motionLines.join("\n")}\n`),
   ]);
 };
 
@@ -301,8 +337,16 @@ const normalizeFileTelemetry = (raw) => {
         .map((point) => ({
           x: Number(point?.x),
           y: Number(point?.y),
+          confidence: Number(point?.confidence),
         }))
         .filter((point) => Number.isFinite(point.x) && Number.isFinite(point.y))
+        .map((point) => ({
+          x: point.x,
+          y: point.y,
+          confidence: Number.isFinite(point.confidence)
+            ? clamp(point.confidence, 0, 1)
+            : 1,
+        }))
     : [];
 
   return {

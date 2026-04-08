@@ -1,4 +1,5 @@
 import { buildObstacleAwareRoute, dist } from "./zonePlanner";
+import { DEFAULT_ENERGY_OPTIONS, estimateRouteEnergy } from "./energyModel";
 
 export const DEFAULT_BATTERY_RANGE_METERS = 100;
 const EPS = 1e-6;
@@ -8,6 +9,7 @@ const FRONTIER_LIMIT = 28;
 const POINT_KEY_DIGITS = 4;
 const STATION_DETOUR_WEIGHT = 0.85;
 const STATION_EXTRA_PATH_WEIGHT = 0.55;
+const ENERGY_SCORE_WEIGHT = 0.22;
 
 const toPoint = (point) => ({
   x: Number(point?.x),
@@ -154,6 +156,8 @@ const buildLegGraph = ({
   stations,
   polygons,
   batteryRange,
+  surfaceZones,
+  energyOptions,
   segmentCache,
 }) => {
   const nodes = [copyPoint(start), copyPoint(end), ...stations.map(copyPoint)];
@@ -166,11 +170,19 @@ const buildLegGraph = ({
 
       const segment = getSafeSegment(nodes[from], nodes[to], polygons, segmentCache);
       if (!segment) continue;
-      if (segment.distance > batteryRange + EPS) continue;
+
+      const metrics = estimateRouteEnergy(segment.route, {
+        surfaceZones,
+        ...energyOptions,
+      });
+      const energy = metrics.totalEnergy;
+      if (!Number.isFinite(energy)) continue;
+      if (energy > batteryRange + EPS) continue;
 
       adjacency[from].push({
         to,
         distance: segment.distance,
+        energy,
         route: segment.route,
       });
     }
@@ -211,6 +223,8 @@ const findLegFrontier = ({
   stations,
   polygons,
   batteryRange,
+  surfaceZones,
+  energyOptions,
   segmentCache,
 }) => {
   const graph = buildLegGraph({
@@ -219,6 +233,8 @@ const findLegFrontier = ({
     stations,
     polygons,
     batteryRange,
+    surfaceZones,
+    energyOptions,
     segmentCache,
   });
   const { nodes, adjacency, isStationNode } = graph;
@@ -249,6 +265,7 @@ const findLegFrontier = ({
     point: nodes[0],
     cost: 0,
     distance: 0,
+    energy: 0,
     fuel: startFuel,
     parent: -1,
     edgeRoute: null,
@@ -273,10 +290,10 @@ const findLegFrontier = ({
     const label = labels[labelIndex];
 
     for (const edge of adjacency[label.node]) {
-      if (edge.distance > label.fuel + FUEL_EPS) continue;
+      if (edge.energy > label.fuel + FUEL_EPS) continue;
 
       const node = edge.to;
-      const rawFuel = label.fuel - edge.distance;
+      const rawFuel = label.fuel - edge.energy;
       if (rawFuel < -FUEL_EPS) continue;
 
       const stationPoint = nodes[node];
@@ -294,8 +311,9 @@ const findLegFrontier = ({
       enqueueLabel({
         node,
         point: stationPoint,
-        cost: label.cost + edge.distance + stationDetourPenalty,
+        cost: label.cost + edge.distance + edge.energy * ENERGY_SCORE_WEIGHT + stationDetourPenalty,
         distance: label.distance + edge.distance,
+        energy: label.energy + edge.energy,
         fuel: Math.max(0, fuel),
         parent: labelIndex,
         edgeRoute: edge.route,
@@ -309,11 +327,13 @@ const findLegFrontier = ({
       index,
       cost: labels[index].cost,
       distance: labels[index].distance,
+      energy: labels[index].energy,
       fuel: labels[index].fuel,
     }))
     .sort((left, right) => {
       if (left.cost !== right.cost) return left.cost - right.cost;
       if (left.distance !== right.distance) return left.distance - right.distance;
+      if (left.energy !== right.energy) return left.energy - right.energy;
       return right.fuel - left.fuel;
     });
 
@@ -322,6 +342,7 @@ const findLegFrontier = ({
     return {
       score: entry.cost,
       distance: entry.distance,
+      energy: entry.energy,
       fuelEnd: entry.fuel,
       route: reconstructed.route,
       stationStops: reconstructed.stationStops,
@@ -333,14 +354,21 @@ export const planRouteWithCharging = ({
   route,
   stations = [],
   polygons = [],
+  surfaceZones = [],
+  energyOptions = DEFAULT_ENERGY_OPTIONS,
   batteryRange = DEFAULT_BATTERY_RANGE_METERS,
 }) => {
   const mandatory = normalizeMandatoryRoute(route);
   if (mandatory.length < 2) {
+    const metrics = estimateRouteEnergy(mandatory, {
+      surfaceZones,
+      ...energyOptions,
+    });
     return {
       ok: true,
       route: mandatory,
       routeDistance: polylineLength(mandatory),
+      routeEnergy: metrics.totalEnergy,
       stationStopCount: 0,
     };
   }
@@ -361,6 +389,7 @@ export const planRouteWithCharging = ({
     {
       cost: 0,
       distance: 0,
+      energySpent: 0,
       fuel: normalizedBatteryRange,
       route: [copyPoint(mandatory[0])],
       stationStops: 0,
@@ -380,6 +409,8 @@ export const planRouteWithCharging = ({
         stations: normalizedStations,
         polygons,
         batteryRange: normalizedBatteryRange,
+        surfaceZones,
+        energyOptions,
         segmentCache,
       });
 
@@ -387,6 +418,7 @@ export const planRouteWithCharging = ({
         nextFrontier.push({
           cost: label.cost + option.score,
           distance: label.distance + option.distance,
+          energySpent: label.energySpent + option.energy,
           fuel: option.fuelEnd,
           route: mergeRoute(label.route, option.route),
           stationStops: label.stationStops + option.stationStops,
@@ -409,16 +441,25 @@ export const planRouteWithCharging = ({
   const best = frontier.sort((left, right) => {
     if (left.cost !== right.cost) return left.cost - right.cost;
     if (left.distance !== right.distance) return left.distance - right.distance;
+    if (left.energySpent !== right.energySpent) return left.energySpent - right.energySpent;
     if (left.stationStops !== right.stationStops) return left.stationStops - right.stationStops;
     if (left.fuel !== right.fuel) return right.fuel - left.fuel;
     return 0;
   })[0];
 
   const normalizedRoute = dedupeConsecutiveRoute(best.route);
+  const routeMetrics = estimateRouteEnergy(normalizedRoute, {
+    surfaceZones,
+    ...energyOptions,
+  });
   return {
     ok: true,
     route: normalizedRoute,
     routeDistance: polylineLength(normalizedRoute),
+    routeEnergy: routeMetrics.totalEnergy,
+    estimatedTimeSec: routeMetrics.estimatedTimeSec,
+    limitingMaxSpeedMps: routeMetrics.limitingMaxSpeedMps,
+    averageSlipRisk: routeMetrics.averageSlipRisk,
     stationStopCount: best.stationStops,
     batteryRange: normalizedBatteryRange,
   };

@@ -21,8 +21,16 @@
 
 #define TIME_STEP 16
 #define PI 3.14159265358979323846
-#define KINEMATIC_LINEAR_SPEED 0.22
+#define KINEMATIC_LINEAR_SPEED 0.45
 #define KINEMATIC_ANGULAR_SPEED 1.6
+#define DEFAULT_CRUISE_SPEED_MPS 0.22
+#define MIN_CRUISE_SPEED_MPS 0.05
+#define MAX_CRUISE_SPEED_MPS 0.8
+#define DEFAULT_PAYLOAD_KG 0.0
+#define MAX_PAYLOAD_KG 500.0
+#define DEFAULT_BATTERY_RANGE_UNITS 100.0
+#define MIN_BATTERY_RANGE_UNITS 1.0
+#define MAX_BATTERY_RANGE_UNITS 100000.0
 #define POSITION_TOLERANCE 0.05
 #define HEADING_TOLERANCE_RAD 0.08
 #define FINAL_ALIGN_DISTANCE 0.18
@@ -43,18 +51,24 @@
 #define START_HEIGHT 0.102838
 #define MAX_WAYPOINTS 256
 #define ROUTE_RELOAD_INTERVAL 20
+#define MOTION_RELOAD_INTERVAL 20
 #define ZONE_RELOAD_INTERVAL 10
 #define MAX_ZONES 32
 #define MAX_ZONE_POINTS 48
 #define MAX_ZONE_NODES 512
-#define MAX_OBSTACLE_TRACE_POINTS 768
+#define MAX_OBSTACLE_TRACE_POINTS 520
 #define WALL_THICKNESS 0.08
 #define WALL_HEIGHT 0.45
 #define ZONE_CLEARANCE 0.32
-#define LIDAR_SAMPLE_STRIDE 3
-#define LIDAR_TRACE_SPACING 0.2
+#define LIDAR_SAMPLE_STRIDE 2
+#define LIDAR_TRACE_SPACING 0.1
 #define LIDAR_MIN_TRACE_RANGE 0.12
-#define LIDAR_MAX_TRACE_RANGE 6.0
+#define LIDAR_MAX_TRACE_RANGE 3.0
+#define LIDAR_RANGE_JUMP_TOLERANCE 0.55
+#define LIDAR_NEAR_ROBOT_IGNORE_RADIUS 0.25
+#define LIDAR_TRACE_TTL_SECONDS 6.0
+#define LIDAR_TRACE_MIN_CONFIDENCE 0.0
+#define LIDAR_SNAP_STEP 0.03
 #define LIDAR_LOCAL_X 0.24
 #define LIDAR_LOCAL_Y 0.0
 #define EPS 1e-9
@@ -97,6 +111,8 @@ typedef struct {
 typedef struct {
   double x;
   double y;
+  double last_seen_time;
+  int hit_count;
 } ObstacleTracePoint;
 
 static WbDeviceTag wheels[4];
@@ -130,14 +146,23 @@ static double navigation_segment_start_z = START_Z;
 static char navigation_status[64] = "booting";
 static char navigation_error[160] = "";
 static double distance_to_target = 0.0;
+static double configured_cruise_speed_mps = DEFAULT_CRUISE_SPEED_MPS;
+static double configured_payload_kg = DEFAULT_PAYLOAD_KG;
+static double configured_battery_range_units = DEFAULT_BATTERY_RANGE_UNITS;
+static double runtime_linear_speed_limit = DEFAULT_CRUISE_SPEED_MPS;
+static double runtime_angular_speed_limit = KINEMATIC_ANGULAR_SPEED;
+static double runtime_battery_speed_factor = 1.0;
+static long long motion_profile_last_modified = -1;
 
 static const char *ROUTE_PATH = "..\\..\\..\\web_state\\route.csv";
 static const char *ZONE_PATH = "..\\..\\..\\web_state\\limit_zones.txt";
 static const char *STATE_PATH = "..\\..\\..\\web_state\\robot_state.json";
 static const char *STATE_TEMP_PATH = "..\\..\\..\\web_state\\robot_state.tmp";
+static const char *MOTION_PROFILE_PATH = "..\\..\\..\\web_state\\motion_profile.txt";
 
 static int point_near_zone(double x, double y, const LimitZone *zone, double clearance);
 static void reset_navigation_mode();
+static void set_status(const char *status);
 
 static double clamp_value(double value, double min_value, double max_value) {
   if (value < min_value) return min_value;
@@ -167,6 +192,78 @@ static long long get_file_mtime(const char *path) {
 #else
   return (long long)file_stat.st_mtime;
 #endif
+}
+
+static void apply_motion_profile() {
+  configured_cruise_speed_mps = clamp_value(
+      configured_cruise_speed_mps,
+      MIN_CRUISE_SPEED_MPS,
+      MAX_CRUISE_SPEED_MPS);
+  configured_payload_kg = clamp_value(configured_payload_kg, 0.0, MAX_PAYLOAD_KG);
+  configured_battery_range_units = clamp_value(
+      configured_battery_range_units,
+      MIN_BATTERY_RANGE_UNITS,
+      MAX_BATTERY_RANGE_UNITS);
+
+  // Payload emulation: the heavier the load, the lower achievable linear/turn speed.
+  const double payload_factor =
+      clamp_value(1.0 - configured_payload_kg * 0.0011, 0.55, 1.0);
+  // Low battery mode: when remaining range is lower than baseline 100 units,
+  // the controller becomes more conservative with speed to reduce energy usage.
+  const double battery_ratio = configured_battery_range_units / DEFAULT_BATTERY_RANGE_UNITS;
+  runtime_battery_speed_factor = clamp_value(battery_ratio, 0.6, 1.0);
+
+  runtime_linear_speed_limit = clamp_value(
+      configured_cruise_speed_mps * payload_factor * runtime_battery_speed_factor,
+      TRACK_MIN_LINEAR_SPEED,
+      KINEMATIC_LINEAR_SPEED);
+  runtime_angular_speed_limit = clamp_value(
+      KINEMATIC_ANGULAR_SPEED *
+          (0.72 + 0.28 * payload_factor) *
+          (0.84 + 0.16 * runtime_battery_speed_factor),
+      0.75,
+      KINEMATIC_ANGULAR_SPEED);
+}
+
+static int load_motion_profile() {
+  FILE *file = fopen(MOTION_PROFILE_PATH, "r");
+  if (!file) return 1;
+
+  double cruise_speed = configured_cruise_speed_mps;
+  double payload_kg = configured_payload_kg;
+  double battery_range = configured_battery_range_units;
+  char key[64];
+  double value = 0.0;
+
+  while (fscanf(file, "%63s %lf", key, &value) == 2) {
+    if (strcmp(key, "cruise_speed_mps") == 0) {
+      cruise_speed = value;
+    } else if (strcmp(key, "payload_kg") == 0) {
+      payload_kg = value;
+    } else if (strcmp(key, "battery_range") == 0) {
+      battery_range = value;
+    }
+  }
+
+  fclose(file);
+  configured_cruise_speed_mps = cruise_speed;
+  configured_payload_kg = payload_kg;
+  configured_battery_range_units = battery_range;
+  apply_motion_profile();
+  return 1;
+}
+
+static void maybe_reload_motion_profile() {
+  if ((step_counter % MOTION_RELOAD_INTERVAL) != 0) return;
+
+  const long long mtime = get_file_mtime(MOTION_PROFILE_PATH);
+  if (mtime < 0) return;
+  if (mtime == motion_profile_last_modified) return;
+
+  if (load_motion_profile()) {
+    motion_profile_last_modified = mtime;
+    set_status("motion_profile_reloaded");
+  }
 }
 
 static int replace_file(const char *from_path, const char *to_path) {
@@ -309,13 +406,13 @@ static void apply_kinematic_step(
   const double dt = (double)TIME_STEP / 1000.0;
   const double heading_step = clamp_value(
       angular_speed * dt,
-      -KINEMATIC_ANGULAR_SPEED * dt,
-      KINEMATIC_ANGULAR_SPEED * dt);
+      -runtime_angular_speed_limit * dt,
+      runtime_angular_speed_limit * dt);
   const double next_heading = wrap_angle(heading + heading_step);
   const double step_distance = clamp_value(
       linear_speed * dt,
-      -KINEMATIC_LINEAR_SPEED * dt,
-      KINEMATIC_LINEAR_SPEED * dt);
+      -runtime_linear_speed_limit * dt,
+      runtime_linear_speed_limit * dt);
   const double move_heading = heading + heading_step * 0.5;
 
   const double translation[3] = {
@@ -387,26 +484,111 @@ static int point_near_known_dynamic_zone(double x, double y) {
   return 0;
 }
 
-static void append_obstacle_trace_point(double x, double y) {
+static void prune_obstacle_trace(double now_time) {
+  if (obstacle_trace_count <= 0) return;
+
+  int write_index = 0;
+  for (int read_index = 0; read_index < obstacle_trace_count; ++read_index) {
+    const ObstacleTracePoint point = obstacle_trace[read_index];
+    if (now_time - point.last_seen_time > LIDAR_TRACE_TTL_SECONDS) continue;
+    obstacle_trace[write_index] = point;
+    write_index += 1;
+  }
+
+  obstacle_trace_count = write_index;
+}
+
+static double lidar_trace_confidence(const ObstacleTracePoint *point, double now_time) {
+  if (!point) return 0.0;
+  const double age = fmax(0.0, now_time - point->last_seen_time);
+  const double freshness = clamp_value(1.0 - age / LIDAR_TRACE_TTL_SECONDS, 0.0, 1.0);
+  const double support = clamp_value((double)point->hit_count / 4.0, 0.0, 1.0);
+  return support * freshness;
+}
+
+static int lidar_hit_is_consistent(
+    const float *ranges,
+    int index,
+    double range,
+    double effective_max_range) {
+  int valid_neighbors = 0;
+  int neighbor_support = 0;
+  const int left = index - LIDAR_SAMPLE_STRIDE;
+  const int right = index + LIDAR_SAMPLE_STRIDE;
+
+  if (left >= 0) {
+    const double left_range = (double)ranges[left];
+    if (is_finite_double(left_range) &&
+        left_range >= LIDAR_MIN_TRACE_RANGE &&
+        left_range <= effective_max_range) {
+      valid_neighbors += 1;
+      if (fabs(left_range - range) <= LIDAR_RANGE_JUMP_TOLERANCE) {
+        neighbor_support += 1;
+      }
+    }
+  }
+
+  if (right < lidar_resolution) {
+    const double right_range = (double)ranges[right];
+    if (is_finite_double(right_range) &&
+        right_range >= LIDAR_MIN_TRACE_RANGE &&
+        right_range <= effective_max_range) {
+      valid_neighbors += 1;
+      if (fabs(right_range - range) <= LIDAR_RANGE_JUMP_TOLERANCE) {
+        neighbor_support += 1;
+      }
+    }
+  }
+
+  if (valid_neighbors == 0) return 1;
+  return neighbor_support > 0;
+}
+
+static void append_obstacle_trace_point(double x, double y, double now_time) {
   if (!is_finite_double(x) || !is_finite_double(y)) return;
-  if (point_near_known_dynamic_zone(x, y)) return;
+
+  int nearest_index = -1;
+  double nearest_distance = 1e9;
 
   for (int i = 0; i < obstacle_trace_count; ++i) {
     const double dx = obstacle_trace[i].x - x;
     const double dy = obstacle_trace[i].y - y;
-    if (hypot2(dx, dy) <= LIDAR_TRACE_SPACING) return;
+    const double distance = hypot2(dx, dy);
+    if (distance <= LIDAR_TRACE_SPACING && distance < nearest_distance) {
+      nearest_distance = distance;
+      nearest_index = i;
+    }
+  }
+
+  if (nearest_index >= 0) {
+    ObstacleTracePoint *point = &obstacle_trace[nearest_index];
+    point->x = point->x * 0.68 + x * 0.32;
+    point->y = point->y * 0.68 + y * 0.32;
+    point->last_seen_time = now_time;
+    if (point->hit_count < 255) point->hit_count += 1;
+    return;
   }
 
   if (obstacle_trace_count >= MAX_OBSTACLE_TRACE_POINTS) {
-    memmove(
-        &obstacle_trace[0],
-        &obstacle_trace[1],
-        sizeof(ObstacleTracePoint) * (MAX_OBSTACLE_TRACE_POINTS - 1));
-    obstacle_trace_count = MAX_OBSTACLE_TRACE_POINTS - 1;
+    int oldest_index = 0;
+    double oldest_time = obstacle_trace[0].last_seen_time;
+    for (int i = 1; i < obstacle_trace_count; ++i) {
+      if (obstacle_trace[i].last_seen_time < oldest_time) {
+        oldest_time = obstacle_trace[i].last_seen_time;
+        oldest_index = i;
+      }
+    }
+    obstacle_trace[oldest_index].x = x;
+    obstacle_trace[oldest_index].y = y;
+    obstacle_trace[oldest_index].last_seen_time = now_time;
+    obstacle_trace[oldest_index].hit_count = 1;
+    return;
   }
 
   obstacle_trace[obstacle_trace_count].x = x;
   obstacle_trace[obstacle_trace_count].y = y;
+  obstacle_trace[obstacle_trace_count].last_seen_time = now_time;
+  obstacle_trace[obstacle_trace_count].hit_count = 1;
   obstacle_trace_count += 1;
 }
 
@@ -421,6 +603,8 @@ static void capture_lidar_trace() {
   double robot_y = 0.0;
   double heading = 0.0;
   read_pose(&robot_x, &robot_y, &heading);
+  const double now_time = wb_robot_get_time();
+  prune_obstacle_trace(now_time);
 
   const double sensor_origin_x =
       robot_x + cos(heading) * LIDAR_LOCAL_X - sin(heading) * LIDAR_LOCAL_Y;
@@ -433,15 +617,18 @@ static void capture_lidar_trace() {
     const double range = (double)ranges[i];
     if (!is_finite_double(range)) continue;
     if (range < LIDAR_MIN_TRACE_RANGE || range > effective_max_range) continue;
+    if (range >= effective_max_range - 0.02) continue;
 
     const double alpha =
         lidar_resolution > 1 ? (double)i / (double)(lidar_resolution - 1) : 0.5;
     const double beam_angle = -0.5 * lidar_fov + alpha * lidar_fov;
-    const double world_angle = heading + beam_angle;
+    const double world_angle = heading - beam_angle;
     const double hit_x = sensor_origin_x + cos(world_angle) * range;
     const double hit_y = sensor_origin_y + sin(world_angle) * range;
-
-    append_obstacle_trace_point(hit_x, hit_y);
+    if (hypot2(hit_x - robot_x, hit_y - robot_y) < LIDAR_NEAR_ROBOT_IGNORE_RADIUS) continue;
+    const double snapped_hit_x = round(hit_x / LIDAR_SNAP_STEP) * LIDAR_SNAP_STEP;
+    const double snapped_hit_y = round(hit_y / LIDAR_SNAP_STEP) * LIDAR_SNAP_STEP;
+    append_obstacle_trace_point(snapped_hit_x, snapped_hit_y, now_time);
     lidar_last_hit_count += 1;
   }
 }
@@ -979,8 +1166,8 @@ static void run_navigation_step() {
       const double heading_error = wrap_angle(target.heading_rad - heading);
       angular_speed = clamp_value(
           heading_error * FINAL_ALIGN_GAIN,
-          -KINEMATIC_ANGULAR_SPEED,
-          KINEMATIC_ANGULAR_SPEED);
+          -runtime_angular_speed_limit,
+          runtime_angular_speed_limit);
       if (fabs(heading_error) > HEADING_TOLERANCE_RAD && fabs(angular_speed) < MIN_ANGULAR_COMMAND) {
         angular_speed = sign_or_one(heading_error) * MIN_ANGULAR_COMMAND;
       }
@@ -1004,8 +1191,8 @@ static void run_navigation_step() {
     } else {
       angular_speed = clamp_value(
           heading_error_to_target * TURN_HEADING_GAIN,
-          -KINEMATIC_ANGULAR_SPEED,
-          KINEMATIC_ANGULAR_SPEED);
+          -runtime_angular_speed_limit,
+          runtime_angular_speed_limit);
       if (fabs(heading_error_to_target) > HEADING_TOLERANCE_RAD &&
           fabs(angular_speed) < MIN_ANGULAR_COMMAND) {
         angular_speed = sign_or_one(heading_error_to_target) * MIN_ANGULAR_COMMAND;
@@ -1025,8 +1212,8 @@ static void run_navigation_step() {
     navigation_mode = NAV_MODE_TURN;
     angular_speed = clamp_value(
         updated_heading_error * TURN_HEADING_GAIN,
-        -KINEMATIC_ANGULAR_SPEED,
-        KINEMATIC_ANGULAR_SPEED);
+        -runtime_angular_speed_limit,
+        runtime_angular_speed_limit);
     if (fabs(angular_speed) < MIN_ANGULAR_COMMAND) {
       angular_speed = sign_or_one(updated_heading_error) * MIN_ANGULAR_COMMAND;
     }
@@ -1038,10 +1225,10 @@ static void run_navigation_step() {
 
   angular_speed = clamp_value(
       updated_heading_error * TRACK_HEADING_GAIN,
-      -KINEMATIC_ANGULAR_SPEED,
-      KINEMATIC_ANGULAR_SPEED);
+      -runtime_angular_speed_limit,
+      runtime_angular_speed_limit);
 
-  double base_speed = clamp_value(distance_to_target * 1.1, TRACK_MIN_LINEAR_SPEED, KINEMATIC_LINEAR_SPEED);
+  double base_speed = clamp_value(distance_to_target * 1.1, TRACK_MIN_LINEAR_SPEED, runtime_linear_speed_limit);
   if (distance_to_target < TRACK_SLOW_RADIUS) {
     base_speed = clamp_value(distance_to_target * 0.95, TRACK_MIN_LINEAR_SPEED, 0.14);
   }
@@ -1068,11 +1255,12 @@ static void write_state_snapshot() {
   double x = 0.0;
   double y = 0.0;
   double heading = 0.0;
+  const double simulation_now = wb_robot_get_time();
   read_pose(&x, &y, &heading);
 
   fprintf(file, "{\n");
   fprintf(file, "  \"coordinateContractVersion\": 1,\n");
-  fprintf(file, "  \"simulationTime\": %.6f,\n", wb_robot_get_time());
+  fprintf(file, "  \"simulationTime\": %.6f,\n", simulation_now);
   fprintf(file, "  \"pose\": {\n");
   fprintf(file, "    \"x\": %.6f,\n", x);
   fprintf(file, "    \"y\": %.6f,\n", y);
@@ -1103,6 +1291,14 @@ static void write_state_snapshot() {
   }
 
   fprintf(file, "  },\n");
+  fprintf(file, "  \"motionProfile\": {\n");
+  fprintf(file, "    \"cruiseSpeedMps\": %.6f,\n", configured_cruise_speed_mps);
+  fprintf(file, "    \"payloadKg\": %.6f,\n", configured_payload_kg);
+  fprintf(file, "    \"batteryRange\": %.6f,\n", configured_battery_range_units);
+  fprintf(file, "    \"batterySpeedFactor\": %.6f,\n", runtime_battery_speed_factor);
+  fprintf(file, "    \"runtimeLinearLimitMps\": %.6f,\n", runtime_linear_speed_limit);
+  fprintf(file, "    \"runtimeAngularLimitRad\": %.6f\n", runtime_angular_speed_limit);
+  fprintf(file, "  },\n");
   fprintf(file, "  \"dynamicZones\": {\n");
   fprintf(file, "    \"count\": %d,\n", zone_data.count);
   fprintf(file, "    \"wallCount\": %d\n", zone_node_count);
@@ -1115,13 +1311,19 @@ static void write_state_snapshot() {
   fprintf(file, "      \"lastHitCount\": %d\n", lidar_last_hit_count);
   fprintf(file, "    },\n");
   fprintf(file, "    \"obstacleTrace\": [\n");
+  int emitted_trace_points = 0;
   for (int i = 0; i < obstacle_trace_count; ++i) {
+    const double confidence = lidar_trace_confidence(&obstacle_trace[i], simulation_now);
+    if (confidence <= LIDAR_TRACE_MIN_CONFIDENCE) continue;
+    if (emitted_trace_points > 0) fprintf(file, ",\n");
     fprintf(file,
-            "      {\"x\": %.6f, \"y\": %.6f}%s\n",
+            "      {\"x\": %.6f, \"y\": %.6f, \"confidence\": %.3f}",
             obstacle_trace[i].x,
             obstacle_trace[i].y,
-            i + 1 < obstacle_trace_count ? "," : "");
+            confidence);
+    emitted_trace_points += 1;
   }
+  if (emitted_trace_points > 0) fprintf(file, "\n");
   fprintf(file, "    ]\n");
   fprintf(file, "  },\n");
   fprintf(file, "  \"route\": {\n");
@@ -1151,6 +1353,11 @@ int main(int argc, char **argv) {
   init_lidar();
   init_pose_tracking();
   reset_robot_pose();
+  apply_motion_profile();
+  motion_profile_last_modified = get_file_mtime(MOTION_PROFILE_PATH);
+  if (motion_profile_last_modified >= 0) {
+    load_motion_profile();
+  }
   maybe_reload_zones();
 
   if (!translation_field || !rotation_field || !root_children_field) {
@@ -1164,6 +1371,7 @@ int main(int argc, char **argv) {
     ++step_counter;
     maybe_reload_zones();
     maybe_reload_route();
+    maybe_reload_motion_profile();
     capture_lidar_trace();
     run_navigation_step();
     write_state_snapshot();

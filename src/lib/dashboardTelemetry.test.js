@@ -27,7 +27,7 @@ describe("normalizeTelemetry", () => {
       z: 0.12,
       yaw: 1.57,
       obstacleTrace: [
-        { x: 2, y: 3 },
+        { x: 2, y: 3, confidence: 1 },
       ],
       perception: {
         lidar: {

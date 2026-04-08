@@ -49,8 +49,10 @@ export const normalizeTelemetry = (raw, prev = INITIAL_TELEMETRY) => {
         .map((point) => ({
           x: pickNumber(point?.x),
           y: pickNumber(point?.y),
+          confidence: Math.max(0, Math.min(1, pickNumber(point?.confidence, 1) ?? 1)),
         }))
         .filter((point) => point.x !== null && point.y !== null)
+        .slice(-520)
     : prev.obstacleTrace || [];
   const lidar = raw?.perception?.lidar ?? prev.perception?.lidar ?? null;
 

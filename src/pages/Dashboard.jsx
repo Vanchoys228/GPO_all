@@ -8,10 +8,12 @@ import {
   probeNativeSolver,
   solveRouteWithNativeAlgorithm,
 } from "../lib/routeAlgorithms";
+import { useMemo } from "react";
 import {
   DEFAULT_POINT_TASK,
   buildObstacleAwareRoute,
   canvasToWorld,
+  DEFAULT_SURFACE_ZONES,
   isInsideMap,
   routeCrossesAnyLimitPolygon,
   sanitizeRouteForController,
@@ -35,6 +37,7 @@ import {
   DEFAULT_BATTERY_RANGE_METERS,
   planRouteWithCharging,
 } from "../lib/chargingPlanner";
+import { DEFAULT_ENERGY_OPTIONS } from "../lib/energyModel";
 import PlannerCanvas from "../components/dashboard/PlannerCanvas";
 import PlannerLeftSidebar from "../components/dashboard/PlannerLeftSidebar";
 import PlannerRightSidebar from "../components/dashboard/PlannerRightSidebar";
@@ -121,8 +124,10 @@ const sendRouteChannelPayload = (routeWsRef, payload, { onSent, onError } = {}) 
 const buildRouteWithEnergyStops = ({
   seedRoute,
   polygons,
+  surfaceZones,
   chargingStations,
   batteryRangeMeters,
+  energyOptions,
 }) => {
   const safeRoute = buildObstacleAwareRoute(seedRoute, polygons);
   if (!safeRoute) {
@@ -137,6 +142,8 @@ const buildRouteWithEnergyStops = ({
     route: safeRoute,
     stations: chargingStations,
     polygons,
+    surfaceZones,
+    energyOptions,
     batteryRange: batteryRangeMeters,
   });
   if (!chargingResult.ok) {
@@ -152,8 +159,23 @@ const buildRouteWithEnergyStops = ({
     route: chargingResult.route,
     stationStopCount: chargingResult.stationStopCount || 0,
     routeDistance: chargingResult.routeDistance,
+    routeEnergy: chargingResult.routeEnergy || 0,
+    estimatedTimeSec: chargingResult.estimatedTimeSec || 0,
+    limitingMaxSpeedMps: chargingResult.limitingMaxSpeedMps || energyOptions?.speedMps || 0,
+    averageSlipRisk: chargingResult.averageSlipRisk || 0,
   };
 };
+
+const parseLooseNumber = (rawValue) => {
+  const normalized = String(rawValue ?? "")
+    .trim()
+    .replace(",", ".");
+  if (!normalized) return Number.NaN;
+  return Number(normalized);
+};
+
+const formatNumber = (value, digits) =>
+  Number(value.toFixed(digits)).toString();
 
 export default function Dashboard() {
   const canvasRef = useRef(null);
@@ -183,6 +205,25 @@ export default function Dashboard() {
   const [batteryRangeMeters, setBatteryRangeMeters] = useState(
     DEFAULT_BATTERY_RANGE_METERS
   );
+  const [cruiseSpeedMps, setCruiseSpeedMps] = useState(
+    DEFAULT_ENERGY_OPTIONS.speedMps
+  );
+  const [payloadKg, setPayloadKg] = useState(DEFAULT_ENERGY_OPTIONS.payloadKg);
+  const [batteryRangeInput, setBatteryRangeInput] = useState(
+    String(DEFAULT_BATTERY_RANGE_METERS)
+  );
+  const [cruiseSpeedInput, setCruiseSpeedInput] = useState(
+    formatNumber(DEFAULT_ENERGY_OPTIONS.speedMps, 3)
+  );
+  const [payloadInput, setPayloadInput] = useState(
+    formatNumber(DEFAULT_ENERGY_OPTIONS.payloadKg, 2)
+  );
+  const [routeEnergyStats, setRouteEnergyStats] = useState({
+    routeEnergy: 0,
+    estimatedTimeSec: 0,
+    limitingMaxSpeedMps: DEFAULT_ENERGY_OPTIONS.speedMps,
+    averageSlipRisk: 0,
+  });
   const [limitZones, setLimitZones] = useState([INITIAL_ZONE]);
   const [activeLimitZoneId, setActiveLimitZoneId] = useState(INITIAL_ZONE.id);
   const [nextZoneNumber, setNextZoneNumber] = useState(2);
@@ -200,6 +241,7 @@ export default function Dashboard() {
     limitZones,
     optimizedRoute,
     activeLimitZoneId,
+    surfaceZones: DEFAULT_SURFACE_ZONES,
   });
   const algorithmFields = getAlgorithmFields(algorithmKey);
   const selectedAlgorithmParams =
@@ -231,7 +273,14 @@ export default function Dashboard() {
       y: Number(point.y.toFixed(4)),
     }))
   );
-  const autoRouteSyncToken = `${zoneSyncPayloadText}|${chargePointsRoutingText}|${batteryRangeMeters}`;
+  const energyOptions = useMemo(
+    () => ({
+      speedMps: cruiseSpeedMps,
+      payloadKg,
+    }),
+    [cruiseSpeedMps, payloadKg]
+  );
+  const autoRouteSyncToken = `${zoneSyncPayloadText}|${chargePointsRoutingText}|${batteryRangeMeters}|${cruiseSpeedMps}|${payloadKg}`;
 
   useEffect(() => {
     let closed = false;
@@ -317,6 +366,12 @@ export default function Dashboard() {
     if (!routeSeed.length) {
       setOptimizedRoute([]);
       setEnergyWarning("");
+      setRouteEnergyStats((prev) => ({
+        ...prev,
+        routeEnergy: 0,
+        estimatedTimeSec: 0,
+        averageSlipRisk: 0,
+      }));
       return;
     }
 
@@ -325,20 +380,36 @@ export default function Dashboard() {
     const nextRoute = buildRouteWithEnergyStops({
       seedRoute: routeSeed,
       polygons: previewPolygons,
+      surfaceZones: plannerModel.surfaceZones,
       chargingStations,
       batteryRangeMeters,
+      energyOptions,
     });
     if (!nextRoute.ok) {
       setOptimizedRoute([]);
       setEnergyWarning(getEnergyWarningText(nextRoute));
+      setRouteEnergyStats((prev) => ({
+        ...prev,
+        routeEnergy: 0,
+        estimatedTimeSec: 0,
+        averageSlipRisk: 0,
+      }));
       setStatus(nextRoute.error || "Маршрут недостижим при текущих ограничениях.");
       return;
     }
     setEnergyWarning("");
     setOptimizedRoute(nextRoute.route);
+    setRouteEnergyStats({
+      routeEnergy: nextRoute.routeEnergy,
+      estimatedTimeSec: nextRoute.estimatedTimeSec,
+      limitingMaxSpeedMps: nextRoute.limitingMaxSpeedMps,
+      averageSlipRisk: nextRoute.averageSlipRisk,
+    });
   }, [
     batteryRangeMeters,
     chargePointsRoutingText,
+    energyOptions,
+    plannerModel.surfaceZones,
     previewPolygonRoutingText,
     routeSeed,
   ]);
@@ -348,6 +419,12 @@ export default function Dashboard() {
     lastAutoRouteZoneSyncRef.current = autoRouteSyncToken;
     if (routeSeed.length < 2) {
       setEnergyWarning("");
+      setRouteEnergyStats((prev) => ({
+        ...prev,
+        routeEnergy: 0,
+        estimatedTimeSec: 0,
+        averageSlipRisk: 0,
+      }));
       return;
     }
 
@@ -362,15 +439,29 @@ export default function Dashboard() {
     const rebuilt = buildRouteWithEnergyStops({
       seedRoute: routeSeed,
       polygons: controllerPolygons,
+      surfaceZones: plannerModel.surfaceZones,
       chargingStations,
       batteryRangeMeters,
+      energyOptions,
     });
     if (!rebuilt.ok) {
       setEnergyWarning(getEnergyWarningText(rebuilt));
+      setRouteEnergyStats((prev) => ({
+        ...prev,
+        routeEnergy: 0,
+        estimatedTimeSec: 0,
+        averageSlipRisk: 0,
+      }));
       setStatus(rebuilt.error || "Невозможно безопасно перестроить маршрут.");
       return;
     }
     setEnergyWarning("");
+    setRouteEnergyStats({
+      routeEnergy: rebuilt.routeEnergy,
+      estimatedTimeSec: rebuilt.estimatedTimeSec,
+      limitingMaxSpeedMps: rebuilt.limitingMaxSpeedMps,
+      averageSlipRisk: rebuilt.averageSlipRisk,
+    });
     const routeForController = sanitizeRouteForController(rebuilt.route);
     if (routeForController.length < 2) {
       setStatus("Маршрут стал слишком коротким после перестройки под зоны.");
@@ -383,6 +474,11 @@ export default function Dashboard() {
         key: algorithmKey,
         task: routeTaskKey,
         params: selectedAlgorithmParams,
+      },
+      motion: {
+        cruiseSpeedMps,
+        payloadKg,
+        batteryRange: batteryRangeMeters,
       },
       route: routeForController.map((point) => ({ x: point.x, y: point.y })),
     };
@@ -402,6 +498,10 @@ export default function Dashboard() {
     autoRouteSyncToken,
     batteryRangeMeters,
     chargePointsRoutingText,
+    cruiseSpeedMps,
+    energyOptions,
+    payloadKg,
+    plannerModel.surfaceZones,
     routeSeed,
     routeTaskKey,
     selectedAlgorithmParams,
@@ -421,6 +521,12 @@ export default function Dashboard() {
       setRouteSeed([]);
       setOptimizedRoute([]);
       setEnergyWarning("");
+      setRouteEnergyStats((prev) => ({
+        ...prev,
+        routeEnergy: 0,
+        estimatedTimeSec: 0,
+        averageSlipRisk: 0,
+      }));
     }
   };
 
@@ -662,12 +768,87 @@ export default function Dashboard() {
     setEnergyWarning("");
   };
 
-  const handleBatteryRangeChange = (rawValue) => {
-    const parsed = Number(rawValue);
-    if (!Number.isFinite(parsed)) return;
-    setBatteryRangeMeters(Math.max(1, Math.min(10000, Math.round(parsed))));
+  const invalidateEnergyDependentRoute = () => {
     clearRouteState({ dropSolvedRoute: false });
+    setRouteEnergyStats((prev) => ({
+      ...prev,
+      routeEnergy: 0,
+      estimatedTimeSec: 0,
+      averageSlipRisk: 0,
+    }));
     setEnergyWarning("");
+  };
+
+  const handleBatteryRangeChange = (rawValue) => {
+    setBatteryRangeInput(rawValue);
+    const parsed = parseLooseNumber(rawValue);
+    if (!Number.isFinite(parsed)) return;
+    const nextValue = Math.max(1, Math.min(10000, Math.round(parsed)));
+    if (nextValue === batteryRangeMeters) return;
+    setBatteryRangeMeters(nextValue);
+    invalidateEnergyDependentRoute();
+  };
+
+  const handleBatteryRangeBlur = () => {
+    const parsed = parseLooseNumber(batteryRangeInput);
+    if (!Number.isFinite(parsed)) {
+      setBatteryRangeInput(String(batteryRangeMeters));
+      return;
+    }
+    const nextValue = Math.max(1, Math.min(10000, Math.round(parsed)));
+    if (nextValue !== batteryRangeMeters) {
+      setBatteryRangeMeters(nextValue);
+      invalidateEnergyDependentRoute();
+    }
+    setBatteryRangeInput(String(nextValue));
+  };
+
+  const handleCruiseSpeedChange = (rawValue) => {
+    setCruiseSpeedInput(rawValue);
+    const parsed = parseLooseNumber(rawValue);
+    if (!Number.isFinite(parsed)) return;
+    const nextValue = Math.max(0.05, Math.min(0.8, Number(parsed.toFixed(3))));
+    if (Math.abs(nextValue - cruiseSpeedMps) <= 1e-9) return;
+    setCruiseSpeedMps(nextValue);
+    invalidateEnergyDependentRoute();
+  };
+
+  const handleCruiseSpeedBlur = () => {
+    const parsed = parseLooseNumber(cruiseSpeedInput);
+    if (!Number.isFinite(parsed)) {
+      setCruiseSpeedInput(formatNumber(cruiseSpeedMps, 3));
+      return;
+    }
+    const nextValue = Math.max(0.05, Math.min(0.8, Number(parsed.toFixed(3))));
+    if (Math.abs(nextValue - cruiseSpeedMps) > 1e-9) {
+      setCruiseSpeedMps(nextValue);
+      invalidateEnergyDependentRoute();
+    }
+    setCruiseSpeedInput(formatNumber(nextValue, 3));
+  };
+
+  const handlePayloadChange = (rawValue) => {
+    setPayloadInput(rawValue);
+    const parsed = parseLooseNumber(rawValue);
+    if (!Number.isFinite(parsed)) return;
+    const nextValue = Math.max(0, Math.min(500, Number(parsed.toFixed(2))));
+    if (Math.abs(nextValue - payloadKg) <= 1e-9) return;
+    setPayloadKg(nextValue);
+    invalidateEnergyDependentRoute();
+  };
+
+  const handlePayloadBlur = () => {
+    const parsed = parseLooseNumber(payloadInput);
+    if (!Number.isFinite(parsed)) {
+      setPayloadInput(formatNumber(payloadKg, 2));
+      return;
+    }
+    const nextValue = Math.max(0, Math.min(500, Number(parsed.toFixed(2))));
+    if (Math.abs(nextValue - payloadKg) > 1e-9) {
+      setPayloadKg(nextValue);
+      invalidateEnergyDependentRoute();
+    }
+    setPayloadInput(formatNumber(nextValue, 2));
   };
 
   const optimizeRoute = async () => {
@@ -699,12 +880,20 @@ export default function Dashboard() {
       const routed = buildRouteWithEnergyStops({
         seedRoute: solvedRoute,
         polygons: plannerModel.previewPolygons,
+        surfaceZones: plannerModel.surfaceZones,
         chargingStations: plannerModel.chargePoints,
         batteryRangeMeters,
+        energyOptions,
       });
       if (!routed.ok) {
         setRouteSeed(solvedRoute);
         setOptimizedRoute([]);
+        setRouteEnergyStats((prev) => ({
+          ...prev,
+          routeEnergy: 0,
+          estimatedTimeSec: 0,
+          averageSlipRisk: 0,
+        }));
         setEnergyWarning(getEnergyWarningText(routed));
         setStatus(routed.error || "Не удалось построить достижимый маршрут.");
         return;
@@ -715,20 +904,33 @@ export default function Dashboard() {
       );
       setRouteSeed(solvedRoute);
       setOptimizedRoute(routed.route);
+      setRouteEnergyStats({
+        routeEnergy: routed.routeEnergy,
+        estimatedTimeSec: routed.estimatedTimeSec,
+        limitingMaxSpeedMps: routed.limitingMaxSpeedMps,
+        averageSlipRisk: routed.averageSlipRisk,
+      });
       setEnergyWarning("");
       const chargingSuffix = routed.stationStopCount
         ? ` Добавлено заездов на зарядку: ${routed.stationStopCount}.`
         : "";
+      const energySuffix = ` Энергия: ${routed.routeEnergy.toFixed(1)} ед., время: ${routed.estimatedTimeSec.toFixed(1)} с.`;
       setStatus(
         blocked
           ? "Маршрут построен, но всё ещё пересекает ограничивающий контур."
           : plannerModel.adjustedVisits.length
-            ? `Маршрут построен: ${getTaskLabel(routeTaskKey)} (${getAlgorithmLabel(algorithmKey)}). ${plannerModel.adjustedVisits.length} точек автоматически сдвинуты к безопасной позиции.${chargingSuffix}`
-            : `Маршрут построен: ${getTaskLabel(routeTaskKey)} (${getAlgorithmLabel(algorithmKey)}).${chargingSuffix}`
+            ? `Маршрут построен: ${getTaskLabel(routeTaskKey)} (${getAlgorithmLabel(algorithmKey)}). ${plannerModel.adjustedVisits.length} точек автоматически сдвинуты к безопасной позиции.${chargingSuffix}${energySuffix}`
+            : `Маршрут построен: ${getTaskLabel(routeTaskKey)} (${getAlgorithmLabel(algorithmKey)}).${chargingSuffix}${energySuffix}`
       );
     } catch (error) {
       setRouteSeed([]);
       setOptimizedRoute([]);
+      setRouteEnergyStats((prev) => ({
+        ...prev,
+        routeEnergy: 0,
+        estimatedTimeSec: 0,
+        averageSlipRisk: 0,
+      }));
       setEnergyWarning("");
       setStatus(
         error instanceof Error ? error.message : "Не удалось построить маршрут."
@@ -755,8 +957,10 @@ export default function Dashboard() {
       const rebuiltForController = buildRouteWithEnergyStops({
         seedRoute: routeSeed,
         polygons: plannerModel.polygons,
+        surfaceZones: plannerModel.surfaceZones,
         chargingStations: plannerModel.chargePoints,
         batteryRangeMeters,
+        energyOptions,
       });
       if (!rebuiltForController.ok) {
         setEnergyWarning(getEnergyWarningText(rebuiltForController));
@@ -781,6 +985,11 @@ export default function Dashboard() {
         key: algorithmKey,
         task: routeTaskKey,
         params: selectedAlgorithmParams,
+      },
+      motion: {
+        cruiseSpeedMps,
+        payloadKg,
+        batteryRange: batteryRangeMeters,
       },
       route: routeForController.map((point) => ({ x: point.x, y: point.y })),
     };
@@ -841,8 +1050,18 @@ export default function Dashboard() {
         polygonCount={plannerModel.polygons.length}
         adjustedVisitCount={plannerModel.adjustedVisits.length}
         activeZoneName={plannerModel.activeZoneName}
-        batteryRangeMeters={batteryRangeMeters}
+        batteryRangeInput={batteryRangeInput}
         onBatteryRangeChange={handleBatteryRangeChange}
+        onBatteryRangeBlur={handleBatteryRangeBlur}
+        cruiseSpeedMps={cruiseSpeedMps}
+        cruiseSpeedInput={cruiseSpeedInput}
+        onCruiseSpeedChange={handleCruiseSpeedChange}
+        onCruiseSpeedBlur={handleCruiseSpeedBlur}
+        payloadKg={payloadKg}
+        payloadInput={payloadInput}
+        onPayloadChange={handlePayloadChange}
+        onPayloadBlur={handlePayloadBlur}
+        routeEnergyStats={routeEnergyStats}
       />
 
       <PlannerCanvas
