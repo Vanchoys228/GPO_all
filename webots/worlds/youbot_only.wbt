@@ -11,7 +11,6 @@ WorldInfo {
   ]
   title "KUKA youBot Only"
   basicTimeStep 16
-  dragTorqueScale 15
   contactProperties [
     ContactProperties {
       material1 "InteriorWheelMat"

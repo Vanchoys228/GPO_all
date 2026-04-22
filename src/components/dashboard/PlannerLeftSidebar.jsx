@@ -52,6 +52,7 @@ export default function PlannerLeftSidebar({
   isOptimizing,
   onOptimizeRoute,
   onSendRoute,
+  onAddRandomObstacle,
   onClearAll,
   hasRoute,
   routeLength,
@@ -360,6 +361,15 @@ export default function PlannerLeftSidebar({
           }`}
         >
           Отправить маршрут
+        </button>
+        <button
+          onClick={onAddRandomObstacle}
+          disabled={isOptimizing}
+          className={`mt-2 w-full h-11 rounded-xl text-white font-semibold transition ${
+            isOptimizing ? "bg-sky-400 cursor-not-allowed" : "bg-sky-600 hover:bg-sky-700"
+          }`}
+        >
+          Добавить случайное препятствие
         </button>
         <button onClick={onClearAll} className={`mt-2 w-full h-11 ${neutralButtonCls}`}>
           Очистить всё

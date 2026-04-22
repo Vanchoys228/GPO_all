@@ -27,6 +27,7 @@ const LIMIT_ZONES_JSON_PATH = path.join(WEB_STATE_DIR, "limit_zones.json");
 const LIMIT_ZONES_TXT_PATH = path.join(WEB_STATE_DIR, "limit_zones.txt");
 const ROBOT_STATE_PATH = path.join(WEB_STATE_DIR, "robot_state.json");
 const MOTION_PROFILE_PATH = path.join(WEB_STATE_DIR, "motion_profile.txt");
+const RUNTIME_COMMAND_PATH = path.join(WEB_STATE_DIR, "runtime_command.txt");
 const ROUTE_CSV_HEADER = coordinateContract.routeCsv.header.join(",");
 const TELEMETRY_MESSAGE_TYPE = coordinateContract.telemetry.messageType;
 const TELEMETRY_POSE_KEY = coordinateContract.telemetry.poseKey;
@@ -250,6 +251,25 @@ const sanitizeMotionProfile = (motion) => {
   };
 };
 
+const sanitizeRuntimeObstacle = (rawObstacle) => {
+  const obstacle = rawObstacle || {};
+  return {
+    x: clamp(normalizeNumber(obstacle.x, 0), -21.5, 21.5),
+    y: clamp(normalizeNumber(obstacle.y, 0), -16.5, 16.5),
+    sizeX: clamp(normalizeNumber(obstacle.sizeX, 0.8), 0.2, 3.5),
+    sizeY: clamp(normalizeNumber(obstacle.sizeY, 0.8), 0.2, 3.5),
+    height: clamp(normalizeNumber(obstacle.height, 0.6), 0.12, 2.8),
+  };
+};
+
+const normalizeCommandId = (rawCommandId) => {
+  const value = Number(rawCommandId);
+  if (Number.isFinite(value) && value > 0) {
+    return Math.trunc(value);
+  }
+  return Date.now();
+};
+
 const writeRouteArtifacts = async (payload) => {
   await ensureWebStateDir();
 
@@ -320,6 +340,22 @@ const writeLimitZoneArtifacts = async (payload) => {
     fsp.writeFile(LIMIT_ZONES_JSON_PATH, JSON.stringify(zonesJson, null, 2)),
     fsp.writeFile(LIMIT_ZONES_TXT_PATH, `${textLines.join("\n")}\n`),
   ]);
+};
+
+const writeRuntimeCommandArtifact = async (payload) => {
+  await ensureWebStateDir();
+  const obstacle = sanitizeRuntimeObstacle(payload?.obstacle);
+  const commandId = normalizeCommandId(payload?.commandId);
+  const lines = [
+    `id ${commandId}`,
+    "type spawn_obstacle",
+    `x ${obstacle.x}`,
+    `y ${obstacle.y}`,
+    `size_x ${obstacle.sizeX}`,
+    `size_y ${obstacle.sizeY}`,
+    `height ${obstacle.height}`,
+  ];
+  await fsp.writeFile(RUNTIME_COMMAND_PATH, `${lines.join("\n")}\n`);
 };
 
 const normalizeFileTelemetry = (raw) => {
@@ -702,6 +738,12 @@ routeWss.on("connection", (ws, req) => {
         await writeLimitZoneArtifacts(parsed);
       } catch (error) {
         console.error("[route] failed to write limit zone artifacts:", error.message);
+      }
+    } else if (parsed?.type === "spawn_random_obstacle") {
+      try {
+        await writeRuntimeCommandArtifact(parsed);
+      } catch (error) {
+        console.error("[route] failed to write runtime obstacle command:", error.message);
       }
     }
     if (controllerConn && controllerConn.readyState === WebSocket.OPEN) {

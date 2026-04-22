@@ -41,10 +41,12 @@
 #define TURN_HEADING_GAIN 3.8
 #define TRACK_HEADING_GAIN 3.0
 #define FINAL_ALIGN_GAIN 3.4
-#define TRACK_CROSS_TRACK_GAIN 1.25
+#define TRACK_CROSS_TRACK_GAIN 0.72
 #define TRACK_LOOKAHEAD_MIN 0.16
 #define TRACK_LOOKAHEAD_MAX 0.45
 #define TRACK_MIN_LINEAR_SPEED 0.035
+#define TRACK_DIRECT_HEADING_CROSSTRACK 0.22
+#define TRACK_REANCHOR_CROSSTRACK 0.28
 #define MIN_ANGULAR_COMMAND 0.28
 #define START_X 0.0
 #define START_Z 0.0
@@ -53,9 +55,11 @@
 #define ROUTE_RELOAD_INTERVAL 20
 #define MOTION_RELOAD_INTERVAL 20
 #define ZONE_RELOAD_INTERVAL 10
+#define RUNTIME_COMMAND_RELOAD_INTERVAL 6
 #define MAX_ZONES 32
 #define MAX_ZONE_POINTS 48
 #define MAX_ZONE_NODES 512
+#define MAX_RUNTIME_OBSTACLE_NODES 96
 #define MAX_OBSTACLE_TRACE_POINTS 520
 #define WALL_THICKNESS 0.08
 #define WALL_HEIGHT 0.45
@@ -71,6 +75,25 @@
 #define LIDAR_SNAP_STEP 0.03
 #define LIDAR_LOCAL_X 0.24
 #define LIDAR_LOCAL_Y 0.0
+#define LIDAR_FRONT_SECTOR_RAD 0.40
+#define LIDAR_CENTER_SECTOR_RAD 0.13
+#define LIDAR_AVOID_TRIGGER_RANGE 0.88
+#define LIDAR_AVOID_STOP_RANGE 0.29
+#define LIDAR_AVOID_RECOVER_RANGE 1.02
+#define LIDAR_AVOID_REVERSE_RANGE 0.18
+#define LIDAR_AVOID_HOLD_STEPS 22
+#define LIDAR_AVOID_SIDE_TRIGGER_RANGE 0.30
+#define LIDAR_AVOID_SIDE_DANGER_RANGE 0.21
+#define LIDAR_AVOID_FOLLOW_RANGE 0.60
+#define LIDAR_AVOID_FOLLOW_TARGET 0.31
+#define LIDAR_AVOID_RELEASE_STEPS 20
+#define LIDAR_AVOID_STUCK_STEPS 24
+#define LIDAR_AVOID_STUCK_POSE_EPS 0.004
+#define LIDAR_AVOID_STUCK_PROGRESS_EPS 0.001
+#define WHEEL_RADIUS 0.05
+#define WHEEL_BASE_LONGITUDINAL 0.228
+#define WHEEL_BASE_LATERAL 0.158
+#define MAX_WHEEL_SPEED_RAD_S 12.0
 #define EPS 1e-9
 
 typedef struct {
@@ -115,6 +138,16 @@ typedef struct {
   int hit_count;
 } ObstacleTracePoint;
 
+typedef struct {
+  long long id;
+  int has_spawn_obstacle;
+  double x;
+  double y;
+  double size_x;
+  double size_y;
+  double height;
+} RuntimeCommand;
+
 static WbDeviceTag wheels[4];
 static WbDeviceTag arm_joints[5];
 static WbDeviceTag gripper_fingers[2];
@@ -129,6 +162,9 @@ static ZoneData zone_data = {0};
 static WbNodeRef zone_nodes[MAX_ZONE_NODES];
 static char zone_node_defs[MAX_ZONE_NODES][64];
 static int zone_node_count = 0;
+static WbNodeRef runtime_obstacle_nodes[MAX_RUNTIME_OBSTACLE_NODES];
+static char runtime_obstacle_defs[MAX_RUNTIME_OBSTACLE_NODES][64];
+static int runtime_obstacle_count = 0;
 static ObstacleTracePoint obstacle_trace[MAX_OBSTACLE_TRACE_POINTS];
 static int obstacle_trace_count = 0;
 static int lidar_available = 0;
@@ -136,6 +172,11 @@ static int lidar_resolution = 0;
 static double lidar_fov = 0.0;
 static double lidar_max_range = 0.0;
 static int lidar_last_hit_count = 0;
+static int lidar_front_hit_count = 0;
+static double lidar_front_min_range = 0.0;
+static double lidar_center_min_range = 0.0;
+static double lidar_left_min_range = 0.0;
+static double lidar_right_min_range = 0.0;
 static int current_waypoint_index = 0;
 static int step_counter = 0;
 static int route_finished = 0;
@@ -152,13 +193,25 @@ static double configured_battery_range_units = DEFAULT_BATTERY_RANGE_UNITS;
 static double runtime_linear_speed_limit = DEFAULT_CRUISE_SPEED_MPS;
 static double runtime_angular_speed_limit = KINEMATIC_ANGULAR_SPEED;
 static double runtime_battery_speed_factor = 1.0;
+static int avoidance_hold_steps = 0;
+static double avoidance_turn_sign = 1.0;
+static int avoidance_active = 0;
+static int avoidance_obstacle_side = 0;
+static int avoidance_release_steps = 0;
+static int avoidance_stuck_steps = 0;
+static double avoidance_prev_x = START_X;
+static double avoidance_prev_z = START_Z;
+static double avoidance_prev_target_distance = 0.0;
 static long long motion_profile_last_modified = -1;
+static long long runtime_command_last_modified = -1;
+static long long last_processed_runtime_command_id = -1;
 
 static const char *ROUTE_PATH = "..\\..\\..\\web_state\\route.csv";
 static const char *ZONE_PATH = "..\\..\\..\\web_state\\limit_zones.txt";
 static const char *STATE_PATH = "..\\..\\..\\web_state\\robot_state.json";
 static const char *STATE_TEMP_PATH = "..\\..\\..\\web_state\\robot_state.tmp";
 static const char *MOTION_PROFILE_PATH = "..\\..\\..\\web_state\\motion_profile.txt";
+static const char *RUNTIME_COMMAND_PATH = "..\\..\\..\\web_state\\runtime_command.txt";
 
 static int point_near_zone(double x, double y, const LimitZone *zone, double clearance);
 static void reset_navigation_mode();
@@ -309,8 +362,8 @@ static void init_manipulator_pose() {
   };
   static const double arm_positions[5] = {
       0.0,
-      0.9,
-      -1.55,
+      1.57,
+      -2.635,
       1.78,
       0.0,
   };
@@ -318,7 +371,7 @@ static void init_manipulator_pose() {
       "finger::left",
       "finger::right",
   };
-  const double finger_opening = 0.01;
+  const double finger_opening = 0.011;
 
   for (int i = 0; i < 5; ++i) {
     arm_joints[i] = wb_robot_get_device(arm_names[i]);
@@ -351,10 +404,23 @@ static void init_lidar() {
   lidar_max_range = wb_lidar_get_max_range(front_lidar);
 }
 
-static void stop_robot() {
+static void set_base_velocity(double vx, double vy, double omega) {
+  const double coupling = WHEEL_BASE_LONGITUDINAL + WHEEL_BASE_LATERAL;
+  double wheel_speeds[4];
+  wheel_speeds[0] = (vx + vy + coupling * omega) / WHEEL_RADIUS;
+  wheel_speeds[1] = (vx - vy - coupling * omega) / WHEEL_RADIUS;
+  wheel_speeds[2] = (vx - vy + coupling * omega) / WHEEL_RADIUS;
+  wheel_speeds[3] = (vx + vy - coupling * omega) / WHEEL_RADIUS;
+
   for (int i = 0; i < 4; ++i) {
-    wb_motor_set_velocity(wheels[i], 0.0);
+    if (!wheels[i]) continue;
+    wheel_speeds[i] = clamp_value(wheel_speeds[i], -MAX_WHEEL_SPEED_RAD_S, MAX_WHEEL_SPEED_RAD_S);
+    wb_motor_set_velocity(wheels[i], wheel_speeds[i]);
   }
+}
+
+static void stop_robot() {
+  set_base_velocity(0.0, 0.0, 0.0);
 }
 
 static int is_finite_double(double value) {
@@ -385,6 +451,8 @@ static void reset_robot_pose() {
   wb_supervisor_field_set_sf_vec3f(translation_field, translation);
   wb_supervisor_field_set_sf_rotation(rotation_field, rotation);
   wb_supervisor_node_reset_physics(self_node);
+  avoidance_hold_steps = 0;
+  avoidance_turn_sign = 1.0;
   reset_navigation_mode();
   stop_robot();
 }
@@ -403,28 +471,19 @@ static void apply_kinematic_step(
     double heading,
     double linear_speed,
     double angular_speed) {
-  const double dt = (double)TIME_STEP / 1000.0;
-  const double heading_step = clamp_value(
-      angular_speed * dt,
-      -runtime_angular_speed_limit * dt,
-      runtime_angular_speed_limit * dt);
-  const double next_heading = wrap_angle(heading + heading_step);
-  const double step_distance = clamp_value(
-      linear_speed * dt,
-      -runtime_linear_speed_limit * dt,
-      runtime_linear_speed_limit * dt);
-  const double move_heading = heading + heading_step * 0.5;
+  (void)x;
+  (void)z;
+  (void)heading;
 
-  const double translation[3] = {
-      x + cos(move_heading) * step_distance,
-      z + sin(move_heading) * step_distance,
-      START_HEIGHT,
-  };
-  const double rotation[4] = {0.0, 0.0, 1.0, next_heading};
-
-  wb_supervisor_field_set_sf_rotation(rotation_field, rotation);
-  wb_supervisor_field_set_sf_vec3f(translation_field, translation);
-  wb_supervisor_node_reset_physics(self_node);
+  const double limited_linear = clamp_value(
+      linear_speed,
+      -runtime_linear_speed_limit,
+      runtime_linear_speed_limit);
+  const double limited_angular = clamp_value(
+      angular_speed,
+      -runtime_angular_speed_limit,
+      runtime_angular_speed_limit);
+  set_base_velocity(limited_linear, 0.0, limited_angular);
 }
 
 static double sign_or_one(double value) {
@@ -436,6 +495,15 @@ static void reset_navigation_mode() {
   navigation_waypoint_index = -1;
   navigation_segment_start_x = START_X;
   navigation_segment_start_z = START_Z;
+  avoidance_hold_steps = 0;
+  avoidance_turn_sign = 1.0;
+  avoidance_active = 0;
+  avoidance_obstacle_side = 0;
+  avoidance_release_steps = 0;
+  avoidance_stuck_steps = 0;
+  avoidance_prev_x = START_X;
+  avoidance_prev_z = START_Z;
+  avoidance_prev_target_distance = 0.0;
 }
 
 static void begin_navigation_for_waypoint(int waypoint_index, double current_x, double current_z) {
@@ -449,6 +517,19 @@ static void ensure_navigation_waypoint_initialized(double current_x, double curr
   if (navigation_waypoint_index != current_waypoint_index) {
     begin_navigation_for_waypoint(current_waypoint_index, current_x, current_z);
   }
+}
+
+static double compute_cross_track_error(double x, double z, const Waypoint *target) {
+  const double segment_dx = target->x - navigation_segment_start_x;
+  const double segment_dz = target->z - navigation_segment_start_z;
+  const double segment_length = hypot2(segment_dx, segment_dz);
+  if (segment_length <= EPS) return 0.0;
+
+  const double ux = segment_dx / segment_length;
+  const double uz = segment_dz / segment_length;
+  const double rel_x = x - navigation_segment_start_x;
+  const double rel_z = z - navigation_segment_start_z;
+  return ux * rel_z - uz * rel_x;
 }
 
 static double compute_track_heading(double x, double z, const Waypoint *target, double distance_to_target) {
@@ -469,6 +550,9 @@ static double compute_track_heading(double x, double z, const Waypoint *target, 
   const double aim_x = navigation_segment_start_x + ux * aim_along;
   const double aim_z = navigation_segment_start_z + uz * aim_along;
   const double cross_track = ux * rel_z - uz * rel_x;
+  if (fabs(cross_track) > TRACK_DIRECT_HEADING_CROSSTRACK) {
+    return atan2(target->z - z, target->x - x);
+  }
   const double cross_correction = clamp_value(-cross_track * TRACK_CROSS_TRACK_GAIN, -0.40, 0.40);
 
   return wrap_angle(atan2(aim_z - z, aim_x - x) + cross_correction);
@@ -594,6 +678,11 @@ static void append_obstacle_trace_point(double x, double y, double now_time) {
 
 static void capture_lidar_trace() {
   lidar_last_hit_count = 0;
+  lidar_front_hit_count = 0;
+  lidar_front_min_range = LIDAR_MAX_TRACE_RANGE;
+  lidar_center_min_range = LIDAR_MAX_TRACE_RANGE;
+  lidar_left_min_range = LIDAR_MAX_TRACE_RANGE;
+  lidar_right_min_range = LIDAR_MAX_TRACE_RANGE;
   if (!lidar_available || !front_lidar || lidar_resolution <= 1 || lidar_fov <= EPS) return;
 
   const float *ranges = wb_lidar_get_range_image(front_lidar);
@@ -612,16 +701,32 @@ static void capture_lidar_trace() {
       robot_y + sin(heading) * LIDAR_LOCAL_X + cos(heading) * LIDAR_LOCAL_Y;
   const double effective_max_range =
       lidar_max_range > EPS ? fmin(lidar_max_range, LIDAR_MAX_TRACE_RANGE) : LIDAR_MAX_TRACE_RANGE;
+  lidar_front_min_range = effective_max_range;
+  lidar_center_min_range = effective_max_range;
+  lidar_left_min_range = effective_max_range;
+  lidar_right_min_range = effective_max_range;
 
   for (int i = 0; i < lidar_resolution; i += LIDAR_SAMPLE_STRIDE) {
     const double range = (double)ranges[i];
     if (!is_finite_double(range)) continue;
     if (range < LIDAR_MIN_TRACE_RANGE || range > effective_max_range) continue;
     if (range >= effective_max_range - 0.02) continue;
+    if (!lidar_hit_is_consistent(ranges, i, range, effective_max_range)) continue;
 
     const double alpha =
         lidar_resolution > 1 ? (double)i / (double)(lidar_resolution - 1) : 0.5;
     const double beam_angle = -0.5 * lidar_fov + alpha * lidar_fov;
+    if (fabs(beam_angle) <= LIDAR_FRONT_SECTOR_RAD) {
+      lidar_front_hit_count += 1;
+      if (range < lidar_front_min_range) lidar_front_min_range = range;
+      if (fabs(beam_angle) <= LIDAR_CENTER_SECTOR_RAD && range < lidar_center_min_range) {
+        lidar_center_min_range = range;
+      }
+    } else if (beam_angle < 0.0) {
+      if (range < lidar_left_min_range) lidar_left_min_range = range;
+    } else {
+      if (range < lidar_right_min_range) lidar_right_min_range = range;
+    }
     const double world_angle = heading - beam_angle;
     const double hit_x = sensor_origin_x + cos(world_angle) * range;
     const double hit_y = sensor_origin_y + sin(world_angle) * range;
@@ -962,6 +1067,168 @@ static void sync_zone_nodes() {
   }
 }
 
+static void remove_runtime_obstacle_at(int index) {
+  if (index < 0 || index >= runtime_obstacle_count) return;
+
+  if (runtime_obstacle_defs[index][0] != '\0') {
+    WbNodeRef node = wb_supervisor_node_get_from_def(runtime_obstacle_defs[index]);
+    if (node) {
+      wb_supervisor_node_remove(node);
+    }
+  }
+
+  for (int i = index + 1; i < runtime_obstacle_count; ++i) {
+    runtime_obstacle_nodes[i - 1] = runtime_obstacle_nodes[i];
+    strncpy(runtime_obstacle_defs[i - 1], runtime_obstacle_defs[i], sizeof(runtime_obstacle_defs[i - 1]) - 1);
+    runtime_obstacle_defs[i - 1][sizeof(runtime_obstacle_defs[i - 1]) - 1] = '\0';
+  }
+
+  runtime_obstacle_count -= 1;
+  if (runtime_obstacle_count < 0) runtime_obstacle_count = 0;
+  if (runtime_obstacle_count < MAX_RUNTIME_OBSTACLE_NODES) {
+    runtime_obstacle_nodes[runtime_obstacle_count] = 0;
+    runtime_obstacle_defs[runtime_obstacle_count][0] = '\0';
+  }
+}
+
+static void remove_runtime_obstacle_nodes() {
+  while (runtime_obstacle_count > 0) {
+    remove_runtime_obstacle_at(0);
+  }
+}
+
+static void spawn_runtime_obstacle_from_command(const RuntimeCommand *command) {
+  if (!command || !command->has_spawn_obstacle || !root_children_field) return;
+
+  const double x = clamp_value(command->x, -21.5, 21.5);
+  const double y = clamp_value(command->y, -16.5, 16.5);
+  const double size_x = clamp_value(command->size_x, 0.2, 3.5);
+  const double size_y = clamp_value(command->size_y, 0.2, 3.5);
+  const double height = clamp_value(command->height, 0.12, 2.8);
+  const double half_height = height * 0.5;
+
+  if (runtime_obstacle_count >= MAX_RUNTIME_OBSTACLE_NODES) {
+    remove_runtime_obstacle_at(0);
+  }
+
+  const long long compact_id = command->id >= 0 ? command->id : 0;
+  char def_name[64];
+  char node_string[1024];
+  snprintf(def_name, sizeof(def_name), "WEB_OBS_%lld", compact_id);
+  WbNodeRef existing = wb_supervisor_node_get_from_def(def_name);
+  if (existing) {
+    wb_supervisor_node_remove(existing);
+  }
+  snprintf(
+      node_string,
+      sizeof(node_string),
+      "DEF %s Solid { "
+      "translation %.6f %.6f %.6f "
+      "name \"runtime_obstacle\" "
+      "children [ "
+      "Shape { "
+      "appearance PBRAppearance { baseColor 0.7608 0.2549 0.1451 roughness 0.95 metalness 0.0 } "
+      "geometry Box { size %.6f %.6f %.6f } "
+      "} "
+      "] "
+      "boundingObject Box { size %.6f %.6f %.6f } "
+      "locked TRUE "
+      "}",
+      def_name,
+      x,
+      y,
+      half_height,
+      size_x,
+      size_y,
+      height,
+      size_x,
+      size_y,
+      height);
+
+  const int insert_at = wb_supervisor_field_get_count(root_children_field);
+  wb_supervisor_field_import_mf_node_from_string(root_children_field, insert_at, node_string);
+  if (runtime_obstacle_count < MAX_RUNTIME_OBSTACLE_NODES) {
+    runtime_obstacle_nodes[runtime_obstacle_count] = wb_supervisor_node_get_from_def(def_name);
+    strncpy(runtime_obstacle_defs[runtime_obstacle_count], def_name, sizeof(runtime_obstacle_defs[runtime_obstacle_count]) - 1);
+    runtime_obstacle_defs[runtime_obstacle_count][sizeof(runtime_obstacle_defs[runtime_obstacle_count]) - 1] = '\0';
+    runtime_obstacle_count += 1;
+  }
+}
+
+static int load_runtime_command(RuntimeCommand *command) {
+  if (!command) return 0;
+  FILE *file = fopen(RUNTIME_COMMAND_PATH, "r");
+  if (!file) return 0;
+
+  RuntimeCommand parsed = {0};
+  parsed.id = -1;
+  parsed.size_x = 0.8;
+  parsed.size_y = 0.8;
+  parsed.height = 0.6;
+
+  char line[256];
+  while (fgets(line, sizeof(line), file)) {
+    long long id = 0;
+    double numeric = 0.0;
+    char token[64];
+
+    if (sscanf(line, " id %lld", &id) == 1) {
+      parsed.id = id;
+      continue;
+    }
+    if (sscanf(line, " type %63s", token) == 1) {
+      parsed.has_spawn_obstacle = strcmp(token, "spawn_obstacle") == 0 ? 1 : 0;
+      continue;
+    }
+    if (sscanf(line, " x %lf", &numeric) == 1) {
+      parsed.x = numeric;
+      continue;
+    }
+    if (sscanf(line, " y %lf", &numeric) == 1) {
+      parsed.y = numeric;
+      continue;
+    }
+    if (sscanf(line, " size_x %lf", &numeric) == 1) {
+      parsed.size_x = numeric;
+      continue;
+    }
+    if (sscanf(line, " size_y %lf", &numeric) == 1) {
+      parsed.size_y = numeric;
+      continue;
+    }
+    if (sscanf(line, " height %lf", &numeric) == 1) {
+      parsed.height = numeric;
+      continue;
+    }
+  }
+
+  fclose(file);
+  if (parsed.id < 0 || !parsed.has_spawn_obstacle) return 0;
+  *command = parsed;
+  return 1;
+}
+
+static void maybe_reload_runtime_command() {
+  if ((step_counter % RUNTIME_COMMAND_RELOAD_INTERVAL) != 0) return;
+
+  const long long mtime = get_file_mtime(RUNTIME_COMMAND_PATH);
+  if (mtime < 0) return;
+  if (mtime == runtime_command_last_modified) return;
+
+  RuntimeCommand command = {0};
+  if (!load_runtime_command(&command)) {
+    runtime_command_last_modified = mtime;
+    return;
+  }
+
+  runtime_command_last_modified = mtime;
+  if (command.id <= last_processed_runtime_command_id) return;
+  last_processed_runtime_command_id = command.id;
+  spawn_runtime_obstacle_from_command(&command);
+  clear_error();
+  set_status("runtime_obstacle_spawned");
+}
+
 static void maybe_reload_zones() {
   if ((step_counter % ZONE_RELOAD_INTERVAL) != 0) return;
 
@@ -1084,6 +1351,7 @@ static void run_navigation_step() {
   if (route_data.count == 0) {
     set_status("waiting_for_route");
     route_finished = 0;
+    avoidance_hold_steps = 0;
     reset_navigation_mode();
     distance_to_target = 0.0;
     stop_robot();
@@ -1092,6 +1360,7 @@ static void run_navigation_step() {
 
   if (route_finished) {
     set_status("finished");
+    avoidance_hold_steps = 0;
     reset_navigation_mode();
     distance_to_target = 0.0;
     stop_robot();
@@ -1138,8 +1407,208 @@ static void run_navigation_step() {
 
   const double dx = target.x - x;
   const double dz = target.z - z;
-  distance_to_target = hypot2(dx, dz);
+  const double target_distance_now = hypot2(dx, dz);
   const double heading_to_target = atan2(dz, dx);
+
+  const int front_obstacle_detected = lidar_available && lidar_front_hit_count > 0;
+  const double front_obstacle_range =
+      front_obstacle_detected ? lidar_front_min_range : LIDAR_MAX_TRACE_RANGE;
+  const double center_obstacle_range =
+      front_obstacle_detected ? lidar_center_min_range : LIDAR_MAX_TRACE_RANGE;
+  const double left_obstacle_range =
+      lidar_available ? lidar_left_min_range : LIDAR_MAX_TRACE_RANGE;
+  const double right_obstacle_range =
+      lidar_available ? lidar_right_min_range : LIDAR_MAX_TRACE_RANGE;
+  const int side_obstacle_detected =
+      lidar_available &&
+      (left_obstacle_range < LIDAR_AVOID_SIDE_TRIGGER_RANGE ||
+       right_obstacle_range < LIDAR_AVOID_SIDE_TRIGGER_RANGE);
+  const int avoidance_was_active = avoidance_active;
+  const int close_side_without_front =
+      side_obstacle_detected &&
+      (!front_obstacle_detected || front_obstacle_range > LIDAR_AVOID_RECOVER_RANGE);
+  const double followed_side_range =
+      avoidance_obstacle_side > 0 ? left_obstacle_range : right_obstacle_range;
+
+  int avoid_now = 0;
+  if (front_obstacle_detected && front_obstacle_range < LIDAR_AVOID_TRIGGER_RANGE) {
+    avoid_now = 1;
+    avoidance_hold_steps = LIDAR_AVOID_HOLD_STEPS;
+    if (fabs(left_obstacle_range - right_obstacle_range) > 0.03) {
+      avoidance_obstacle_side = left_obstacle_range <= right_obstacle_range ? 1 : -1;
+      avoidance_turn_sign = avoidance_obstacle_side > 0 ? -1.0 : 1.0;
+    } else {
+      const double heading_error_to_target_for_side = wrap_angle(heading_to_target - heading);
+      avoidance_turn_sign = sign_or_one(heading_error_to_target_for_side);
+      avoidance_obstacle_side = avoidance_turn_sign > 0.0 ? -1 : 1;
+    }
+    avoidance_release_steps = 0;
+  } else if (avoidance_hold_steps > 0 &&
+             lidar_available &&
+             (front_obstacle_range < LIDAR_AVOID_RECOVER_RANGE ||
+              left_obstacle_range < (LIDAR_AVOID_SIDE_TRIGGER_RANGE + 0.08) ||
+              right_obstacle_range < (LIDAR_AVOID_SIDE_TRIGGER_RANGE + 0.08))) {
+    avoid_now = 1;
+  } else if (avoidance_active &&
+             lidar_available &&
+             followed_side_range < LIDAR_AVOID_FOLLOW_RANGE) {
+    avoid_now = 1;
+  }
+
+  // If only a side wall is close but the front is clear, do not force avoidance mode:
+  // this allows tight parallel passing near obstacles.
+  if (!avoidance_active && close_side_without_front) {
+    avoid_now = 0;
+    avoidance_hold_steps = 0;
+  }
+
+  if (avoidance_hold_steps > 0) avoidance_hold_steps -= 1;
+
+  if (avoid_now) {
+    if (!avoidance_active) {
+      avoidance_active = 1;
+      avoidance_stuck_steps = 0;
+      avoidance_prev_x = x;
+      avoidance_prev_z = z;
+      avoidance_prev_target_distance = target_distance_now;
+      avoidance_release_steps = 0;
+      if (avoidance_obstacle_side == 0) {
+        avoidance_obstacle_side = left_obstacle_range <= right_obstacle_range ? 1 : -1;
+      }
+    }
+
+    const double moved_since_last = hypot2(x - avoidance_prev_x, z - avoidance_prev_z);
+    const double target_progress = avoidance_prev_target_distance - target_distance_now;
+    if (moved_since_last < LIDAR_AVOID_STUCK_POSE_EPS &&
+        target_progress < LIDAR_AVOID_STUCK_PROGRESS_EPS) {
+      avoidance_stuck_steps += 1;
+    } else {
+      avoidance_stuck_steps -= 2;
+      if (avoidance_stuck_steps < 0) avoidance_stuck_steps = 0;
+    }
+    avoidance_prev_x = x;
+    avoidance_prev_z = z;
+    avoidance_prev_target_distance = target_distance_now;
+
+    const double avoid_window = fmax(LIDAR_AVOID_TRIGGER_RANGE - LIDAR_AVOID_STOP_RANGE, 0.05);
+    const double front_proximity = clamp_value(
+        (LIDAR_AVOID_TRIGGER_RANGE - front_obstacle_range) / avoid_window,
+        0.0,
+        1.0);
+    const double follow_side_range =
+        avoidance_obstacle_side > 0 ? left_obstacle_range : right_obstacle_range;
+    const double outer_side_range =
+        avoidance_obstacle_side > 0 ? right_obstacle_range : left_obstacle_range;
+    const double turn_side_range =
+        avoidance_turn_sign > 0.0 ? left_obstacle_range : right_obstacle_range;
+    const double opposite_side_range =
+        avoidance_turn_sign > 0.0 ? right_obstacle_range : left_obstacle_range;
+    const double side_window =
+        fmax(LIDAR_AVOID_SIDE_TRIGGER_RANGE - LIDAR_AVOID_SIDE_DANGER_RANGE, 0.03);
+    const double side_proximity = clamp_value(
+        (LIDAR_AVOID_SIDE_TRIGGER_RANGE - follow_side_range) / side_window,
+        0.0,
+        1.0);
+
+    if (turn_side_range < LIDAR_AVOID_SIDE_DANGER_RANGE &&
+        opposite_side_range > turn_side_range + 0.10) {
+      avoidance_turn_sign = -avoidance_turn_sign;
+      avoidance_obstacle_side = -avoidance_obstacle_side;
+    }
+
+    double linear_speed = runtime_linear_speed_limit * (0.56 - front_proximity * 0.34 - side_proximity * 0.20);
+    if (center_obstacle_range <= LIDAR_AVOID_REVERSE_RANGE) {
+      linear_speed = -0.055;
+    } else if (center_obstacle_range <= LIDAR_AVOID_STOP_RANGE) {
+      linear_speed = 0.0;
+    } else if (follow_side_range <= LIDAR_AVOID_SIDE_DANGER_RANGE) {
+      // Keep creeping forward even in tight side clearances; avoid full stop.
+      linear_speed = clamp_value(linear_speed, 0.045, 0.09);
+    }
+    linear_speed = clamp_value(linear_speed, -0.065, 0.15);
+
+    const double side_delta = clamp_value(fabs(left_obstacle_range - right_obstacle_range), 0.0, 0.8);
+    double angular_speed = 0.0;
+    const int contour_follow_active =
+        center_obstacle_range > LIDAR_AVOID_STOP_RANGE &&
+        follow_side_range < LIDAR_AVOID_FOLLOW_RANGE;
+
+    if (contour_follow_active) {
+      const double follow_error = clamp_value(
+          LIDAR_AVOID_FOLLOW_TARGET - follow_side_range,
+          -0.24,
+          0.24);
+      angular_speed = avoidance_turn_sign *
+                      clamp_value(follow_error * 6.2, -0.86, 0.96);
+      linear_speed = clamp_value(
+          linear_speed * (0.66 + 0.24 * clamp_value(outer_side_range / LIDAR_AVOID_FOLLOW_RANGE, 0.35, 1.3)),
+          0.04,
+          0.11);
+      avoidance_release_steps = 0;
+    } else {
+      avoidance_release_steps += 1;
+      const double release_heading_error = wrap_angle(heading_to_target - heading);
+      angular_speed = clamp_value(
+          release_heading_error * 1.6 + avoidance_turn_sign * 0.10,
+          -0.42,
+          0.42);
+      linear_speed = clamp_value(linear_speed, 0.06, 0.11);
+    }
+
+    angular_speed += avoidance_turn_sign * side_delta * 0.08;
+    if (center_obstacle_range <= LIDAR_AVOID_STOP_RANGE ||
+        follow_side_range <= LIDAR_AVOID_SIDE_DANGER_RANGE) {
+      angular_speed = avoidance_turn_sign * runtime_angular_speed_limit;
+      avoidance_release_steps = 0;
+    }
+    angular_speed = clamp_value(
+        angular_speed,
+        -runtime_angular_speed_limit,
+        runtime_angular_speed_limit);
+
+    if (avoidance_stuck_steps > LIDAR_AVOID_STUCK_STEPS) {
+      if ((avoidance_stuck_steps % 34) == 0) {
+        avoidance_turn_sign = -avoidance_turn_sign;
+      }
+      linear_speed = -0.07;
+      angular_speed = avoidance_turn_sign * runtime_angular_speed_limit;
+      clear_error();
+      set_status("avoiding_escape");
+    } else {
+      clear_error();
+      set_status(contour_follow_active ? "avoiding_contour" : "avoiding_release");
+    }
+
+    distance_to_target = target_distance_now;
+    if (avoidance_release_steps < LIDAR_AVOID_RELEASE_STEPS ||
+        contour_follow_active ||
+        center_obstacle_range < LIDAR_AVOID_RECOVER_RANGE) {
+      set_base_velocity(linear_speed, 0.0, angular_speed);
+      return;
+    }
+
+    avoidance_active = 0;
+    avoidance_hold_steps = 0;
+    avoidance_release_steps = 0;
+  }
+
+  avoidance_active = 0;
+  avoidance_obstacle_side = 0;
+  avoidance_release_steps = 0;
+  avoidance_stuck_steps = 0;
+  if (avoidance_was_active) {
+    navigation_segment_start_x = x;
+    navigation_segment_start_z = z;
+    navigation_mode = NAV_MODE_TRACK;
+  }
+  distance_to_target = target_distance_now;
+  const double cross_track_error = compute_cross_track_error(x, z, &target);
+  if (fabs(cross_track_error) > TRACK_REANCHOR_CROSSTRACK &&
+      distance_to_target > TRACK_SLOW_RADIUS * 0.8) {
+    navigation_segment_start_x = x;
+    navigation_segment_start_z = z;
+    navigation_mode = NAV_MODE_TRACK;
+  }
   const double track_heading = compute_track_heading(x, z, &target, distance_to_target);
   const double heading_error_to_target = wrap_angle(heading_to_target - heading);
   const double heading_error_on_track = wrap_angle(track_heading - heading);
@@ -1308,7 +1777,12 @@ static void write_state_snapshot() {
   fprintf(file, "      \"enabled\": %s,\n", lidar_available ? "true" : "false");
   fprintf(file, "      \"horizontalResolution\": %d,\n", lidar_resolution);
   fprintf(file, "      \"maxRange\": %.3f,\n", lidar_max_range);
-  fprintf(file, "      \"lastHitCount\": %d\n", lidar_last_hit_count);
+  fprintf(file, "      \"lastHitCount\": %d,\n", lidar_last_hit_count);
+  fprintf(file, "      \"frontHitCount\": %d,\n", lidar_front_hit_count);
+  fprintf(file, "      \"frontMinRange\": %.3f,\n", lidar_front_min_range);
+  fprintf(file, "      \"centerMinRange\": %.3f,\n", lidar_center_min_range);
+  fprintf(file, "      \"leftMinRange\": %.3f,\n", lidar_left_min_range);
+  fprintf(file, "      \"rightMinRange\": %.3f\n", lidar_right_min_range);
   fprintf(file, "    },\n");
   fprintf(file, "    \"obstacleTrace\": [\n");
   int emitted_trace_points = 0;
@@ -1359,6 +1833,7 @@ int main(int argc, char **argv) {
     load_motion_profile();
   }
   maybe_reload_zones();
+  runtime_command_last_modified = get_file_mtime(RUNTIME_COMMAND_PATH);
 
   if (!translation_field || !rotation_field || !root_children_field) {
     set_status("error");
@@ -1372,11 +1847,13 @@ int main(int argc, char **argv) {
     maybe_reload_zones();
     maybe_reload_route();
     maybe_reload_motion_profile();
+    maybe_reload_runtime_command();
     capture_lidar_trace();
     run_navigation_step();
     write_state_snapshot();
   }
 
+  remove_runtime_obstacle_nodes();
   remove_zone_nodes();
   wb_robot_cleanup();
   return 0;

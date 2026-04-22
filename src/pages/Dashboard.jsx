@@ -11,10 +11,13 @@ import {
 import { useMemo } from "react";
 import {
   DEFAULT_POINT_TASK,
+  HALF_HEIGHT,
+  HALF_WIDTH,
   buildObstacleAwareRoute,
   canvasToWorld,
   DEFAULT_SURFACE_ZONES,
   isInsideMap,
+  pointInAnyPolygon,
   routeCrossesAnyLimitPolygon,
   sanitizeRouteForController,
   worldToCanvas,
@@ -176,6 +179,75 @@ const parseLooseNumber = (rawValue) => {
 
 const formatNumber = (value, digits) =>
   Number(value.toFixed(digits)).toString();
+
+const randomBetween = (min, max) => min + Math.random() * (max - min);
+
+const pickRandomObstacleCenter = ({
+  telemetry,
+  optimizedRoute,
+  points,
+  polygons,
+}) => {
+  const allPoints = Array.isArray(points) ? points : [];
+  const route = Array.isArray(optimizedRoute) ? optimizedRoute : [];
+  const routeBiasAttempts = 28;
+  const totalAttempts = 120;
+
+  const isSafe = (candidate) => {
+    if (!isInsideMap(candidate)) return false;
+    if (pointInAnyPolygon(candidate, polygons)) return false;
+
+    const robotDistance = Math.hypot(candidate.x - telemetry.x, candidate.y - telemetry.y);
+    if (robotDistance < 1.1) return false;
+
+    for (const point of allPoints) {
+      if (Math.hypot(candidate.x - point.x, candidate.y - point.y) < 0.75) {
+        return false;
+      }
+    }
+
+    return true;
+  };
+
+  for (let attempt = 0; attempt < totalAttempts; attempt += 1) {
+    let candidate = null;
+    const useRouteBias = route.length > 1 && attempt < routeBiasAttempts;
+
+    if (useRouteBias) {
+      const segmentIndex = Math.floor(Math.random() * (route.length - 1));
+      const a = route[segmentIndex];
+      const b = route[segmentIndex + 1];
+      const t = Math.random();
+      const ax = a.x + (b.x - a.x) * t;
+      const ay = a.y + (b.y - a.y) * t;
+      const dx = b.x - a.x;
+      const dy = b.y - a.y;
+      const segmentLength = Math.hypot(dx, dy);
+
+      if (segmentLength > 1e-6) {
+        const normalX = -dy / segmentLength;
+        const normalY = dx / segmentLength;
+        const sign = Math.random() < 0.5 ? -1 : 1;
+        const lateralOffset = randomBetween(0.22, 0.85);
+        candidate = {
+          x: ax + normalX * lateralOffset * sign,
+          y: ay + normalY * lateralOffset * sign,
+        };
+      }
+    }
+
+    if (!candidate) {
+      candidate = {
+        x: randomBetween(-HALF_WIDTH + 1.2, HALF_WIDTH - 1.2),
+        y: randomBetween(-HALF_HEIGHT + 1.2, HALF_HEIGHT - 1.2),
+      };
+    }
+
+    if (isSafe(candidate)) return candidate;
+  }
+
+  return null;
+};
 
 export default function Dashboard() {
   const canvasRef = useRef(null);
@@ -1020,6 +1092,43 @@ export default function Dashboard() {
     sendPayload(ws);
   };
 
+  const addRandomObstacle = () => {
+    const center = pickRandomObstacleCenter({
+      telemetry,
+      optimizedRoute,
+      points,
+      polygons: plannerModel.polygons,
+    });
+
+    if (!center) {
+      setStatus("Не удалось подобрать безопасное место для случайного препятствия.");
+      return;
+    }
+
+    const payload = {
+      type: "spawn_random_obstacle",
+      commandId: Date.now(),
+      obstacle: {
+        x: Number(center.x.toFixed(4)),
+        y: Number(center.y.toFixed(4)),
+        sizeX: Number(randomBetween(0.46, 1.15).toFixed(3)),
+        sizeY: Number(randomBetween(0.38, 0.95).toFixed(3)),
+        height: Number(randomBetween(0.32, 0.9).toFixed(3)),
+      },
+    };
+
+    sendRouteChannelPayload(routeWsRef, payload, {
+      onSent: () => {
+        setStatus(
+          `Случайное препятствие добавлено: (${payload.obstacle.x.toFixed(2)}, ${payload.obstacle.y.toFixed(2)}).`
+        );
+      },
+      onError: () => {
+        setStatus("Не удалось отправить команду добавления препятствия.");
+      },
+    });
+  };
+
   return (
     <div className="flex h-screen bg-stone-100 text-stone-900">
       <PlannerLeftSidebar
@@ -1041,6 +1150,7 @@ export default function Dashboard() {
         isOptimizing={isOptimizing}
         onOptimizeRoute={optimizeRoute}
         onSendRoute={sendRoute}
+        onAddRandomObstacle={addRandomObstacle}
         onClearAll={() => clearPoints()}
         hasRoute={optimizedRoute.length > 0}
         routeLength={plannerModel.routeLength}
