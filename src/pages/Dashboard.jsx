@@ -282,6 +282,57 @@ export default function Dashboard() {
   );
   const autoRouteSyncToken = `${zoneSyncPayloadText}|${chargePointsRoutingText}|${batteryRangeMeters}|${cruiseSpeedMps}|${payloadKg}`;
 
+  
+  const handleImportGraph = (importedData) => {
+  const newPoints = [];
+
+  (importedData.visitEntries || []).forEach(entry => {
+    newPoints.push({
+      kind: 'visit',
+      x: entry.point.x,
+      y: entry.point.y,
+      task: entry.task || DEFAULT_POINT_TASK,
+      index: entry.index,
+    });
+  });
+
+  (importedData.chargeEntries || []).forEach(entry => {
+    newPoints.push({
+      kind: 'charge',
+      x: entry.point.x,
+      y: entry.point.y,
+      index: entry.index,
+    });
+  });
+  const newLimitZones = [];
+  (importedData.zoneEntries || []).forEach(zone => {
+    const zoneId = zone.id;
+    newLimitZones.push({
+      id: zoneId,
+      name: zone.name,
+      closed: zone.closed,
+    });
+    (zone.points || []).forEach(pointEntry => {
+      newPoints.push({
+        kind: 'limit',
+        zoneId: zoneId,
+        x: pointEntry.point.x,
+        y: pointEntry.point.y,
+        order: pointEntry.order,
+      });
+    });
+  });
+
+  setPoints(newPoints);
+  setLimitZones(newLimitZones);
+
+  setOptimizedRoute([]);
+  setHoveredPointIndex(null);
+  
+  console.log('Граф успешно импортирован');
+};
+  
+  
   useEffect(() => {
     let closed = false;
     let ws = null;
@@ -1062,6 +1113,8 @@ export default function Dashboard() {
         onPayloadChange={handlePayloadChange}
         onPayloadBlur={handlePayloadBlur}
         routeEnergyStats={routeEnergyStats}
+        onImportGraph={handleImportGraph}
+      
       />
 
       <PlannerCanvas
