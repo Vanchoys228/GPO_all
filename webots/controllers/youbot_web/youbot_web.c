@@ -21,7 +21,7 @@
 
 #define TIME_STEP 16
 #define PI 3.14159265358979323846
-#define KINEMATIC_LINEAR_SPEED 0.45
+#define KINEMATIC_LINEAR_SPEED 0.60
 #define KINEMATIC_ANGULAR_SPEED 1.6
 #define DEFAULT_CRUISE_SPEED_MPS 0.22
 #define MIN_CRUISE_SPEED_MPS 0.05
@@ -41,12 +41,13 @@
 #define TURN_HEADING_GAIN 3.8
 #define TRACK_HEADING_GAIN 3.0
 #define FINAL_ALIGN_GAIN 3.4
-#define TRACK_CROSS_TRACK_GAIN 0.72
+#define TRACK_CROSS_TRACK_GAIN 0.22
 #define TRACK_LOOKAHEAD_MIN 0.16
 #define TRACK_LOOKAHEAD_MAX 0.45
 #define TRACK_MIN_LINEAR_SPEED 0.035
-#define TRACK_DIRECT_HEADING_CROSSTRACK 0.22
-#define TRACK_REANCHOR_CROSSTRACK 0.28
+#define TRACK_DIRECT_HEADING_CROSSTRACK 0.10
+#define TRACK_REANCHOR_CROSSTRACK 0.12
+#define TRACK_RELAXED_MODE_CROSSTRACK 0.035
 #define MIN_ANGULAR_COMMAND 0.28
 #define START_X 0.0
 #define START_Z 0.0
@@ -77,23 +78,58 @@
 #define LIDAR_LOCAL_Y 0.0
 #define LIDAR_FRONT_SECTOR_RAD 0.40
 #define LIDAR_CENTER_SECTOR_RAD 0.13
-#define LIDAR_AVOID_TRIGGER_RANGE 0.88
-#define LIDAR_AVOID_STOP_RANGE 0.29
-#define LIDAR_AVOID_RECOVER_RANGE 1.02
-#define LIDAR_AVOID_REVERSE_RANGE 0.18
-#define LIDAR_AVOID_HOLD_STEPS 22
-#define LIDAR_AVOID_SIDE_TRIGGER_RANGE 0.30
-#define LIDAR_AVOID_SIDE_DANGER_RANGE 0.21
-#define LIDAR_AVOID_FOLLOW_RANGE 0.60
-#define LIDAR_AVOID_FOLLOW_TARGET 0.31
-#define LIDAR_AVOID_RELEASE_STEPS 20
+#define LIDAR_FRONT_CORNER_MIN_RAD 0.14
+#define LIDAR_FRONT_CORNER_MAX_RAD 0.42
+#define LIDAR_AVOID_TRIGGER_RANGE 1.02
+#define LIDAR_AVOID_STOP_RANGE 0.27
+#define LIDAR_AVOID_RECOVER_RANGE 1.18
+#define LIDAR_AVOID_REVERSE_RANGE 0.17
+#define LIDAR_AVOID_HOLD_STEPS 28
+#define LIDAR_AVOID_SIDE_TRIGGER_RANGE 0.42
+#define LIDAR_AVOID_SIDE_DANGER_RANGE 0.19
+#define LIDAR_AVOID_FOLLOW_RANGE 0.74
+#define LIDAR_AVOID_FOLLOW_TARGET 0.29
+#define LIDAR_AVOID_RELEASE_STEPS 24
+#define LIDAR_AVOID_MIN_CONTOUR_STEPS 18
+#define LIDAR_AVOID_CLEAR_STEPS 8
+#define LIDAR_AVOID_LEAVE_PROGRESS 0.16
+#define LIDAR_AVOID_LEAVE_HEADING_RAD 0.44
+#define LIDAR_AVOID_TARGET_CLEAR_RANGE 1.16
+#define LIDAR_AVOID_ESCAPE_STEPS 16
 #define LIDAR_AVOID_STUCK_STEPS 24
 #define LIDAR_AVOID_STUCK_POSE_EPS 0.004
 #define LIDAR_AVOID_STUCK_PROGRESS_EPS 0.001
+#define LIDAR_TRACK_CAUTION_RANGE 1.45
+#define LIDAR_TRACK_HARD_PRIORITY_RANGE 1.12
+#define LIDAR_TRACK_SLOW_RANGE 1.00
+#define LIDAR_TRACK_SIDE_BIAS_RANGE 0.90
+#define LIDAR_TRACK_MAX_HEADING_BIAS 0.52
+#define LIDAR_PRIORITY_HOLD_STEPS 18
+#define LIDAR_PRIORITY_SWITCH_MARGIN 0.18
+#define LIDAR_PRIORITY_CENTER_MARGIN 0.08
+#define POSE_RELOCATION_DISTANCE 0.45
+#define POSE_RELOCATION_HEADING_RAD 1.20
+#define FREE_SPACE_RECOVERY_STEPS 10
+#define ZONE_WALL_EXPECTED_TOLERANCE 0.18
+#define EXPECTED_WALL_SOFT_STOP_RANGE 0.24
+#define EXPECTED_WALL_SLOWDOWN_RANGE 0.46
+#define LIDAR_REFLEX_SIDE_RELEASE_RANGE 0.90
+#define LIDAR_REFLEX_SWITCH_MARGIN 0.18
+#define LIDAR_REFLEX_TARGET_GAIN 0.16
+#define LIDAR_REFLEX_MAX_LINEAR_SPEED 0.18
+#define LIDAR_GAP_MIN_RANGE 0.34
+#define LIDAR_GAP_SWITCH_RANGE_BONUS 0.18
 #define WHEEL_RADIUS 0.05
 #define WHEEL_BASE_LONGITUDINAL 0.228
 #define WHEEL_BASE_LATERAL 0.158
 #define MAX_WHEEL_SPEED_RAD_S 12.0
+#define WHEEL_ACCEL_LIMIT_RAD_S2 90.0
+#define WHEEL_DECEL_LIMIT_RAD_S2 140.0
+#define MAX_MAP_POINTS 4096
+#define MAP_CELL_SIZE 0.06
+#define MAP_MERGE_MIN_HIT_COUNT 2
+#define MAP_MERGE_MAX_AGE_S 1.0
+#define MAP_WRITE_INTERVAL 60
 #define EPS 1e-9
 
 typedef struct {
@@ -116,6 +152,15 @@ typedef enum {
   NAV_MODE_TRACK = 2,
   NAV_MODE_FINAL_ALIGN = 3,
 } NavigationMode;
+
+typedef enum {
+  AVOID_MODE_NONE = 0,
+  AVOID_MODE_FACE_CLEAR = 1,
+  AVOID_MODE_FOLLOW_EDGE = 2,
+  AVOID_MODE_SEARCH_EDGE = 3,
+  AVOID_MODE_RECOVER_TARGET = 4,
+  AVOID_MODE_ESCAPE = 5,
+} AvoidanceMode;
 
 typedef struct {
   char id[64];
@@ -148,6 +193,31 @@ typedef struct {
   double height;
 } RuntimeCommand;
 
+typedef struct {
+  double x;
+  double y;
+  int confidence;
+} MapCell;
+
+typedef struct {
+  double expected_front_min_range;
+  double unexpected_front_min_range;
+  double unexpected_center_min_range;
+  double unexpected_left_front_min_range;
+  double unexpected_right_front_min_range;
+  double unexpected_left_min_range;
+  double unexpected_right_min_range;
+  double expected_front_score;
+  double unexpected_front_score;
+  double unexpected_left_score;
+  double unexpected_right_score;
+  double best_gap_beam_angle;
+  double best_gap_range;
+  double best_gap_score;
+  int has_best_gap;
+  int unexpected_front_hit_count;
+} LidarObstacleContext;
+
 static WbDeviceTag wheels[4];
 static WbDeviceTag arm_joints[5];
 static WbDeviceTag gripper_fingers[2];
@@ -156,6 +226,7 @@ static WbNodeRef self_node;
 static WbFieldRef translation_field;
 static WbFieldRef rotation_field;
 static WbFieldRef root_children_field;
+static double applied_wheel_speeds[4] = {0.0, 0.0, 0.0, 0.0};
 
 static RouteData route_data = {0};
 static ZoneData zone_data = {0};
@@ -167,6 +238,9 @@ static char runtime_obstacle_defs[MAX_RUNTIME_OBSTACLE_NODES][64];
 static int runtime_obstacle_count = 0;
 static ObstacleTracePoint obstacle_trace[MAX_OBSTACLE_TRACE_POINTS];
 static int obstacle_trace_count = 0;
+static MapCell persistent_map[MAX_MAP_POINTS];
+static int persistent_map_count = 0;
+static int map_dirty = 0;
 static int lidar_available = 0;
 static int lidar_resolution = 0;
 static double lidar_fov = 0.0;
@@ -175,6 +249,8 @@ static int lidar_last_hit_count = 0;
 static int lidar_front_hit_count = 0;
 static double lidar_front_min_range = 0.0;
 static double lidar_center_min_range = 0.0;
+static double lidar_left_front_min_range = 0.0;
+static double lidar_right_front_min_range = 0.0;
 static double lidar_left_min_range = 0.0;
 static double lidar_right_min_range = 0.0;
 static int current_waypoint_index = 0;
@@ -193,15 +269,28 @@ static double configured_battery_range_units = DEFAULT_BATTERY_RANGE_UNITS;
 static double runtime_linear_speed_limit = DEFAULT_CRUISE_SPEED_MPS;
 static double runtime_angular_speed_limit = KINEMATIC_ANGULAR_SPEED;
 static double runtime_battery_speed_factor = 1.0;
+static double lidar_priority_turn_sign = 0.0;
+static int lidar_priority_hold_steps = 0;
+static AvoidanceMode avoidance_mode = AVOID_MODE_NONE;
 static int avoidance_hold_steps = 0;
 static double avoidance_turn_sign = 1.0;
 static int avoidance_active = 0;
 static int avoidance_obstacle_side = 0;
 static int avoidance_release_steps = 0;
+static int avoidance_contour_steps = 0;
+static int avoidance_clear_steps = 0;
+static int avoidance_escape_steps = 0;
 static int avoidance_stuck_steps = 0;
+static int avoidance_no_obstacle_steps = 0;
 static double avoidance_prev_x = START_X;
 static double avoidance_prev_z = START_Z;
 static double avoidance_prev_target_distance = 0.0;
+static double avoidance_hit_target_distance = 0.0;
+static double avoidance_state_heading = 0.0;
+static double last_pose_x = START_X;
+static double last_pose_z = START_Z;
+static double last_pose_heading = 0.0;
+static int last_pose_valid = 0;
 static long long motion_profile_last_modified = -1;
 static long long runtime_command_last_modified = -1;
 static long long last_processed_runtime_command_id = -1;
@@ -212,8 +301,13 @@ static const char *STATE_PATH = "..\\..\\..\\web_state\\robot_state.json";
 static const char *STATE_TEMP_PATH = "..\\..\\..\\web_state\\robot_state.tmp";
 static const char *MOTION_PROFILE_PATH = "..\\..\\..\\web_state\\motion_profile.txt";
 static const char *RUNTIME_COMMAND_PATH = "..\\..\\..\\web_state\\runtime_command.txt";
+static const char *MAP_PATH = "..\\..\\..\\web_state\\obstacle_map.json";
+static const char *MAP_TEMP_PATH = "..\\..\\..\\web_state\\obstacle_map.tmp";
+static const char *MAP_CSV_PATH = "..\\..\\..\\web_state\\obstacle_map.csv";
+static const char *MAP_CSV_TEMP_PATH = "..\\..\\..\\web_state\\obstacle_map_csv.tmp";
 
 static int point_near_zone(double x, double y, const LimitZone *zone, double clearance);
+static int point_near_zone_boundary(double x, double y, const LimitZone *zone, double tolerance);
 static void reset_navigation_mode();
 static void set_status(const char *status);
 
@@ -235,6 +329,14 @@ static double wrap_angle(double angle) {
   while (angle > PI) angle -= 2.0 * PI;
   while (angle < -PI) angle += 2.0 * PI;
   return angle;
+}
+
+static double blend_angle(double from_angle, double to_angle, double weight_to) {
+  const double weight = clamp_value(weight_to, 0.0, 1.0);
+  const double x = (1.0 - weight) * cos(from_angle) + weight * cos(to_angle);
+  const double y = (1.0 - weight) * sin(from_angle) + weight * sin(to_angle);
+  if (fabs(x) <= EPS && fabs(y) <= EPS) return to_angle;
+  return atan2(y, x);
 }
 
 static long long get_file_mtime(const char *path) {
@@ -267,13 +369,12 @@ static void apply_motion_profile() {
   runtime_battery_speed_factor = clamp_value(battery_ratio, 0.6, 1.0);
 
   runtime_linear_speed_limit = clamp_value(
-      configured_cruise_speed_mps * payload_factor * runtime_battery_speed_factor,
+      configured_cruise_speed_mps,
       TRACK_MIN_LINEAR_SPEED,
       KINEMATIC_LINEAR_SPEED);
   runtime_angular_speed_limit = clamp_value(
       KINEMATIC_ANGULAR_SPEED *
-          (0.72 + 0.28 * payload_factor) *
-          (0.84 + 0.16 * runtime_battery_speed_factor),
+          (0.88 + 0.12 * payload_factor),
       0.75,
       KINEMATIC_ANGULAR_SPEED);
 }
@@ -309,13 +410,26 @@ static int load_motion_profile() {
 static void maybe_reload_motion_profile() {
   if ((step_counter % MOTION_RELOAD_INTERVAL) != 0) return;
 
+  const double previous_cruise_speed = configured_cruise_speed_mps;
+  const double previous_payload_kg = configured_payload_kg;
+  const double previous_battery_range = configured_battery_range_units;
+  const double previous_linear_limit = runtime_linear_speed_limit;
+  const double previous_angular_limit = runtime_angular_speed_limit;
   const long long mtime = get_file_mtime(MOTION_PROFILE_PATH);
   if (mtime < 0) return;
-  if (mtime == motion_profile_last_modified) return;
 
   if (load_motion_profile()) {
+    const int profile_changed =
+        mtime != motion_profile_last_modified ||
+        fabs(configured_cruise_speed_mps - previous_cruise_speed) > 1e-6 ||
+        fabs(configured_payload_kg - previous_payload_kg) > 1e-6 ||
+        fabs(configured_battery_range_units - previous_battery_range) > 1e-6 ||
+        fabs(runtime_linear_speed_limit - previous_linear_limit) > 1e-6 ||
+        fabs(runtime_angular_speed_limit - previous_angular_limit) > 1e-6;
     motion_profile_last_modified = mtime;
-    set_status("motion_profile_reloaded");
+    if (profile_changed) {
+      set_status("motion_profile_reloaded");
+    }
   }
 }
 
@@ -349,6 +463,7 @@ static void init_wheels() {
     wheels[i] = wb_robot_get_device(name);
     wb_motor_set_position(wheels[i], INFINITY);
     wb_motor_set_velocity(wheels[i], 0.0);
+    applied_wheel_speeds[i] = 0.0;
   }
 }
 
@@ -406,6 +521,7 @@ static void init_lidar() {
 
 static void set_base_velocity(double vx, double vy, double omega) {
   const double coupling = WHEEL_BASE_LONGITUDINAL + WHEEL_BASE_LATERAL;
+  const double dt = TIME_STEP / 1000.0;
   double wheel_speeds[4];
   wheel_speeds[0] = (vx + vy + coupling * omega) / WHEEL_RADIUS;
   wheel_speeds[1] = (vx - vy - coupling * omega) / WHEEL_RADIUS;
@@ -415,7 +531,15 @@ static void set_base_velocity(double vx, double vy, double omega) {
   for (int i = 0; i < 4; ++i) {
     if (!wheels[i]) continue;
     wheel_speeds[i] = clamp_value(wheel_speeds[i], -MAX_WHEEL_SPEED_RAD_S, MAX_WHEEL_SPEED_RAD_S);
-    wb_motor_set_velocity(wheels[i], wheel_speeds[i]);
+    const double speed_diff = wheel_speeds[i] - applied_wheel_speeds[i];
+    const double max_delta =
+        ((fabs(wheel_speeds[i]) >= fabs(applied_wheel_speeds[i]) &&
+          applied_wheel_speeds[i] * wheel_speeds[i] >= 0.0)
+             ? WHEEL_ACCEL_LIMIT_RAD_S2
+             : WHEEL_DECEL_LIMIT_RAD_S2) *
+        dt;
+    applied_wheel_speeds[i] += clamp_value(speed_diff, -max_delta, max_delta);
+    wb_motor_set_velocity(wheels[i], applied_wheel_speeds[i]);
   }
 }
 
@@ -451,8 +575,16 @@ static void reset_robot_pose() {
   wb_supervisor_field_set_sf_vec3f(translation_field, translation);
   wb_supervisor_field_set_sf_rotation(rotation_field, rotation);
   wb_supervisor_node_reset_physics(self_node);
+  for (int i = 0; i < 4; ++i) {
+    applied_wheel_speeds[i] = 0.0;
+    if (wheels[i]) wb_motor_set_velocity(wheels[i], 0.0);
+  }
   avoidance_hold_steps = 0;
   avoidance_turn_sign = 1.0;
+  last_pose_x = START_X;
+  last_pose_z = START_Z;
+  last_pose_heading = 0.0;
+  last_pose_valid = 1;
   reset_navigation_mode();
   stop_robot();
 }
@@ -495,15 +627,24 @@ static void reset_navigation_mode() {
   navigation_waypoint_index = -1;
   navigation_segment_start_x = START_X;
   navigation_segment_start_z = START_Z;
+  lidar_priority_turn_sign = 0.0;
+  lidar_priority_hold_steps = 0;
+  avoidance_mode = AVOID_MODE_NONE;
   avoidance_hold_steps = 0;
   avoidance_turn_sign = 1.0;
   avoidance_active = 0;
   avoidance_obstacle_side = 0;
   avoidance_release_steps = 0;
+  avoidance_contour_steps = 0;
+  avoidance_clear_steps = 0;
+  avoidance_escape_steps = 0;
   avoidance_stuck_steps = 0;
+  avoidance_no_obstacle_steps = 0;
   avoidance_prev_x = START_X;
   avoidance_prev_z = START_Z;
   avoidance_prev_target_distance = 0.0;
+  avoidance_hit_target_distance = 0.0;
+  avoidance_state_heading = 0.0;
 }
 
 static void begin_navigation_for_waypoint(int waypoint_index, double current_x, double current_z) {
@@ -516,6 +657,251 @@ static void begin_navigation_for_waypoint(int waypoint_index, double current_x, 
 static void ensure_navigation_waypoint_initialized(double current_x, double current_z) {
   if (navigation_waypoint_index != current_waypoint_index) {
     begin_navigation_for_waypoint(current_waypoint_index, current_x, current_z);
+  }
+}
+
+static void clear_local_navigation_state() {
+  lidar_priority_turn_sign = 0.0;
+  lidar_priority_hold_steps = 0;
+  avoidance_mode = AVOID_MODE_NONE;
+  avoidance_hold_steps = 0;
+  avoidance_turn_sign = 1.0;
+  avoidance_active = 0;
+  avoidance_obstacle_side = 0;
+  avoidance_release_steps = 0;
+  avoidance_contour_steps = 0;
+  avoidance_clear_steps = 0;
+  avoidance_escape_steps = 0;
+  avoidance_stuck_steps = 0;
+  avoidance_no_obstacle_steps = 0;
+  avoidance_prev_target_distance = 0.0;
+  avoidance_hit_target_distance = 0.0;
+  avoidance_state_heading = 0.0;
+}
+
+static double compute_range_pressure(double range, double clear_range, double blocked_range) {
+  if (clear_range <= blocked_range + EPS) {
+    return range <= blocked_range ? 1.0 : 0.0;
+  }
+
+  return clamp_value((clear_range - range) / (clear_range - blocked_range), 0.0, 1.0);
+}
+
+static void compute_reflex_avoidance_command(double front_range,
+                                             double center_range,
+                                             double left_front_range,
+                                             double right_front_range,
+                                             double left_side_range,
+                                             double right_side_range,
+                                             double heading_error_to_target,
+                                             double *linear_speed,
+                                             double *angular_speed) {
+  const double front_pressure =
+      compute_range_pressure(front_range, LIDAR_AVOID_RECOVER_RANGE, LIDAR_AVOID_STOP_RANGE);
+  const double center_pressure = compute_range_pressure(center_range,
+                                                        LIDAR_AVOID_RECOVER_RANGE,
+                                                        LIDAR_AVOID_REVERSE_RANGE);
+  const double left_front_pressure =
+      compute_range_pressure(left_front_range, LIDAR_AVOID_RECOVER_RANGE, LIDAR_AVOID_STOP_RANGE);
+  const double right_front_pressure =
+      compute_range_pressure(right_front_range, LIDAR_AVOID_RECOVER_RANGE, LIDAR_AVOID_STOP_RANGE);
+  const double left_side_pressure = compute_range_pressure(left_side_range,
+                                                           LIDAR_REFLEX_SIDE_RELEASE_RANGE,
+                                                           LIDAR_AVOID_SIDE_DANGER_RANGE);
+  const double right_side_pressure = compute_range_pressure(right_side_range,
+                                                            LIDAR_REFLEX_SIDE_RELEASE_RANGE,
+                                                            LIDAR_AVOID_SIDE_DANGER_RANGE);
+
+  double left_drive = 0.58;
+  double right_drive = 0.58;
+
+  // e-puck-like Braitenberg idea: opposite-side sensors speed up the other wheel,
+  // while the front sensors brake both wheels and bias the robot away from the obstacle.
+  left_drive += right_front_pressure * 0.95 + right_side_pressure * 0.72;
+  right_drive += left_front_pressure * 0.95 + left_side_pressure * 0.72;
+
+  left_drive -= front_pressure * 0.95 + center_pressure * 1.28 + left_front_pressure * 0.12;
+  right_drive -= front_pressure * 0.95 + center_pressure * 1.28 + right_front_pressure * 0.12;
+
+  // The route remains only a weak attraction term while we are near the obstacle.
+  const double target_bias =
+      clamp_value(heading_error_to_target * LIDAR_REFLEX_TARGET_GAIN, -0.18, 0.18);
+  left_drive -= target_bias;
+  right_drive += target_bias;
+
+  // Keep the chosen обход side stable: if we already committed to one side,
+  // add a small persistent turn bias so the robot doesn't ping-pong left/right.
+  const double committed_turn_bias =
+      (center_pressure > 0.20 || front_pressure > 0.24 || left_front_pressure > 0.20 ||
+       right_front_pressure > 0.20)
+          ? 0.26
+          : 0.12;
+  left_drive += avoidance_turn_sign < 0.0 ? committed_turn_bias : -committed_turn_bias;
+  right_drive += avoidance_turn_sign > 0.0 ? committed_turn_bias : -committed_turn_bias;
+
+  if (center_pressure > 0.92) {
+    *linear_speed = -0.06;
+    *angular_speed = avoidance_turn_sign * runtime_angular_speed_limit;
+    return;
+  }
+
+  if (front_pressure > 0.82 && fabs(left_drive - right_drive) < 0.18) {
+    *linear_speed = 0.0;
+    *angular_speed = avoidance_turn_sign * runtime_angular_speed_limit;
+    return;
+  }
+
+  const double max_reflex_linear = fmin(runtime_linear_speed_limit, LIDAR_REFLEX_MAX_LINEAR_SPEED);
+  const double drive_average = clamp_value(0.5 * (left_drive + right_drive), -0.60, 1.0);
+  const double drive_delta = clamp_value(0.5 * (right_drive - left_drive), -1.0, 1.0);
+  const double min_linear = (front_pressure > 0.60 || center_pressure > 0.55) ? -0.05 : 0.02;
+
+  *linear_speed = clamp_value(drive_average * max_reflex_linear, min_linear, max_reflex_linear);
+  *angular_speed = clamp_value(drive_delta * runtime_angular_speed_limit * 1.45,
+                               -runtime_angular_speed_limit,
+                               runtime_angular_speed_limit);
+
+  if ((front_pressure > 0.22 || center_pressure > 0.22 || left_front_pressure > 0.18 ||
+       right_front_pressure > 0.18) &&
+      fabs(*angular_speed) < MIN_ANGULAR_COMMAND) {
+    *angular_speed = avoidance_turn_sign * MIN_ANGULAR_COMMAND;
+  }
+}
+
+static void compute_lidar_obstacle_context(LidarObstacleContext *context,
+                                           double target_beam_angle,
+                                           double preferred_turn_sign) {
+  if (!context) return;
+
+  const double effective_max_range =
+      lidar_max_range > EPS ? fmin(lidar_max_range, LIDAR_MAX_TRACE_RANGE) : LIDAR_MAX_TRACE_RANGE;
+  memset(context, 0, sizeof(*context));
+  context->expected_front_min_range = effective_max_range;
+  context->unexpected_front_min_range = effective_max_range;
+  context->unexpected_center_min_range = effective_max_range;
+  context->unexpected_left_front_min_range = effective_max_range;
+  context->unexpected_right_front_min_range = effective_max_range;
+  context->unexpected_left_min_range = effective_max_range;
+  context->unexpected_right_min_range = effective_max_range;
+  context->best_gap_beam_angle = 0.0;
+  context->best_gap_range = 0.0;
+  context->best_gap_score = -1e9;
+  context->has_best_gap = 0;
+
+  if (!lidar_available || !front_lidar || lidar_resolution <= 1 || lidar_fov <= EPS) return;
+
+  const float *ranges = wb_lidar_get_range_image(front_lidar);
+  if (!ranges) return;
+
+  double robot_x = 0.0;
+  double robot_y = 0.0;
+  double heading = 0.0;
+  read_pose(&robot_x, &robot_y, &heading);
+
+  const double sensor_origin_x =
+      robot_x + cos(heading) * LIDAR_LOCAL_X - sin(heading) * LIDAR_LOCAL_Y;
+  const double sensor_origin_y =
+      robot_y + sin(heading) * LIDAR_LOCAL_X + cos(heading) * LIDAR_LOCAL_Y;
+  const double sigma = fmax(lidar_fov * 0.22, 0.22);
+
+  for (int i = 0; i < lidar_resolution; i += LIDAR_SAMPLE_STRIDE) {
+    const double range = (double)ranges[i];
+    if (!is_finite_double(range)) continue;
+    if (range < LIDAR_MIN_TRACE_RANGE || range > effective_max_range) continue;
+    if (!lidar_hit_is_consistent(ranges, i, range, effective_max_range)) continue;
+
+    const double alpha = lidar_resolution > 1 ? (double)i / (double)(lidar_resolution - 1) : 0.5;
+    const double beam_angle = -0.5 * lidar_fov + alpha * lidar_fov;
+    const double world_angle = heading - beam_angle;
+    const double hit_x = sensor_origin_x + cos(world_angle) * range;
+    const double hit_y = sensor_origin_y + sin(world_angle) * range;
+
+    int expected_zone_wall = 0;
+    for (int zone_index = 0; zone_index < zone_data.count; ++zone_index) {
+      if (point_near_zone_boundary(hit_x,
+                                   hit_y,
+                                   &zone_data.zones[zone_index],
+                                   ZONE_WALL_EXPECTED_TOLERANCE)) {
+        expected_zone_wall = 1;
+        break;
+      }
+    }
+
+    const double pressure =
+        compute_range_pressure(range, LIDAR_TRACK_CAUTION_RANGE, LIDAR_AVOID_STOP_RANGE);
+    const double center_weight = exp(-(beam_angle * beam_angle) / (2.0 * sigma * sigma));
+
+    if (expected_zone_wall) {
+      if (fabs(beam_angle) <= (LIDAR_FRONT_SECTOR_RAD + 0.16)) {
+        if (range < context->expected_front_min_range) {
+          context->expected_front_min_range = range;
+        }
+        context->expected_front_score += pressure * center_weight;
+      }
+      continue;
+    }
+
+    if (fabs(beam_angle) <= (LIDAR_FRONT_SECTOR_RAD + 0.16)) {
+      context->unexpected_front_hit_count += 1;
+      if (range < context->unexpected_front_min_range) {
+        context->unexpected_front_min_range = range;
+      }
+      context->unexpected_front_score += pressure * center_weight;
+
+      if (fabs(beam_angle) <= LIDAR_CENTER_SECTOR_RAD && range < context->unexpected_center_min_range) {
+        context->unexpected_center_min_range = range;
+      }
+      if (beam_angle <= -LIDAR_FRONT_CORNER_MIN_RAD &&
+          beam_angle >= -LIDAR_FRONT_CORNER_MAX_RAD &&
+          range < context->unexpected_left_front_min_range) {
+        context->unexpected_left_front_min_range = range;
+      }
+      if (beam_angle >= LIDAR_FRONT_CORNER_MIN_RAD &&
+          beam_angle <= LIDAR_FRONT_CORNER_MAX_RAD &&
+          range < context->unexpected_right_front_min_range) {
+        context->unexpected_right_front_min_range = range;
+      }
+    } else if (beam_angle < 0.0) {
+      if (range < context->unexpected_left_min_range) {
+        context->unexpected_left_min_range = range;
+      }
+    } else {
+      if (range < context->unexpected_right_min_range) {
+        context->unexpected_right_min_range = range;
+      }
+    }
+
+    if (beam_angle < 0.0) {
+      context->unexpected_left_score += pressure * (0.40 + center_weight * 0.60);
+    } else {
+      context->unexpected_right_score += pressure * (0.40 + center_weight * 0.60);
+    }
+
+    if (range >= LIDAR_GAP_MIN_RANGE) {
+      const double target_alignment =
+          1.0 - clamp_value(fabs(wrap_angle(beam_angle - target_beam_angle)) / 1.25, 0.0, 1.0);
+      const double gap_side_sign = beam_angle < 0.0 ? 1.0 : -1.0;
+      const double commitment_bonus =
+          preferred_turn_sign == 0.0
+              ? 0.0
+              : (gap_side_sign == preferred_turn_sign ? 0.16 : -0.10);
+      const double frontal_bonus = 1.0 - clamp_value(fabs(beam_angle) / 1.35, 0.0, 1.0);
+      const double range_score =
+          clamp_value((range - LIDAR_GAP_MIN_RANGE) / fmax(effective_max_range - LIDAR_GAP_MIN_RANGE, 0.1),
+                      0.0,
+                      1.0);
+      const double gap_score =
+          range_score * 0.72 + target_alignment * 0.18 + frontal_bonus * 0.08 + commitment_bonus;
+
+      if (!context->has_best_gap ||
+          gap_score > context->best_gap_score + 1e-6 ||
+          (fabs(gap_score - context->best_gap_score) <= 1e-6 && range > context->best_gap_range)) {
+        context->best_gap_beam_angle = beam_angle;
+        context->best_gap_range = range;
+        context->best_gap_score = gap_score;
+        context->has_best_gap = 1;
+      }
+    }
   }
 }
 
@@ -533,11 +919,12 @@ static double compute_cross_track_error(double x, double z, const Waypoint *targ
 }
 
 static double compute_track_heading(double x, double z, const Waypoint *target, double distance_to_target) {
+  const double target_heading = atan2(target->z - z, target->x - x);
   const double segment_dx = target->x - navigation_segment_start_x;
   const double segment_dz = target->z - navigation_segment_start_z;
   const double segment_length = hypot2(segment_dx, segment_dz);
   if (segment_length <= EPS) {
-    return atan2(target->z - z, target->x - x);
+    return target_heading;
   }
 
   const double ux = segment_dx / segment_length;
@@ -551,11 +938,16 @@ static double compute_track_heading(double x, double z, const Waypoint *target, 
   const double aim_z = navigation_segment_start_z + uz * aim_along;
   const double cross_track = ux * rel_z - uz * rel_x;
   if (fabs(cross_track) > TRACK_DIRECT_HEADING_CROSSTRACK) {
-    return atan2(target->z - z, target->x - x);
+    return target_heading;
   }
-  const double cross_correction = clamp_value(-cross_track * TRACK_CROSS_TRACK_GAIN, -0.40, 0.40);
-
-  return wrap_angle(atan2(aim_z - z, aim_x - x) + cross_correction);
+  const double cross_correction = clamp_value(-cross_track * TRACK_CROSS_TRACK_GAIN, -0.16, 0.16);
+  const double line_heading = wrap_angle(atan2(aim_z - z, aim_x - x) + cross_correction);
+  const double direct_bias = clamp_value(
+      0.32 + fabs(cross_track) / fmax(TRACK_DIRECT_HEADING_CROSSTRACK, 0.01) * 0.68,
+      0.32,
+      1.0);
+  const double distance_bias = distance_to_target < 0.70 ? 0.75 : 0.0;
+  return wrap_angle(blend_angle(line_heading, target_heading, fmax(direct_bias, distance_bias)));
 }
 
 static int point_near_known_dynamic_zone(double x, double y) {
@@ -681,6 +1073,8 @@ static void capture_lidar_trace() {
   lidar_front_hit_count = 0;
   lidar_front_min_range = LIDAR_MAX_TRACE_RANGE;
   lidar_center_min_range = LIDAR_MAX_TRACE_RANGE;
+  lidar_left_front_min_range = LIDAR_MAX_TRACE_RANGE;
+  lidar_right_front_min_range = LIDAR_MAX_TRACE_RANGE;
   lidar_left_min_range = LIDAR_MAX_TRACE_RANGE;
   lidar_right_min_range = LIDAR_MAX_TRACE_RANGE;
   if (!lidar_available || !front_lidar || lidar_resolution <= 1 || lidar_fov <= EPS) return;
@@ -703,6 +1097,8 @@ static void capture_lidar_trace() {
       lidar_max_range > EPS ? fmin(lidar_max_range, LIDAR_MAX_TRACE_RANGE) : LIDAR_MAX_TRACE_RANGE;
   lidar_front_min_range = effective_max_range;
   lidar_center_min_range = effective_max_range;
+  lidar_left_front_min_range = effective_max_range;
+  lidar_right_front_min_range = effective_max_range;
   lidar_left_min_range = effective_max_range;
   lidar_right_min_range = effective_max_range;
 
@@ -722,6 +1118,16 @@ static void capture_lidar_trace() {
       if (fabs(beam_angle) <= LIDAR_CENTER_SECTOR_RAD && range < lidar_center_min_range) {
         lidar_center_min_range = range;
       }
+      if (beam_angle <= -LIDAR_FRONT_CORNER_MIN_RAD &&
+          beam_angle >= -LIDAR_FRONT_CORNER_MAX_RAD &&
+          range < lidar_left_front_min_range) {
+        lidar_left_front_min_range = range;
+      }
+      if (beam_angle >= LIDAR_FRONT_CORNER_MIN_RAD &&
+          beam_angle <= LIDAR_FRONT_CORNER_MAX_RAD &&
+          range < lidar_right_front_min_range) {
+        lidar_right_front_min_range = range;
+      }
     } else if (beam_angle < 0.0) {
       if (range < lidar_left_min_range) lidar_left_min_range = range;
     } else {
@@ -735,6 +1141,96 @@ static void capture_lidar_trace() {
     const double snapped_hit_y = round(hit_y / LIDAR_SNAP_STEP) * LIDAR_SNAP_STEP;
     append_obstacle_trace_point(snapped_hit_x, snapped_hit_y, now_time);
     lidar_last_hit_count += 1;
+  }
+}
+
+static void merge_trace_into_map(double now_time) {
+  for (int i = 0; i < obstacle_trace_count; ++i) {
+    const ObstacleTracePoint *point = &obstacle_trace[i];
+    if (now_time - point->last_seen_time > MAP_MERGE_MAX_AGE_S) continue;
+    if (point->hit_count < MAP_MERGE_MIN_HIT_COUNT) continue;
+
+    const double cell_x = round(point->x / MAP_CELL_SIZE) * MAP_CELL_SIZE;
+    const double cell_y = round(point->y / MAP_CELL_SIZE) * MAP_CELL_SIZE;
+    const double half_cell = MAP_CELL_SIZE * 0.5 + EPS;
+    int found_index = -1;
+
+    for (int j = 0; j < persistent_map_count; ++j) {
+      if (fabs(persistent_map[j].x - cell_x) < half_cell &&
+          fabs(persistent_map[j].y - cell_y) < half_cell) {
+        found_index = j;
+        break;
+      }
+    }
+
+    if (found_index >= 0) {
+      if (persistent_map[found_index].confidence < 255) {
+        persistent_map[found_index].confidence += 1;
+        map_dirty = 1;
+      }
+      continue;
+    }
+
+    if (persistent_map_count >= MAX_MAP_POINTS) continue;
+    persistent_map[persistent_map_count++] = (MapCell){cell_x, cell_y, 1};
+    map_dirty = 1;
+  }
+}
+
+static void clear_persistent_map() {
+  persistent_map_count = 0;
+  map_dirty = 0;
+  remove(MAP_PATH);
+  remove(MAP_TEMP_PATH);
+  remove(MAP_CSV_PATH);
+  remove(MAP_CSV_TEMP_PATH);
+}
+
+static void maybe_write_map() {
+  if (!map_dirty) return;
+  if ((step_counter % MAP_WRITE_INTERVAL) != 0) return;
+
+  int json_written = 0;
+  int csv_written = 0;
+
+  FILE *json_file = fopen(MAP_TEMP_PATH, "w");
+  if (json_file) {
+    fprintf(json_file, "{\n");
+    fprintf(json_file, "  \"cellSize\": %.4f,\n", MAP_CELL_SIZE);
+    fprintf(json_file, "  \"totalCells\": %d,\n", persistent_map_count);
+    fprintf(json_file, "  \"cells\": [\n");
+    for (int i = 0; i < persistent_map_count; ++i) {
+      fprintf(
+          json_file,
+          "    {\"x\": %.4f, \"y\": %.4f, \"confidence\": %d}%s\n",
+          persistent_map[i].x,
+          persistent_map[i].y,
+          persistent_map[i].confidence,
+          i + 1 < persistent_map_count ? "," : "");
+    }
+    fprintf(json_file, "  ]\n");
+    fprintf(json_file, "}\n");
+    fclose(json_file);
+    json_written = replace_file(MAP_TEMP_PATH, MAP_PATH) == 0;
+  }
+
+  FILE *csv_file = fopen(MAP_CSV_TEMP_PATH, "w");
+  if (csv_file) {
+    fprintf(csv_file, "x,y,confidence\n");
+    for (int i = 0; i < persistent_map_count; ++i) {
+      fprintf(
+          csv_file,
+          "%.4f,%.4f,%d\n",
+          persistent_map[i].x,
+          persistent_map[i].y,
+          persistent_map[i].confidence);
+    }
+    fclose(csv_file);
+    csv_written = replace_file(MAP_CSV_TEMP_PATH, MAP_CSV_PATH) == 0;
+  }
+
+  if (json_written && csv_written) {
+    map_dirty = 0;
   }
 }
 
@@ -865,6 +1361,24 @@ static int point_near_zone(double x, double y, const LimitZone *zone, double cle
         zone->points[next].x,
         zone->points[next].y);
     if (distance <= clearance + EPS) return 1;
+  }
+
+  return 0;
+}
+
+static int point_near_zone_boundary(double x, double y, const LimitZone *zone, double tolerance) {
+  if (!zone || zone->point_count < 2) return 0;
+
+  for (int i = 0; i < zone->point_count; ++i) {
+    const int next = (i + 1) % zone->point_count;
+    const double distance = distance_point_to_segment(
+        x,
+        y,
+        zone->points[i].x,
+        zone->points[i].y,
+        zone->points[next].x,
+        zone->points[next].y);
+    if (distance <= tolerance + EPS) return 1;
   }
 
   return 0;
@@ -1347,6 +1861,17 @@ static void run_navigation_step() {
   double heading = 0.0;
 
   read_pose(&x, &z, &heading);
+  int manual_relocation_detected = 0;
+  if (last_pose_valid) {
+    const double pose_jump = hypot2(x - last_pose_x, z - last_pose_z);
+    const double heading_jump = fabs(wrap_angle(heading - last_pose_heading));
+    manual_relocation_detected =
+        pose_jump > POSE_RELOCATION_DISTANCE || heading_jump > POSE_RELOCATION_HEADING_RAD;
+  }
+  last_pose_x = x;
+  last_pose_z = z;
+  last_pose_heading = heading;
+  last_pose_valid = 1;
 
   if (route_data.count == 0) {
     set_status("waiting_for_route");
@@ -1363,6 +1888,20 @@ static void run_navigation_step() {
     avoidance_hold_steps = 0;
     reset_navigation_mode();
     distance_to_target = 0.0;
+    stop_robot();
+    return;
+  }
+
+  if (manual_relocation_detected) {
+    clear_local_navigation_state();
+    navigation_waypoint_index = current_waypoint_index;
+    navigation_segment_start_x = x;
+    navigation_segment_start_z = z;
+    navigation_mode = NAV_MODE_TRACK;
+    distance_to_target = hypot2(route_data.waypoints[current_waypoint_index].x - x,
+                                route_data.waypoints[current_waypoint_index].z - z);
+    clear_error();
+    set_status("relocalized_pose");
     stop_robot();
     return;
   }
@@ -1409,212 +1948,252 @@ static void run_navigation_step() {
   const double dz = target.z - z;
   const double target_distance_now = hypot2(dx, dz);
   const double heading_to_target = atan2(dz, dx);
+  const double heading_error_to_target = wrap_angle(heading_to_target - heading);
 
-  const int front_obstacle_detected = lidar_available && lidar_front_hit_count > 0;
+  LidarObstacleContext lidar_context;
+  compute_lidar_obstacle_context(&lidar_context, -heading_error_to_target, avoidance_turn_sign);
+  const int front_obstacle_detected = lidar_available && lidar_context.unexpected_front_hit_count > 0;
   const double front_obstacle_range =
-      front_obstacle_detected ? lidar_front_min_range : LIDAR_MAX_TRACE_RANGE;
+      front_obstacle_detected ? lidar_context.unexpected_front_min_range : LIDAR_MAX_TRACE_RANGE;
   const double center_obstacle_range =
-      front_obstacle_detected ? lidar_center_min_range : LIDAR_MAX_TRACE_RANGE;
+      front_obstacle_detected ? lidar_context.unexpected_center_min_range : LIDAR_MAX_TRACE_RANGE;
+  const double left_front_corner_range =
+      lidar_available ? lidar_context.unexpected_left_front_min_range : LIDAR_MAX_TRACE_RANGE;
+  const double right_front_corner_range =
+      lidar_available ? lidar_context.unexpected_right_front_min_range : LIDAR_MAX_TRACE_RANGE;
   const double left_obstacle_range =
-      lidar_available ? lidar_left_min_range : LIDAR_MAX_TRACE_RANGE;
+      lidar_available ? lidar_context.unexpected_left_min_range : LIDAR_MAX_TRACE_RANGE;
   const double right_obstacle_range =
-      lidar_available ? lidar_right_min_range : LIDAR_MAX_TRACE_RANGE;
+      lidar_available ? lidar_context.unexpected_right_min_range : LIDAR_MAX_TRACE_RANGE;
+  const double expected_front_range =
+      lidar_available ? lidar_context.expected_front_min_range : LIDAR_MAX_TRACE_RANGE;
+  const int avoidance_was_active = avoidance_active;
+  const double near_front_range = fmin(
+      fmin(front_obstacle_range, center_obstacle_range),
+      fmin(left_front_corner_range, right_front_corner_range));
+  const double left_lidar_context = fmin(left_obstacle_range, left_front_corner_range);
+  const double right_lidar_context = fmin(right_obstacle_range, right_front_corner_range);
+  const int expected_zone_wall_ahead =
+      lidar_available && expected_front_range < LIDAR_TRACK_CAUTION_RANGE;
+  const int expected_zone_wall_close =
+      lidar_available && expected_front_range < EXPECTED_WALL_SOFT_STOP_RANGE;
+  const int expected_zone_wall_slowdown =
+      lidar_available && expected_front_range < EXPECTED_WALL_SLOWDOWN_RANGE;
   const int side_obstacle_detected =
       lidar_available &&
-      (left_obstacle_range < LIDAR_AVOID_SIDE_TRIGGER_RANGE ||
-       right_obstacle_range < LIDAR_AVOID_SIDE_TRIGGER_RANGE);
-  const int avoidance_was_active = avoidance_active;
-  const int close_side_without_front =
-      side_obstacle_detected &&
-      (!front_obstacle_detected || front_obstacle_range > LIDAR_AVOID_RECOVER_RANGE);
-  const double followed_side_range =
-      avoidance_obstacle_side > 0 ? left_obstacle_range : right_obstacle_range;
+      (left_lidar_context < LIDAR_AVOID_SIDE_TRIGGER_RANGE ||
+       right_lidar_context < LIDAR_AVOID_SIDE_TRIGGER_RANGE);
+  const int lidar_hard_priority_zone =
+      lidar_available &&
+      (near_front_range < LIDAR_TRACK_HARD_PRIORITY_RANGE ||
+       left_lidar_context < (LIDAR_AVOID_SIDE_TRIGGER_RANGE + 0.10) ||
+       right_lidar_context < (LIDAR_AVOID_SIDE_TRIGGER_RANGE + 0.10));
+  const int front_corner_obstacle_detected =
+      left_front_corner_range < (LIDAR_AVOID_TRIGGER_RANGE + 0.10) ||
+      right_front_corner_range < (LIDAR_AVOID_TRIGGER_RANGE + 0.10);
+  const int obstacle_context_present =
+      lidar_available &&
+      (near_front_range < LIDAR_AVOID_RECOVER_RANGE ||
+       left_lidar_context < LIDAR_REFLEX_SIDE_RELEASE_RANGE ||
+       right_lidar_context < LIDAR_REFLEX_SIDE_RELEASE_RANGE);
+  const int should_start_avoidance =
+      lidar_available &&
+      ((front_obstacle_detected && near_front_range < LIDAR_AVOID_TRIGGER_RANGE) ||
+       center_obstacle_range < (LIDAR_AVOID_STOP_RANGE + 0.08) ||
+       front_corner_obstacle_detected ||
+       (side_obstacle_detected && near_front_range < LIDAR_TRACK_SLOW_RANGE) ||
+       (lidar_hard_priority_zone && near_front_range < (LIDAR_TRACK_HARD_PRIORITY_RANGE - 0.04)));
 
-  int avoid_now = 0;
-  if (front_obstacle_detected && front_obstacle_range < LIDAR_AVOID_TRIGGER_RANGE) {
-    avoid_now = 1;
-    avoidance_hold_steps = LIDAR_AVOID_HOLD_STEPS;
-    if (fabs(left_obstacle_range - right_obstacle_range) > 0.03) {
-      avoidance_obstacle_side = left_obstacle_range <= right_obstacle_range ? 1 : -1;
-      avoidance_turn_sign = avoidance_obstacle_side > 0 ? -1.0 : 1.0;
+  if (!avoidance_active && should_start_avoidance) {
+    const double left_clearance = fmax(left_obstacle_range, left_front_corner_range);
+    const double right_clearance = fmax(right_obstacle_range, right_front_corner_range);
+    avoidance_active = 1;
+    avoidance_mode = AVOID_MODE_FOLLOW_EDGE;
+    avoidance_hold_steps = LIDAR_AVOID_MIN_CONTOUR_STEPS;
+    if (lidar_context.unexpected_left_score + LIDAR_REFLEX_SWITCH_MARGIN < lidar_context.unexpected_right_score ||
+        left_clearance > right_clearance + LIDAR_REFLEX_SWITCH_MARGIN) {
+      avoidance_turn_sign = 1.0;
+    } else if (lidar_context.unexpected_right_score + LIDAR_REFLEX_SWITCH_MARGIN < lidar_context.unexpected_left_score ||
+               right_clearance > left_clearance + LIDAR_REFLEX_SWITCH_MARGIN) {
+      avoidance_turn_sign = -1.0;
+    } else if (fabs(lidar_priority_turn_sign) > 0.0) {
+      avoidance_turn_sign = lidar_priority_turn_sign;
     } else {
-      const double heading_error_to_target_for_side = wrap_angle(heading_to_target - heading);
-      avoidance_turn_sign = sign_or_one(heading_error_to_target_for_side);
-      avoidance_obstacle_side = avoidance_turn_sign > 0.0 ? -1 : 1;
+      avoidance_turn_sign = sign_or_one(heading_error_to_target);
     }
+    avoidance_obstacle_side = avoidance_turn_sign > 0.0 ? -1 : 1;
+    lidar_priority_turn_sign = avoidance_turn_sign;
+    lidar_priority_hold_steps = LIDAR_PRIORITY_HOLD_STEPS;
     avoidance_release_steps = 0;
-  } else if (avoidance_hold_steps > 0 &&
-             lidar_available &&
-             (front_obstacle_range < LIDAR_AVOID_RECOVER_RANGE ||
-              left_obstacle_range < (LIDAR_AVOID_SIDE_TRIGGER_RANGE + 0.08) ||
-              right_obstacle_range < (LIDAR_AVOID_SIDE_TRIGGER_RANGE + 0.08))) {
-    avoid_now = 1;
-  } else if (avoidance_active &&
-             lidar_available &&
-             followed_side_range < LIDAR_AVOID_FOLLOW_RANGE) {
-    avoid_now = 1;
+    avoidance_contour_steps = 0;
+    avoidance_clear_steps = 0;
+    avoidance_escape_steps = 0;
+    avoidance_stuck_steps = 0;
+    avoidance_no_obstacle_steps = 0;
+    avoidance_prev_x = x;
+    avoidance_prev_z = z;
+    avoidance_prev_target_distance = target_distance_now;
+    avoidance_hit_target_distance = target_distance_now;
+    avoidance_state_heading = heading;
   }
 
-  // If only a side wall is close but the front is clear, do not force avoidance mode:
-  // this allows tight parallel passing near obstacles.
-  if (!avoidance_active && close_side_without_front) {
-    avoid_now = 0;
-    avoidance_hold_steps = 0;
-  }
-
-  if (avoidance_hold_steps > 0) avoidance_hold_steps -= 1;
-
-  if (avoid_now) {
-    if (!avoidance_active) {
-      avoidance_active = 1;
-      avoidance_stuck_steps = 0;
-      avoidance_prev_x = x;
-      avoidance_prev_z = z;
-      avoidance_prev_target_distance = target_distance_now;
-      avoidance_release_steps = 0;
-      if (avoidance_obstacle_side == 0) {
-        avoidance_obstacle_side = left_obstacle_range <= right_obstacle_range ? 1 : -1;
-      }
-    }
-
+  if (avoidance_active) {
+    const double front_pressure =
+        compute_range_pressure(front_obstacle_range, LIDAR_AVOID_RECOVER_RANGE, LIDAR_AVOID_STOP_RANGE);
+    const double center_pressure =
+        compute_range_pressure(center_obstacle_range, LIDAR_AVOID_RECOVER_RANGE, LIDAR_AVOID_REVERSE_RANGE);
     const double moved_since_last = hypot2(x - avoidance_prev_x, z - avoidance_prev_z);
     const double target_progress = avoidance_prev_target_distance - target_distance_now;
+
+    avoidance_contour_steps += 1;
+    if (avoidance_hold_steps > 0) avoidance_hold_steps -= 1;
+
     if (moved_since_last < LIDAR_AVOID_STUCK_POSE_EPS &&
         target_progress < LIDAR_AVOID_STUCK_PROGRESS_EPS) {
       avoidance_stuck_steps += 1;
     } else {
-      avoidance_stuck_steps -= 2;
-      if (avoidance_stuck_steps < 0) avoidance_stuck_steps = 0;
+      avoidance_stuck_steps = 0;
     }
     avoidance_prev_x = x;
     avoidance_prev_z = z;
     avoidance_prev_target_distance = target_distance_now;
 
-    const double avoid_window = fmax(LIDAR_AVOID_TRIGGER_RANGE - LIDAR_AVOID_STOP_RANGE, 0.05);
-    const double front_proximity = clamp_value(
-        (LIDAR_AVOID_TRIGGER_RANGE - front_obstacle_range) / avoid_window,
-        0.0,
-        1.0);
-    const double follow_side_range =
-        avoidance_obstacle_side > 0 ? left_obstacle_range : right_obstacle_range;
-    const double outer_side_range =
-        avoidance_obstacle_side > 0 ? right_obstacle_range : left_obstacle_range;
-    const double turn_side_range =
-        avoidance_turn_sign > 0.0 ? left_obstacle_range : right_obstacle_range;
-    const double opposite_side_range =
-        avoidance_turn_sign > 0.0 ? right_obstacle_range : left_obstacle_range;
-    const double side_window =
-        fmax(LIDAR_AVOID_SIDE_TRIGGER_RANGE - LIDAR_AVOID_SIDE_DANGER_RANGE, 0.03);
-    const double side_proximity = clamp_value(
-        (LIDAR_AVOID_SIDE_TRIGGER_RANGE - follow_side_range) / side_window,
-        0.0,
-        1.0);
-
-    if (turn_side_range < LIDAR_AVOID_SIDE_DANGER_RANGE &&
-        opposite_side_range > turn_side_range + 0.10) {
-      avoidance_turn_sign = -avoidance_turn_sign;
-      avoidance_obstacle_side = -avoidance_obstacle_side;
-    }
-
-    double linear_speed = runtime_linear_speed_limit * (0.56 - front_proximity * 0.34 - side_proximity * 0.20);
-    if (center_obstacle_range <= LIDAR_AVOID_REVERSE_RANGE) {
-      linear_speed = -0.055;
-    } else if (center_obstacle_range <= LIDAR_AVOID_STOP_RANGE) {
-      linear_speed = 0.0;
-    } else if (follow_side_range <= LIDAR_AVOID_SIDE_DANGER_RANGE) {
-      // Keep creeping forward even in tight side clearances; avoid full stop.
-      linear_speed = clamp_value(linear_speed, 0.045, 0.09);
-    }
-    linear_speed = clamp_value(linear_speed, -0.065, 0.15);
-
-    const double side_delta = clamp_value(fabs(left_obstacle_range - right_obstacle_range), 0.0, 0.8);
-    double angular_speed = 0.0;
-    const int contour_follow_active =
-        center_obstacle_range > LIDAR_AVOID_STOP_RANGE &&
-        follow_side_range < LIDAR_AVOID_FOLLOW_RANGE;
-
-    if (contour_follow_active) {
-      const double follow_error = clamp_value(
-          LIDAR_AVOID_FOLLOW_TARGET - follow_side_range,
-          -0.24,
-          0.24);
-      angular_speed = avoidance_turn_sign *
-                      clamp_value(follow_error * 6.2, -0.86, 0.96);
-      linear_speed = clamp_value(
-          linear_speed * (0.66 + 0.24 * clamp_value(outer_side_range / LIDAR_AVOID_FOLLOW_RANGE, 0.35, 1.3)),
-          0.04,
-          0.11);
-      avoidance_release_steps = 0;
+    if (!obstacle_context_present) {
+      avoidance_no_obstacle_steps += 1;
+      avoidance_clear_steps += 1;
     } else {
-      avoidance_release_steps += 1;
-      const double release_heading_error = wrap_angle(heading_to_target - heading);
-      angular_speed = clamp_value(
-          release_heading_error * 1.6 + avoidance_turn_sign * 0.10,
-          -0.42,
-          0.42);
-      linear_speed = clamp_value(linear_speed, 0.06, 0.11);
+      avoidance_no_obstacle_steps = 0;
+      avoidance_clear_steps = 0;
     }
 
-    angular_speed += avoidance_turn_sign * side_delta * 0.08;
-    if (center_obstacle_range <= LIDAR_AVOID_STOP_RANGE ||
-        follow_side_range <= LIDAR_AVOID_SIDE_DANGER_RANGE) {
-      angular_speed = avoidance_turn_sign * runtime_angular_speed_limit;
-      avoidance_release_steps = 0;
+    if (avoidance_no_obstacle_steps > FREE_SPACE_RECOVERY_STEPS &&
+        avoidance_hold_steps <= 0 &&
+        avoidance_clear_steps >= LIDAR_AVOID_CLEAR_STEPS) {
+      clear_local_navigation_state();
+      navigation_waypoint_index = current_waypoint_index;
+      navigation_segment_start_x = x;
+      navigation_segment_start_z = z;
+      navigation_mode = NAV_MODE_TRACK;
+      distance_to_target = target_distance_now;
+      clear_error();
+      set_status("reacquired_free_space");
     }
-    angular_speed = clamp_value(
-        angular_speed,
-        -runtime_angular_speed_limit,
-        runtime_angular_speed_limit);
 
-    if (avoidance_stuck_steps > LIDAR_AVOID_STUCK_STEPS) {
-      if ((avoidance_stuck_steps % 34) == 0) {
-        avoidance_turn_sign = -avoidance_turn_sign;
+    if (avoidance_active) {
+      double linear_speed = 0.0;
+      double angular_speed = 0.0;
+      const int hard_front_blocked =
+          center_obstacle_range < (LIDAR_AVOID_STOP_RANGE + 0.05) ||
+          front_obstacle_range < (LIDAR_AVOID_STOP_RANGE + 0.10) ||
+          lidar_context.unexpected_front_score > 0.95;
+      const double side_commit_score =
+          avoidance_turn_sign > 0.0 ? lidar_context.unexpected_right_score : lidar_context.unexpected_left_score;
+      const double opposite_side_score =
+          avoidance_turn_sign > 0.0 ? lidar_context.unexpected_left_score : lidar_context.unexpected_right_score;
+      const double gap_heading_error =
+          lidar_context.has_best_gap ? wrap_angle(-lidar_context.best_gap_beam_angle) : 0.0;
+      const double gap_turn_sign =
+          lidar_context.has_best_gap ? sign_or_one(gap_heading_error) : avoidance_turn_sign;
+      const double gap_speed_scale =
+          lidar_context.has_best_gap
+              ? clamp_value((lidar_context.best_gap_range - LIDAR_GAP_MIN_RANGE) /
+                                fmax(LIDAR_TRACK_CAUTION_RANGE - LIDAR_GAP_MIN_RANGE, 0.1),
+                            0.28,
+                            1.0)
+              : 0.42;
+      const double turn_lock_bias = clamp_value(
+          side_commit_score - opposite_side_score,
+          -0.55,
+          0.55);
+      const double target_bias = clamp_value(heading_error_to_target * 0.12, -0.12, 0.12);
+
+      if (lidar_context.has_best_gap &&
+          gap_turn_sign != avoidance_turn_sign &&
+          (avoidance_stuck_steps > (LIDAR_AVOID_STUCK_STEPS / 2) ||
+           lidar_context.best_gap_range > (front_obstacle_range + LIDAR_GAP_SWITCH_RANGE_BONUS))) {
+        avoidance_turn_sign = gap_turn_sign;
+        avoidance_obstacle_side = avoidance_turn_sign > 0.0 ? -1 : 1;
+        lidar_priority_turn_sign = avoidance_turn_sign;
+        lidar_priority_hold_steps = LIDAR_PRIORITY_HOLD_STEPS;
       }
-      linear_speed = -0.07;
-      angular_speed = avoidance_turn_sign * runtime_angular_speed_limit;
-      clear_error();
-      set_status("avoiding_escape");
-    } else {
-      clear_error();
-      set_status(contour_follow_active ? "avoiding_contour" : "avoiding_release");
-    }
 
-    distance_to_target = target_distance_now;
-    if (avoidance_release_steps < LIDAR_AVOID_RELEASE_STEPS ||
-        contour_follow_active ||
-        center_obstacle_range < LIDAR_AVOID_RECOVER_RANGE) {
+      if (hard_front_blocked) {
+        linear_speed = center_obstacle_range < LIDAR_AVOID_REVERSE_RANGE ? -0.05 : 0.0;
+        angular_speed = clamp_value(
+            (lidar_context.has_best_gap ? gap_heading_error * 2.4 : avoidance_turn_sign) *
+                runtime_angular_speed_limit,
+            -runtime_angular_speed_limit,
+            runtime_angular_speed_limit);
+        if (fabs(angular_speed) < MIN_ANGULAR_COMMAND) {
+          angular_speed = avoidance_turn_sign * MIN_ANGULAR_COMMAND;
+        }
+        set_status(lidar_context.has_best_gap ? "avoiding_gap_turn" : "avoiding_committed_turn");
+      } else {
+        linear_speed = clamp_value(runtime_linear_speed_limit *
+                                       (0.38 - front_pressure * 0.18 - center_pressure * 0.12) *
+                                       gap_speed_scale,
+                                   0.04,
+                                   fmin(runtime_linear_speed_limit * 0.48, 0.15));
+        if (lidar_context.has_best_gap) {
+          angular_speed = clamp_value(
+              gap_heading_error * 1.85 +
+                  avoidance_turn_sign * (runtime_angular_speed_limit * 0.18 + front_pressure * 0.22) +
+                  turn_lock_bias * 0.18 + target_bias,
+              -runtime_angular_speed_limit,
+              runtime_angular_speed_limit);
+        } else {
+          angular_speed = clamp_value(
+              avoidance_turn_sign * (runtime_angular_speed_limit * 0.52 + front_pressure * 0.38) +
+                  turn_lock_bias * 0.55 + target_bias,
+              -runtime_angular_speed_limit,
+              runtime_angular_speed_limit);
+        }
+        if (fabs(angular_speed) < MIN_ANGULAR_COMMAND) {
+          angular_speed = avoidance_turn_sign * MIN_ANGULAR_COMMAND;
+        }
+        set_status(lidar_context.has_best_gap ? "avoiding_gap_drive" : "avoiding_committed_drive");
+      }
+
+      if (avoidance_stuck_steps > LIDAR_AVOID_STUCK_STEPS) {
+        linear_speed = -0.05;
+        angular_speed = avoidance_turn_sign * runtime_angular_speed_limit;
+        avoidance_hold_steps = LIDAR_AVOID_HOLD_STEPS;
+        avoidance_stuck_steps = 0;
+        set_status("avoiding_committed_escape");
+      }
+
+      distance_to_target = target_distance_now;
+      clear_error();
       set_base_velocity(linear_speed, 0.0, angular_speed);
       return;
     }
-
-    avoidance_active = 0;
-    avoidance_hold_steps = 0;
-    avoidance_release_steps = 0;
   }
 
   avoidance_active = 0;
+  avoidance_mode = AVOID_MODE_NONE;
   avoidance_obstacle_side = 0;
   avoidance_release_steps = 0;
+  avoidance_contour_steps = 0;
+  avoidance_clear_steps = 0;
+  avoidance_escape_steps = 0;
   avoidance_stuck_steps = 0;
+  avoidance_hit_target_distance = 0.0;
+  avoidance_state_heading = 0.0;
   if (avoidance_was_active) {
     navigation_segment_start_x = x;
     navigation_segment_start_z = z;
     navigation_mode = NAV_MODE_TRACK;
   }
   distance_to_target = target_distance_now;
-  const double cross_track_error = compute_cross_track_error(x, z, &target);
-  if (fabs(cross_track_error) > TRACK_REANCHOR_CROSSTRACK &&
-      distance_to_target > TRACK_SLOW_RADIUS * 0.8) {
-    navigation_segment_start_x = x;
-    navigation_segment_start_z = z;
-    navigation_mode = NAV_MODE_TRACK;
-  }
-  const double track_heading = compute_track_heading(x, z, &target, distance_to_target);
-  const double heading_error_to_target = wrap_angle(heading_to_target - heading);
-  const double heading_error_on_track = wrap_angle(track_heading - heading);
+  navigation_segment_start_x = x;
+  navigation_segment_start_z = z;
+  const double cross_track_error = 0.0;
+  const int route_relaxed_mode_base = 1;
+  const double track_heading = heading_to_target;
+  const double heading_error_on_track = heading_error_to_target;
 
   if (navigation_mode == NAV_MODE_IDLE) {
-    navigation_mode = NAV_MODE_TURN;
+    navigation_mode = NAV_MODE_TRACK;
   }
 
   if (is_final_waypoint && target.has_heading && distance_to_target <= FINAL_ALIGN_DISTANCE) {
@@ -1647,36 +2226,145 @@ static void run_navigation_step() {
     }
   }
 
-  if (navigation_mode == NAV_MODE_TRACK &&
-      fabs(heading_error_on_track) > TRACK_REENTER_TURN_RAD &&
-      distance_to_target > TRACK_SLOW_RADIUS) {
-    navigation_mode = NAV_MODE_TURN;
+  const double updated_track_heading = heading_to_target;
+  const double direct_heading_error = wrap_angle(heading_to_target - heading);
+  double updated_heading_error = wrap_angle(updated_track_heading - heading);
+  double lidar_heading_bias = 0.0;
+  double lidar_speed_scale = 1.0;
+  double expected_wall_speed_scale = 1.0;
+  int lidar_caution_active = 0;
+  int lidar_hard_priority = 0;
+
+  if (lidar_available) {
+    const double front_caution = clamp_value(
+        (LIDAR_TRACK_CAUTION_RANGE - near_front_range) /
+            fmax(LIDAR_TRACK_CAUTION_RANGE - LIDAR_AVOID_STOP_RANGE, 0.05),
+        0.0,
+        1.0);
+    const double left_pressure = clamp_value(
+        (LIDAR_TRACK_SIDE_BIAS_RANGE - left_lidar_context) /
+            fmax(LIDAR_TRACK_SIDE_BIAS_RANGE - LIDAR_AVOID_SIDE_DANGER_RANGE, 0.05),
+        0.0,
+        1.0);
+    const double right_pressure = clamp_value(
+        (LIDAR_TRACK_SIDE_BIAS_RANGE - right_lidar_context) /
+            fmax(LIDAR_TRACK_SIDE_BIAS_RANGE - LIDAR_AVOID_SIDE_DANGER_RANGE, 0.05),
+        0.0,
+        1.0);
+    const double asymmetric_pressure = right_pressure - left_pressure;
+    double desired_turn_sign = 0.0;
+
+    lidar_speed_scale = clamp_value(
+        1.0 - front_caution * 0.72 - fmax(left_pressure, right_pressure) * 0.20,
+        0.16,
+        1.0);
+    lidar_hard_priority =
+        near_front_range < LIDAR_TRACK_HARD_PRIORITY_RANGE ||
+        left_lidar_context < (LIDAR_AVOID_SIDE_TRIGGER_RANGE + 0.10) ||
+        right_lidar_context < (LIDAR_AVOID_SIDE_TRIGGER_RANGE + 0.10);
+    lidar_caution_active =
+        near_front_range < LIDAR_TRACK_CAUTION_RANGE ||
+        left_lidar_context < LIDAR_TRACK_SIDE_BIAS_RANGE ||
+        right_lidar_context < LIDAR_TRACK_SIDE_BIAS_RANGE;
+
+    if (fabs(asymmetric_pressure) > LIDAR_PRIORITY_SWITCH_MARGIN) {
+      desired_turn_sign = sign_or_one(asymmetric_pressure);
+    } else if (lidar_hard_priority) {
+      if (fabs(heading_error_to_target) > 0.12) {
+        desired_turn_sign = sign_or_one(heading_error_to_target);
+      } else {
+        desired_turn_sign = left_lidar_context <= right_lidar_context ? -1.0 : 1.0;
+      }
+    }
+
+    if (lidar_caution_active) {
+      if (desired_turn_sign != 0.0) {
+        if (lidar_priority_turn_sign == 0.0 ||
+            desired_turn_sign == lidar_priority_turn_sign ||
+            fabs(asymmetric_pressure) > (LIDAR_PRIORITY_SWITCH_MARGIN + 0.10) ||
+            lidar_priority_hold_steps <= 0) {
+          lidar_priority_turn_sign = desired_turn_sign;
+          lidar_priority_hold_steps = LIDAR_PRIORITY_HOLD_STEPS;
+        }
+      } else if (lidar_priority_hold_steps <= 0) {
+        lidar_priority_turn_sign = 0.0;
+      }
+
+      if (lidar_priority_hold_steps > 0) {
+        lidar_priority_hold_steps -= 1;
+      }
+
+      if (fabs(lidar_priority_turn_sign) > 0.0) {
+        const double bias_magnitude = clamp_value(
+            (lidar_hard_priority ? 0.34 : 0.18) +
+                front_caution * 0.22 +
+                fmax(left_pressure, right_pressure) * 0.14,
+            0.0,
+            LIDAR_TRACK_MAX_HEADING_BIAS);
+        lidar_heading_bias = lidar_priority_turn_sign * bias_magnitude;
+      } else if (fabs(asymmetric_pressure) > LIDAR_PRIORITY_CENTER_MARGIN) {
+        lidar_heading_bias = clamp_value(
+            asymmetric_pressure * (0.22 + 0.34 * front_caution),
+            -LIDAR_TRACK_MAX_HEADING_BIAS * 0.6,
+            LIDAR_TRACK_MAX_HEADING_BIAS * 0.6);
+      }
+    } else {
+      lidar_priority_turn_sign = 0.0;
+      lidar_priority_hold_steps = 0;
+    }
+
+    updated_heading_error = wrap_angle(
+        (lidar_hard_priority ? direct_heading_error : updated_heading_error) + lidar_heading_bias);
+    if (lidar_hard_priority) {
+      lidar_speed_scale = fmin(lidar_speed_scale, 0.58);
+    }
+  }
+
+  if (!lidar_caution_active && expected_zone_wall_slowdown) {
+    expected_wall_speed_scale = clamp_value(
+        (expected_front_range - EXPECTED_WALL_SOFT_STOP_RANGE) /
+            fmax(EXPECTED_WALL_SLOWDOWN_RANGE - EXPECTED_WALL_SOFT_STOP_RANGE, 0.05),
+        0.32,
+        1.0);
+    if (expected_zone_wall_close && fabs(heading_error_to_target) < 0.24) {
+      expected_wall_speed_scale = fmin(expected_wall_speed_scale, 0.26);
+    }
+  }
+
+  const int route_relaxed_mode = route_relaxed_mode_base || lidar_caution_active;
+  if (route_relaxed_mode && navigation_mode == NAV_MODE_TURN) {
+    navigation_mode = NAV_MODE_TRACK;
   }
 
   if (navigation_mode == NAV_MODE_TURN) {
-    if (fabs(heading_error_to_target) <= TURN_EXIT_ERROR_RAD ||
+    const double preferred_turn_error =
+        (!avoidance_active && lidar_hard_priority && fabs(lidar_priority_turn_sign) > 0.0)
+            ? wrap_angle(heading_error_to_target + lidar_heading_bias)
+            : updated_heading_error;
+    if (fabs(preferred_turn_error) <= TURN_EXIT_ERROR_RAD ||
         distance_to_target <= TRACK_SLOW_RADIUS * 0.5) {
       navigation_mode = NAV_MODE_TRACK;
     } else {
       angular_speed = clamp_value(
-          heading_error_to_target * TURN_HEADING_GAIN,
+          preferred_turn_error * TURN_HEADING_GAIN,
           -runtime_angular_speed_limit,
           runtime_angular_speed_limit);
-      if (fabs(heading_error_to_target) > HEADING_TOLERANCE_RAD &&
+      if (fabs(preferred_turn_error) > HEADING_TOLERANCE_RAD &&
           fabs(angular_speed) < MIN_ANGULAR_COMMAND) {
-        angular_speed = sign_or_one(heading_error_to_target) * MIN_ANGULAR_COMMAND;
+        angular_speed = sign_or_one(preferred_turn_error) * MIN_ANGULAR_COMMAND;
       }
       clear_error();
-      set_status("turning_to_path");
+      set_status(
+          (!avoidance_active && lidar_hard_priority && fabs(lidar_priority_turn_sign) > 0.0)
+              ? "turning_lidar_priority"
+              : "turning_to_path");
       apply_kinematic_step(x, z, heading, 0.0, angular_speed);
       return;
     }
   }
 
-  const double updated_track_heading = compute_track_heading(x, z, &target, distance_to_target);
-  const double updated_heading_error = wrap_angle(updated_track_heading - heading);
-
-  if (fabs(updated_heading_error) > TRACK_REENTER_TURN_RAD &&
+  if (!route_relaxed_mode &&
+      fabs(updated_heading_error) > TRACK_REENTER_TURN_RAD &&
       distance_to_target > TRACK_SLOW_RADIUS) {
     navigation_mode = NAV_MODE_TURN;
     angular_speed = clamp_value(
@@ -1701,6 +2389,8 @@ static void run_navigation_step() {
   if (distance_to_target < TRACK_SLOW_RADIUS) {
     base_speed = clamp_value(distance_to_target * 0.95, TRACK_MIN_LINEAR_SPEED, 0.14);
   }
+  base_speed *= lidar_speed_scale;
+  base_speed *= expected_wall_speed_scale;
 
   double heading_scale = clamp_value(1.0 - fabs(updated_heading_error) / 0.85, 0.22, 1.0);
   if (fabs(updated_heading_error) > TURN_ENTER_ERROR_RAD) {
@@ -1713,7 +2403,9 @@ static void run_navigation_step() {
   }
 
   clear_error();
-  set_status("tracking_path");
+  set_status(lidar_caution_active ? "tracking_lidar_priority"
+                                  : (expected_zone_wall_ahead ? "tracking_planned_zone_bypass"
+                                                              : "tracking_path"));
   apply_kinematic_step(x, z, heading, linear_speed, angular_speed);
 }
 
@@ -1781,6 +2473,8 @@ static void write_state_snapshot() {
   fprintf(file, "      \"frontHitCount\": %d,\n", lidar_front_hit_count);
   fprintf(file, "      \"frontMinRange\": %.3f,\n", lidar_front_min_range);
   fprintf(file, "      \"centerMinRange\": %.3f,\n", lidar_center_min_range);
+  fprintf(file, "      \"leftFrontCornerMinRange\": %.3f,\n", lidar_left_front_min_range);
+  fprintf(file, "      \"rightFrontCornerMinRange\": %.3f,\n", lidar_right_front_min_range);
   fprintf(file, "      \"leftMinRange\": %.3f,\n", lidar_left_min_range);
   fprintf(file, "      \"rightMinRange\": %.3f\n", lidar_right_min_range);
   fprintf(file, "    },\n");
@@ -1799,6 +2493,12 @@ static void write_state_snapshot() {
   }
   if (emitted_trace_points > 0) fprintf(file, "\n");
   fprintf(file, "    ]\n");
+  fprintf(file, "  },\n");
+  fprintf(file, "  \"obstacleMap\": {\n");
+  fprintf(file, "    \"cellCount\": %d,\n", persistent_map_count);
+  fprintf(file, "    \"cellSize\": %.4f,\n", MAP_CELL_SIZE);
+  fprintf(file, "    \"jsonFile\": \"obstacle_map.json\",\n");
+  fprintf(file, "    \"excelCsvFile\": \"obstacle_map.csv\"\n");
   fprintf(file, "  },\n");
   fprintf(file, "  \"route\": {\n");
   fprintf(file, "    \"source\": \"route.csv\",\n");
@@ -1827,6 +2527,7 @@ int main(int argc, char **argv) {
   init_lidar();
   init_pose_tracking();
   reset_robot_pose();
+  clear_persistent_map();
   apply_motion_profile();
   motion_profile_last_modified = get_file_mtime(MOTION_PROFILE_PATH);
   if (motion_profile_last_modified >= 0) {
@@ -1849,10 +2550,13 @@ int main(int argc, char **argv) {
     maybe_reload_motion_profile();
     maybe_reload_runtime_command();
     capture_lidar_trace();
+    merge_trace_into_map(wb_robot_get_time());
+    maybe_write_map();
     run_navigation_step();
     write_state_snapshot();
   }
 
+  maybe_write_map();
   remove_runtime_obstacle_nodes();
   remove_zone_nodes();
   wb_robot_cleanup();

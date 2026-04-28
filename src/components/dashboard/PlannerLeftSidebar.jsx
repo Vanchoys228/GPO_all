@@ -1,3 +1,4 @@
+import { useRef } from "react";
 import { ALGORITHM_OPTIONS, TASK_OPTIONS } from "../../lib/routeAlgorithms";
 import {
   POINT_KIND_OPTIONS,
@@ -53,6 +54,7 @@ export default function PlannerLeftSidebar({
   onOptimizeRoute,
   onSendRoute,
   onAddRandomObstacle,
+  onImportGraph,
   onClearAll,
   hasRoute,
   routeLength,
@@ -75,6 +77,32 @@ export default function PlannerLeftSidebar({
   onPayloadBlur,
   routeEnergyStats,
 }) {
+  const fileInputRef = useRef(null);
+
+  const handleImportClick = () => {
+    fileInputRef.current?.click();
+  };
+
+  const handleFileChange = (event) => {
+    const file = event.target.files?.[0];
+    if (!file) return;
+
+    const reader = new FileReader();
+    reader.onload = (loadEvent) => {
+      try {
+        const rawText = String(loadEvent.target?.result ?? "");
+        const parsed = JSON.parse(rawText);
+        onImportGraph?.(parsed, file.name);
+      } catch (error) {
+        console.error("Graph import failed", error);
+        window.alert("Не удалось импортировать граф: проверьте JSON-файл.");
+      } finally {
+        event.target.value = "";
+      }
+    };
+    reader.readAsText(file);
+  };
+
   return (
     <aside className="w-[310px] overflow-auto border-r border-stone-200 bg-gradient-to-b from-stone-100 via-white to-slate-100 p-4 space-y-4 xl:w-[330px]">
       <div className={cardCls}>
@@ -379,6 +407,26 @@ export default function PlannerLeftSidebar({
             Длина маршрута: <b>{routeLength.toFixed(2)} м</b>
           </p>
         )}
+      </div>
+
+      <div className={cardCls}>
+        <h3 className="text-sm font-semibold mb-3">Импорт графа</h3>
+        <p className="mb-3 text-xs text-stone-600">
+          Загрузите JSON с точками, зарядками и ограничивающими зонами.
+        </p>
+        <button
+          onClick={handleImportClick}
+          className="w-full rounded-xl border border-stone-300 bg-stone-100 px-3 py-2 text-sm font-semibold text-stone-800 shadow-sm transition hover:bg-stone-200"
+        >
+          Загрузить граф
+        </button>
+        <input
+          ref={fileInputRef}
+          type="file"
+          accept=".json,application/json"
+          onChange={handleFileChange}
+          className="hidden"
+        />
       </div>
     </aside>
   );
