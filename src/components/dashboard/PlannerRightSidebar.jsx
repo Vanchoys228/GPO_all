@@ -33,6 +33,7 @@ export default function PlannerRightSidebar({
   telemetryWsUp,
   routeWsUp,
   solverApiUp,
+  onExportMapImage,
   onCreateZone,
   onSelectZone,
   onToggleZoneClosed,
@@ -281,6 +282,27 @@ export default function PlannerRightSidebar({
           <div>yaw: {telemetry.yaw.toFixed(2)}</div>
           <div>lidar: {telemetry.perception?.lidar?.enabled ? "on" : "off"}</div>
           <div>hits: {telemetry.obstacleTrace?.length || 0}</div>
+          <div>cells: {telemetry.obstacleMap?.cellCount || telemetry.obstacleMap?.cells?.length || 0}</div>
+          <div>cell: {(telemetry.obstacleMap?.cellSize || 0.06).toFixed(2)} м</div>
+        </div>
+        <div className="mt-3 rounded-xl border border-cyan-200 bg-cyan-50/70 p-3">
+          <div className="text-xs font-semibold uppercase tracking-[0.12em] text-cyan-800">
+            Карта препятствий
+          </div>
+          <div className="mt-1 text-xs text-cyan-900">
+            Постоянная карта строится из лидарных попаданий и рисуется поверх рабочей сетки.
+          </div>
+          <button
+            onClick={onExportMapImage}
+            disabled={!telemetry.obstacleMap?.cells?.length}
+            className={`mt-3 w-full rounded-xl px-3 py-2 text-xs font-semibold shadow-sm transition ${
+              telemetry.obstacleMap?.cells?.length
+                ? "bg-cyan-700 text-white hover:bg-cyan-800"
+                : "cursor-not-allowed bg-cyan-100 text-cyan-400"
+            }`}
+          >
+            Сохранить карту в PNG
+          </button>
         </div>
         <div className="mt-3 text-xs text-stone-600">
           WS Telemetry:{" "}

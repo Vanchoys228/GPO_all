@@ -29,6 +29,15 @@ describe("normalizeTelemetry", () => {
       obstacleTrace: [
         { x: 2, y: 3, confidence: 1 },
       ],
+      obstacleMap: {
+        cellSize: 0.06,
+        cellCount: 0,
+        mapFile: "obstacle_map.json",
+        jsonFile: "obstacle_map.json",
+        excelCsvFile: "obstacle_map.csv",
+        imageFile: "obstacle_map.png",
+        cells: [],
+      },
       perception: {
         lidar: {
           enabled: true,
@@ -55,9 +64,50 @@ describe("normalizeTelemetry", () => {
       z: 0.5,
       yaw: 0.75,
       obstacleTrace: [],
+      obstacleMap: {
+        cellSize: 0.06,
+        cellCount: 0,
+        mapFile: "obstacle_map.json",
+        jsonFile: "obstacle_map.json",
+        excelCsvFile: "obstacle_map.csv",
+        imageFile: "obstacle_map.png",
+        cells: [],
+      },
       perception: {
         lidar: null,
       },
+    });
+  });
+
+  it("normalizes obstacle map payloads with cells and metadata", () => {
+    const result = normalizeTelemetry({
+      type: "telemetry",
+      pose: {
+        x: 0,
+        y: 0,
+      },
+      obstacleMap: {
+        cellSize: 0.08,
+        cellCount: 2,
+        imageFile: "custom-map.png",
+        cells: [
+          { x: 1, y: 2, confidence: 4 },
+          { x: -1.5, y: 0.5, confidence: 1 },
+        ],
+      },
+    });
+
+    expect(result?.obstacleMap).toEqual({
+      cellSize: 0.08,
+      cellCount: 2,
+      mapFile: "obstacle_map.json",
+      jsonFile: "obstacle_map.json",
+      excelCsvFile: "obstacle_map.csv",
+      imageFile: "custom-map.png",
+      cells: [
+        { x: 1, y: 2, confidence: 4 },
+        { x: -1.5, y: 0.5, confidence: 1 },
+      ],
     });
   });
 

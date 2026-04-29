@@ -8,6 +8,15 @@ export const INITIAL_TELEMETRY = {
   z: 0,
   yaw: 0,
   obstacleTrace: [],
+  obstacleMap: {
+    cellSize: 0.06,
+    cellCount: 0,
+    mapFile: "obstacle_map.json",
+    jsonFile: "obstacle_map.json",
+    excelCsvFile: "obstacle_map.csv",
+    imageFile: "obstacle_map.png",
+    cells: [],
+  },
   perception: {
     lidar: null,
   },
@@ -28,6 +37,44 @@ const pickNumber = (...values) => {
     if (n !== null) return n;
   }
   return null;
+};
+
+const normalizeObstacleMap = (rawMap, prevMap = INITIAL_TELEMETRY.obstacleMap) => {
+  if (!rawMap || typeof rawMap !== "object") return prevMap;
+
+  const rawCells = Array.isArray(rawMap.cells) ? rawMap.cells : prevMap?.cells || [];
+  const cells = rawCells
+    .map((cell) => ({
+      x: pickNumber(cell?.x),
+      y: pickNumber(cell?.y),
+      confidence: Math.max(0, pickNumber(cell?.confidence, 0) ?? 0),
+    }))
+    .filter((cell) => cell.x !== null && cell.y !== null)
+    .slice(-4096);
+  const cellSize = pickNumber(rawMap.cellSize, prevMap?.cellSize, INITIAL_TELEMETRY.obstacleMap.cellSize);
+  const cellCount = pickNumber(rawMap.cellCount, cells.length, prevMap?.cellCount, 0);
+
+  return {
+    cellSize: cellSize ?? INITIAL_TELEMETRY.obstacleMap.cellSize,
+    cellCount: cellCount ?? cells.length,
+    mapFile:
+      typeof rawMap.mapFile === "string" && rawMap.mapFile.trim()
+        ? rawMap.mapFile
+        : prevMap?.mapFile ?? INITIAL_TELEMETRY.obstacleMap.mapFile,
+    jsonFile:
+      typeof rawMap.jsonFile === "string" && rawMap.jsonFile.trim()
+        ? rawMap.jsonFile
+        : prevMap?.jsonFile ?? INITIAL_TELEMETRY.obstacleMap.jsonFile,
+    excelCsvFile:
+      typeof rawMap.excelCsvFile === "string" && rawMap.excelCsvFile.trim()
+        ? rawMap.excelCsvFile
+        : prevMap?.excelCsvFile ?? INITIAL_TELEMETRY.obstacleMap.excelCsvFile,
+    imageFile:
+      typeof rawMap.imageFile === "string" && rawMap.imageFile.trim()
+        ? rawMap.imageFile
+        : prevMap?.imageFile ?? INITIAL_TELEMETRY.obstacleMap.imageFile,
+    cells,
+  };
 };
 
 export const normalizeTelemetry = (raw, prev = INITIAL_TELEMETRY) => {
@@ -55,6 +102,7 @@ export const normalizeTelemetry = (raw, prev = INITIAL_TELEMETRY) => {
         .slice(-520)
     : prev.obstacleTrace || [];
   const lidar = raw?.perception?.lidar ?? prev.perception?.lidar ?? null;
+  const obstacleMap = normalizeObstacleMap(raw?.obstacleMap, prev.obstacleMap);
 
   if (x === null || y === null) return null;
   return {
@@ -63,6 +111,7 @@ export const normalizeTelemetry = (raw, prev = INITIAL_TELEMETRY) => {
     z,
     yaw,
     obstacleTrace,
+    obstacleMap,
     perception: {
       lidar,
     },

@@ -26,6 +26,7 @@ const ROUTE_CSV_PATH = path.join(WEB_STATE_DIR, "route.csv");
 const LIMIT_ZONES_JSON_PATH = path.join(WEB_STATE_DIR, "limit_zones.json");
 const LIMIT_ZONES_TXT_PATH = path.join(WEB_STATE_DIR, "limit_zones.txt");
 const ROBOT_STATE_PATH = path.join(WEB_STATE_DIR, "robot_state.json");
+const OBSTACLE_MAP_PATH = path.join(WEB_STATE_DIR, "obstacle_map.json");
 const MOTION_PROFILE_PATH = path.join(WEB_STATE_DIR, "motion_profile.txt");
 const RUNTIME_COMMAND_PATH = path.join(WEB_STATE_DIR, "runtime_command.txt");
 const ROUTE_CSV_HEADER = coordinateContract.routeCsv.header.join(",");
@@ -230,6 +231,52 @@ const safeJsonParse = (text) => {
   }
 };
 
+const normalizeObstacleMap = (rawMap, fallback = null) => {
+  const fallbackMap = fallback && typeof fallback === "object" ? fallback : {};
+  const rawCells = Array.isArray(rawMap?.cells)
+    ? rawMap.cells
+    : Array.isArray(fallbackMap?.cells)
+      ? fallbackMap.cells
+      : [];
+  const cells = rawCells
+    .map((cell) => ({
+      x: Number(cell?.x),
+      y: Number(cell?.y),
+      confidence: Number(cell?.confidence),
+    }))
+    .filter((cell) => Number.isFinite(cell.x) && Number.isFinite(cell.y))
+    .map((cell) => ({
+      x: cell.x,
+      y: cell.y,
+      confidence: Number.isFinite(cell.confidence) ? Math.max(0, cell.confidence) : 0,
+    }))
+    .slice(-4096);
+  const cellSize = Number(rawMap?.cellSize ?? fallbackMap?.cellSize);
+  const cellCount = Number(rawMap?.totalCells ?? fallbackMap?.cellCount ?? cells.length);
+
+  return {
+    cellSize: Number.isFinite(cellSize) && cellSize > 0 ? cellSize : 0.06,
+    cellCount: Number.isFinite(cellCount) && cellCount >= 0 ? cellCount : cells.length,
+    mapFile:
+      typeof fallbackMap?.mapFile === "string" && fallbackMap.mapFile.trim()
+        ? fallbackMap.mapFile
+        : "obstacle_map.json",
+    jsonFile:
+      typeof fallbackMap?.jsonFile === "string" && fallbackMap.jsonFile.trim()
+        ? fallbackMap.jsonFile
+        : "obstacle_map.json",
+    excelCsvFile:
+      typeof fallbackMap?.excelCsvFile === "string" && fallbackMap.excelCsvFile.trim()
+        ? fallbackMap.excelCsvFile
+        : "obstacle_map.csv",
+    imageFile:
+      typeof fallbackMap?.imageFile === "string" && fallbackMap.imageFile.trim()
+        ? fallbackMap.imageFile
+        : "obstacle_map.png",
+    cells,
+  };
+};
+
 const sanitizeMotionProfile = (motion) => {
   const profile = motion || {};
   return {
@@ -358,7 +405,7 @@ const writeRuntimeCommandArtifact = async (payload) => {
   await fsp.writeFile(RUNTIME_COMMAND_PATH, `${lines.join("\n")}\n`);
 };
 
-const normalizeFileTelemetry = (raw) => {
+const normalizeFileTelemetry = (raw, rawMap = null) => {
   const pose = raw?.[TELEMETRY_POSE_KEY] || null;
   const x = Number(pose?.x ?? raw?.robot?.x ?? raw?.x);
   const y = Number(pose?.y ?? raw?.robot?.y ?? raw?.robot?.z ?? raw?.y);
@@ -384,6 +431,7 @@ const normalizeFileTelemetry = (raw) => {
             : 1,
         }))
     : [];
+  const obstacleMap = normalizeObstacleMap(rawMap, raw?.obstacleMap || null);
 
   return {
     type: TELEMETRY_MESSAGE_TYPE,
@@ -403,6 +451,7 @@ const normalizeFileTelemetry = (raw) => {
       lidar: raw?.perception?.lidar || null,
       obstacleTrace,
     },
+    obstacleMap,
     obstacleTrace,
     simulationTime: Number(raw?.simulationTime) || 0,
   };
@@ -688,9 +737,16 @@ const pollFileTelemetry = async () => {
     const mtime = stat.mtimeMs;
     if (!Number.isFinite(mtime) || mtime === lastFileTelemetryMtime) return;
 
-    const text = await fsp.readFile(ROBOT_STATE_PATH, "utf8");
+    const [text, obstacleMapText] = await Promise.all([
+      fsp.readFile(ROBOT_STATE_PATH, "utf8"),
+      fsp.readFile(OBSTACLE_MAP_PATH, "utf8").catch((error) => {
+        if (error?.code === "ENOENT") return null;
+        throw error;
+      }),
+    ]);
     const parsed = safeJsonParse(text);
-    const normalized = normalizeFileTelemetry(parsed);
+    const parsedObstacleMap = obstacleMapText ? safeJsonParse(obstacleMapText) : null;
+    const normalized = normalizeFileTelemetry(parsed, parsedObstacleMap);
     if (!normalized) return;
 
     lastFileTelemetryMtime = mtime;

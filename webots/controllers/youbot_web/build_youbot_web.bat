@@ -17,9 +17,17 @@ if not defined VCVARS (
 call "%VCVARS%" >nul
 if errorlevel 1 exit /b 1
 
-set "WEBOTS_HOME=C:\Program Files\Webots"
+if not defined WEBOTS_HOME (
+  if exist "D:\DS\Programs\Webots\include\controller\c\webots\robot.h" (
+    set "WEBOTS_HOME=D:\DS\Programs\Webots"
+  ) else if exist "C:\Program Files\Webots\include\controller\c\webots\robot.h" (
+    set "WEBOTS_HOME=C:\Program Files\Webots"
+  )
+)
+
 if not exist "%WEBOTS_HOME%\include\controller\c\webots\robot.h" (
   echo Failed to locate Webots headers in "%WEBOTS_HOME%".
+  echo Set WEBOTS_HOME to your Webots installation directory and rerun the build.
   exit /b 1
 )
 

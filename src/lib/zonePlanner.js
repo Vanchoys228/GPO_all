@@ -638,7 +638,12 @@ const drawSurfaceZones = (ctx, surfaceZones = DEFAULT_SURFACE_ZONES) => {
   }
 };
 
-export const drawPlannerBackground = (ctx, surfaceZones = DEFAULT_SURFACE_ZONES) => {
+export const drawPlannerBackground = (
+  ctx,
+  surfaceZones = DEFAULT_SURFACE_ZONES,
+  options = {}
+) => {
+  const { annotate = true } = options;
   const gradient = ctx.createLinearGradient(0, 0, CANVAS_WIDTH, CANVAS_HEIGHT);
   gradient.addColorStop(0, "#fafafa");
   gradient.addColorStop(1, "#e5e7eb");
@@ -692,25 +697,27 @@ export const drawPlannerBackground = (ctx, surfaceZones = DEFAULT_SURFACE_ZONES)
     ctx.stroke();
   }
 
-  const verticalAxisTop = worldToCanvas(0, HALF_HEIGHT);
-  const verticalAxisBottom = worldToCanvas(0, -HALF_HEIGHT);
-  const horizontalAxisLeft = worldToCanvas(-HALF_WIDTH, 0);
-  const horizontalAxisRight = worldToCanvas(HALF_WIDTH, 0);
+  if (annotate) {
+    const verticalAxisTop = worldToCanvas(0, HALF_HEIGHT);
+    const verticalAxisBottom = worldToCanvas(0, -HALF_HEIGHT);
+    const horizontalAxisLeft = worldToCanvas(-HALF_WIDTH, 0);
+    const horizontalAxisRight = worldToCanvas(HALF_WIDTH, 0);
 
-  ctx.strokeStyle = "rgba(15, 23, 42, 0.6)";
-  ctx.lineWidth = 2;
-  ctx.beginPath();
-  ctx.moveTo(verticalAxisTop.x, verticalAxisTop.y);
-  ctx.lineTo(verticalAxisBottom.x, verticalAxisBottom.y);
-  ctx.moveTo(horizontalAxisLeft.x, horizontalAxisLeft.y);
-  ctx.lineTo(horizontalAxisRight.x, horizontalAxisRight.y);
-  ctx.stroke();
+    ctx.strokeStyle = "rgba(15, 23, 42, 0.6)";
+    ctx.lineWidth = 2;
+    ctx.beginPath();
+    ctx.moveTo(verticalAxisTop.x, verticalAxisTop.y);
+    ctx.lineTo(verticalAxisBottom.x, verticalAxisBottom.y);
+    ctx.moveTo(horizontalAxisLeft.x, horizontalAxisLeft.y);
+    ctx.lineTo(horizontalAxisRight.x, horizontalAxisRight.y);
+    ctx.stroke();
 
-  ctx.fillStyle = "#334155";
-  ctx.font = "600 12px 'Segoe UI', sans-serif";
-  ctx.textAlign = "left";
-  ctx.textBaseline = "alphabetic";
-  ctx.fillText("Y", verticalAxisTop.x + 8, verticalAxisTop.y + 18);
-  ctx.fillText("X", horizontalAxisRight.x - 18, horizontalAxisRight.y - 8);
-  ctx.fillText("Routing grid with surface map", DRAWING_LEFT + 14, DRAWING_TOP - 14);
+    ctx.fillStyle = "#334155";
+    ctx.font = "600 12px 'Segoe UI', sans-serif";
+    ctx.textAlign = "left";
+    ctx.textBaseline = "alphabetic";
+    ctx.fillText("Y", verticalAxisTop.x + 8, verticalAxisTop.y + 18);
+    ctx.fillText("X", horizontalAxisRight.x - 18, horizontalAxisRight.y - 8);
+    ctx.fillText("Routing grid with surface map", DRAWING_LEFT + 14, DRAWING_TOP - 14);
+  }
 };
