@@ -1,9 +1,14 @@
+import { useRef } from "react";
 import { ALGORITHM_OPTIONS, TASK_OPTIONS } from "../../lib/routeAlgorithms";
 import {
   POINT_KIND_OPTIONS,
   ROUTE_CLEARANCE_MARGIN,
   SAFE_POINT_MARGIN,
 } from "../../lib/zonePlanner";
+import {
+  SURFACE_PROFILE_OPTIONS,
+  describeSurfaceRuntime,
+} from "../../lib/energyModel";
 
 const cardCls =
   "rounded-2xl bg-white/95 backdrop-blur border border-stone-200 shadow-[0_18px_40px_rgba(15,23,42,0.06)] p-4";
@@ -13,6 +18,21 @@ const subtleButtonCls =
   "rounded-xl border border-stone-300 bg-stone-100 px-3 py-2 text-sm font-semibold text-stone-800 shadow-sm transition hover:bg-stone-200 hover:border-stone-400";
 const neutralButtonCls =
   "rounded-xl border border-slate-300 bg-slate-800 px-3 py-2 text-sm font-semibold text-white shadow-sm transition hover:bg-slate-900";
+
+const formatSeconds = (seconds) => {
+  if (!Number.isFinite(seconds) || seconds <= 0) return "0 c";
+  if (seconds < 60) return `${seconds.toFixed(1)} c`;
+  return `${(seconds / 60).toFixed(1)} мин`;
+};
+
+const parseLooseInput = (rawValue, fallback) => {
+  const normalized = String(rawValue ?? "")
+    .trim()
+    .replace(",", ".");
+  if (!normalized) return fallback;
+  const parsed = Number(normalized);
+  return Number.isFinite(parsed) ? parsed : fallback;
+};
 
 export default function PlannerLeftSidebar({
   activePointKind,
@@ -33,6 +53,8 @@ export default function PlannerLeftSidebar({
   isOptimizing,
   onOptimizeRoute,
   onSendRoute,
+  onAddRandomObstacle,
+  onImportGraph,
   onClearAll,
   hasRoute,
   routeLength,
@@ -42,9 +64,45 @@ export default function PlannerLeftSidebar({
   polygonCount,
   adjustedVisitCount,
   activeZoneName,
-  batteryRangeMeters,
+  batteryRangeInput,
   onBatteryRangeChange,
+  onBatteryRangeBlur,
+  cruiseSpeedMps,
+  cruiseSpeedInput,
+  onCruiseSpeedChange,
+  onCruiseSpeedBlur,
+  payloadKg,
+  payloadInput,
+  onPayloadChange,
+  onPayloadBlur,
+  routeEnergyStats,
 }) {
+  const fileInputRef = useRef(null);
+
+  const handleImportClick = () => {
+    fileInputRef.current?.click();
+  };
+
+  const handleFileChange = (event) => {
+    const file = event.target.files?.[0];
+    if (!file) return;
+
+    const reader = new FileReader();
+    reader.onload = (loadEvent) => {
+      try {
+        const rawText = String(loadEvent.target?.result ?? "");
+        const parsed = JSON.parse(rawText);
+        onImportGraph?.(parsed, file.name);
+      } catch (error) {
+        console.error("Graph import failed", error);
+        window.alert("Не удалось импортировать граф: проверьте JSON-файл.");
+      } finally {
+        event.target.value = "";
+      }
+    };
+    reader.readAsText(file);
+  };
+
   return (
     <aside className="w-[310px] overflow-auto border-r border-stone-200 bg-gradient-to-b from-stone-100 via-white to-slate-100 p-4 space-y-4 xl:w-[330px]">
       <div className={cardCls}>
@@ -54,7 +112,7 @@ export default function PlannerLeftSidebar({
         <h2 className="text-2xl font-bold leading-tight">Планировщик маршрута робота</h2>
         <p className="mt-2 text-sm text-stone-600">
           Добавляйте точки посещения, станции зарядки и ограничивающие зоны.
-          Маршрут строится с учетом запретных контуров и запаса хода.
+          Теперь расчёт учитывает покрытие пола, массу груза и заданную скорость.
         </p>
       </div>
 
@@ -198,27 +256,95 @@ export default function PlannerLeftSidebar({
       </div>
 
       <div className={cardCls}>
-        <h3 className="text-sm font-semibold mb-3">Энергия и дальность</h3>
+        <h3 className="text-sm font-semibold mb-3">Энергия и динамика</h3>
         <label>
-          <div className="text-xs text-stone-600 mb-1">Запас хода (м)</div>
+          <div className="text-xs text-stone-600 mb-1">Запас хода (энерго-ед.)</div>
           <input
-            type="number"
-            min={1}
-            max={10000}
-            step={1}
-            value={batteryRangeMeters}
+            type="text"
+            inputMode="numeric"
+            value={batteryRangeInput}
             className={inputCls}
             onChange={(event) => onBatteryRangeChange(event.target.value)}
+            onBlur={onBatteryRangeBlur}
           />
         </label>
-        <div className="mt-2 text-xs text-stone-600">
-          Планировщик автоматически вставляет заезды на станции зарядки, если без этого маршрут недостижим.
+
+        <div className="mt-3 grid grid-cols-2 gap-2">
+          <label className="col-span-1">
+            <div className="text-xs text-stone-600 mb-1">Скорость, м/с</div>
+            <input
+              type="text"
+              inputMode="decimal"
+              value={cruiseSpeedInput}
+              className={inputCls}
+              onChange={(event) => onCruiseSpeedChange(event.target.value)}
+              onBlur={onCruiseSpeedBlur}
+            />
+          </label>
+          <label className="col-span-1">
+            <div className="text-xs text-stone-600 mb-1">Масса груза, кг</div>
+            <input
+              type="text"
+              inputMode="decimal"
+              value={payloadInput}
+              className={inputCls}
+              onChange={(event) => onPayloadChange(event.target.value)}
+              onBlur={onPayloadBlur}
+            />
+          </label>
         </div>
+
+        <div className="mt-3 rounded-xl border border-stone-200 bg-stone-50 px-3 py-2 text-xs text-stone-700 space-y-1">
+          <div>Энергия маршрута: <span className="font-semibold">{routeEnergyStats.routeEnergy.toFixed(1)}</span></div>
+          <div>Время прохода: <span className="font-semibold">{formatSeconds(routeEnergyStats.estimatedTimeSec)}</span></div>
+          <div>Лимит по покрытию: <span className="font-semibold">{routeEnergyStats.limitingMaxSpeedMps.toFixed(2)} м/с</span></div>
+          <div>Риск проскальзывания: <span className="font-semibold">{(routeEnergyStats.averageSlipRisk * 100).toFixed(1)}%</span></div>
+        </div>
+
+        <div className="mt-3 rounded-xl border border-sky-200 bg-sky-50 px-3 py-2 text-xs text-sky-800">
+          Карта покрытий влияет на расход, допустимую скорость и риски в поворотах.
+        </div>
+
         {energyWarning && (
           <div className="mt-3 rounded-xl border border-rose-200 bg-rose-50 px-3 py-2 text-xs text-rose-700">
             {energyWarning}
           </div>
         )}
+      </div>
+
+      <div className={cardCls}>
+        <h3 className="text-sm font-semibold mb-3">Покрытия карты</h3>
+        <div className="space-y-2 text-xs">
+          {SURFACE_PROFILE_OPTIONS.map((profile) => (
+            (() => {
+              const runtime = describeSurfaceRuntime(profile, {
+                speedMps: parseLooseInput(cruiseSpeedInput, cruiseSpeedMps),
+                payloadKg: parseLooseInput(payloadInput, payloadKg),
+              });
+              return (
+                <div
+                  key={profile.key}
+                  className="rounded-xl border border-stone-200 bg-stone-50 px-3 py-2"
+                >
+                  <div className="flex items-center gap-2">
+                    <span
+                      className="inline-block h-3 w-3 rounded-full border border-stone-400"
+                      style={{ background: profile.fill }}
+                    />
+                    <span className="font-semibold text-stone-800">{profile.label}</span>
+                  </div>
+                  <div className="mt-1 text-stone-600">
+                    скорость {runtime.requestedSpeedMps.toFixed(2)} м/с (лимит {runtime.surfaceMaxSpeedMps.toFixed(2)}, факт{" "}
+                    {runtime.effectiveSpeedMps.toFixed(2)})
+                  </div>
+                  <div className="text-stone-600">
+                    расход x{runtime.energyMultiplier.toFixed(2)} (база x{profile.energyPerMeter.toFixed(2)})
+                  </div>
+                </div>
+              );
+            })()
+          ))}
+        </div>
       </div>
 
       <div className={cardCls}>
@@ -264,6 +390,15 @@ export default function PlannerLeftSidebar({
         >
           Отправить маршрут
         </button>
+        <button
+          onClick={onAddRandomObstacle}
+          disabled={isOptimizing}
+          className={`mt-2 w-full h-11 rounded-xl text-white font-semibold transition ${
+            isOptimizing ? "bg-sky-400 cursor-not-allowed" : "bg-sky-600 hover:bg-sky-700"
+          }`}
+        >
+          Добавить случайное препятствие
+        </button>
         <button onClick={onClearAll} className={`mt-2 w-full h-11 ${neutralButtonCls}`}>
           Очистить всё
         </button>
@@ -272,6 +407,26 @@ export default function PlannerLeftSidebar({
             Длина маршрута: <b>{routeLength.toFixed(2)} м</b>
           </p>
         )}
+      </div>
+
+      <div className={cardCls}>
+        <h3 className="text-sm font-semibold mb-3">Импорт графа</h3>
+        <p className="mb-3 text-xs text-stone-600">
+          Загрузите JSON с точками, зарядками и ограничивающими зонами.
+        </p>
+        <button
+          onClick={handleImportClick}
+          className="w-full rounded-xl border border-stone-300 bg-stone-100 px-3 py-2 text-sm font-semibold text-stone-800 shadow-sm transition hover:bg-stone-200"
+        >
+          Загрузить граф
+        </button>
+        <input
+          ref={fileInputRef}
+          type="file"
+          accept=".json,application/json"
+          onChange={handleFileChange}
+          className="hidden"
+        />
       </div>
     </aside>
   );

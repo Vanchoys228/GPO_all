@@ -14,6 +14,7 @@ const INITIAL_DRAW_STATE = {
   chargeEntries: [],
   plannedVisitEntryMap: new Map(),
   zoneEntries: [],
+  surfaceZones: [],
   optimizedRoute: [],
   obstacleTrace: [],
   routeBlocked: false,
@@ -46,6 +47,7 @@ export default function PlannerCanvas({
       chargeEntries: plannerModel.chargeEntries,
       plannedVisitEntryMap: plannerModel.plannedVisitEntryMap,
       zoneEntries: plannerModel.zoneEntries,
+      surfaceZones: plannerModel.surfaceZones,
       optimizedRoute,
       obstacleTrace: telemetry.obstacleTrace || [],
       routeBlocked: plannerModel.routeBlocked,
@@ -57,6 +59,7 @@ export default function PlannerCanvas({
     plannerModel.chargeEntries,
     plannerModel.plannedVisitEntryMap,
     plannerModel.routeBlocked,
+    plannerModel.surfaceZones,
     plannerModel.visitEntries,
     plannerModel.zoneEntries,
     telemetry.obstacleTrace,
@@ -87,7 +90,7 @@ export default function PlannerCanvas({
       current.z += (target.z - current.z) * alpha;
       current.yaw += normalizeAngle(target.yaw - current.yaw) * alpha;
 
-      drawPlannerBackground(ctx);
+      drawPlannerBackground(ctx, state.surfaceZones);
 
       state.zoneEntries.forEach((zone) => {
         if (zone.points.length > 1) {
@@ -143,14 +146,21 @@ export default function PlannerCanvas({
       });
 
       if (state.obstacleTrace.length) {
-        ctx.fillStyle = "rgba(71, 85, 105, 0.6)";
-        ctx.strokeStyle = "rgba(226, 232, 240, 0.9)";
-        ctx.lineWidth = 1.5;
-
         state.obstacleTrace.forEach((point) => {
+          const confidenceRaw = Number(point?.confidence);
+          const confidence = Number.isFinite(confidenceRaw)
+            ? Math.max(0, Math.min(1, confidenceRaw))
+            : 1;
           const hit = worldToCanvas(point.x, point.y);
+          const radius = 1.4 + confidence * 1.5;
+          const fillAlpha = 0.2 + confidence * 0.46;
+          const strokeAlpha = 0.08 + confidence * 0.24;
+
+          ctx.fillStyle = `rgba(15, 118, 110, ${fillAlpha})`;
+          ctx.strokeStyle = `rgba(15, 23, 42, ${strokeAlpha})`;
+          ctx.lineWidth = 1.1;
           ctx.beginPath();
-          ctx.arc(hit.x, hit.y, 4.5, 0, Math.PI * 2);
+          ctx.arc(hit.x, hit.y, radius, 0, Math.PI * 2);
           ctx.fill();
           ctx.stroke();
         });

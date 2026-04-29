@@ -1,6 +1,7 @@
 ﻿import { useEffect, useRef, useState } from "react";
 import {
   ALGORITHM_OPTIONS,
+  TASK_OPTIONS,
   getAlgorithmFields,
   getAlgorithmLabel,
   getDefaultAlgorithmParams,
@@ -8,11 +9,16 @@ import {
   probeNativeSolver,
   solveRouteWithNativeAlgorithm,
 } from "../lib/routeAlgorithms";
+import { useMemo } from "react";
 import {
   DEFAULT_POINT_TASK,
+  HALF_HEIGHT,
+  HALF_WIDTH,
   buildObstacleAwareRoute,
   canvasToWorld,
+  DEFAULT_SURFACE_ZONES,
   isInsideMap,
+  pointInAnyPolygon,
   routeCrossesAnyLimitPolygon,
   sanitizeRouteForController,
   worldToCanvas,
@@ -35,6 +41,7 @@ import {
   DEFAULT_BATTERY_RANGE_METERS,
   planRouteWithCharging,
 } from "../lib/chargingPlanner";
+import { DEFAULT_ENERGY_OPTIONS } from "../lib/energyModel";
 import PlannerCanvas from "../components/dashboard/PlannerCanvas";
 import PlannerLeftSidebar from "../components/dashboard/PlannerLeftSidebar";
 import PlannerRightSidebar from "../components/dashboard/PlannerRightSidebar";
@@ -121,8 +128,10 @@ const sendRouteChannelPayload = (routeWsRef, payload, { onSent, onError } = {}) 
 const buildRouteWithEnergyStops = ({
   seedRoute,
   polygons,
+  surfaceZones,
   chargingStations,
   batteryRangeMeters,
+  energyOptions,
 }) => {
   const safeRoute = buildObstacleAwareRoute(seedRoute, polygons);
   if (!safeRoute) {
@@ -137,6 +146,8 @@ const buildRouteWithEnergyStops = ({
     route: safeRoute,
     stations: chargingStations,
     polygons,
+    surfaceZones,
+    energyOptions,
     batteryRange: batteryRangeMeters,
   });
   if (!chargingResult.ok) {
@@ -152,7 +163,245 @@ const buildRouteWithEnergyStops = ({
     route: chargingResult.route,
     stationStopCount: chargingResult.stationStopCount || 0,
     routeDistance: chargingResult.routeDistance,
+    routeEnergy: chargingResult.routeEnergy || 0,
+    estimatedTimeSec: chargingResult.estimatedTimeSec || 0,
+    limitingMaxSpeedMps: chargingResult.limitingMaxSpeedMps || energyOptions?.speedMps || 0,
+    averageSlipRisk: chargingResult.averageSlipRisk || 0,
   };
+};
+
+const parseLooseNumber = (rawValue) => {
+  const normalized = String(rawValue ?? "")
+    .trim()
+    .replace(",", ".");
+  if (!normalized) return Number.NaN;
+  return Number(normalized);
+};
+
+const formatNumber = (value, digits) =>
+  Number(value.toFixed(digits)).toString();
+
+const randomBetween = (min, max) => min + Math.random() * (max - min);
+
+const isFinitePoint = (point) =>
+  Number.isFinite(point?.x) && Number.isFinite(point?.y);
+
+const normalizeImportedZoneMeta = (zone, index) => ({
+  id:
+    typeof zone?.id === "string" && zone.id.trim()
+      ? zone.id.trim()
+      : `zone-${index + 1}`,
+  name:
+    typeof zone?.name === "string" && zone.name.trim()
+      ? zone.name.trim()
+      : `Зона ${index + 1}`,
+  closed: Boolean(zone?.closed),
+});
+
+const deriveNextZoneNumber = (zones) => {
+  const maxNumber = zones.reduce((best, zone) => {
+    const idMatch = String(zone?.id ?? "").match(/zone-(\d+)/i);
+    const nameMatch = String(zone?.name ?? "").match(/(\d+)/);
+    const candidates = [idMatch?.[1], nameMatch?.[1]]
+      .map((value) => Number(value))
+      .filter(Number.isFinite);
+
+    return candidates.length ? Math.max(best, ...candidates) : best;
+  }, 1);
+
+  return Math.max(2, maxNumber + 1);
+};
+
+const normalizeImportedGraph = (rawGraph) => {
+  if (!rawGraph || typeof rawGraph !== "object") {
+    throw new Error("Граф должен быть объектом JSON.");
+  }
+
+  if (Array.isArray(rawGraph.points)) {
+    const zonesSource =
+      Array.isArray(rawGraph.limitZones) && rawGraph.limitZones.length
+        ? rawGraph.limitZones
+        : [INITIAL_ZONE];
+    const limitZones = zonesSource.map((zone, index) =>
+      normalizeImportedZoneMeta(zone, index)
+    );
+    const zoneIds = new Set(limitZones.map((zone) => zone.id));
+    const points = rawGraph.points
+      .filter((point) => isFinitePoint(point))
+      .filter((point) => isInsideMap(point))
+      .map((point) => {
+        if (point.kind === "limit") {
+          return {
+            x: point.x,
+            y: point.y,
+            kind: "limit",
+            zoneId: zoneIds.has(point.zoneId) ? point.zoneId : limitZones[0].id,
+            task: null,
+          };
+        }
+
+        if (point.kind === "charge") {
+          return {
+            x: point.x,
+            y: point.y,
+            kind: "charge",
+            zoneId: null,
+            task: null,
+          };
+        }
+
+        return {
+          x: point.x,
+          y: point.y,
+          kind: "visit",
+          zoneId: null,
+          task: point.task || DEFAULT_POINT_TASK,
+        };
+      });
+
+    return {
+      points,
+      limitZones,
+      routeTaskKey: rawGraph.routeTaskKey,
+      algorithmKey: rawGraph.algorithmKey,
+      activeLimitZoneId: rawGraph.activeLimitZoneId,
+    };
+  }
+
+  const limitZones = Array.isArray(rawGraph.zoneEntries)
+    ? rawGraph.zoneEntries.map((zone, index) => normalizeImportedZoneMeta(zone, index))
+    : [INITIAL_ZONE];
+  const points = [];
+
+  for (const visitEntry of Array.isArray(rawGraph.visitEntries) ? rawGraph.visitEntries : []) {
+    const point = visitEntry?.point;
+    if (!isFinitePoint(point) || !isInsideMap(point)) continue;
+    points.push({
+      x: point.x,
+      y: point.y,
+      kind: "visit",
+      zoneId: null,
+      task: visitEntry?.task || point?.task || DEFAULT_POINT_TASK,
+    });
+  }
+
+  for (const chargeEntry of Array.isArray(rawGraph.chargeEntries) ? rawGraph.chargeEntries : []) {
+    const point = chargeEntry?.point;
+    if (!isFinitePoint(point) || !isInsideMap(point)) continue;
+    points.push({
+      x: point.x,
+      y: point.y,
+      kind: "charge",
+      zoneId: null,
+      task: null,
+    });
+  }
+
+  limitZones.forEach((zone) => {
+    const sourceZone = Array.isArray(rawGraph.zoneEntries)
+      ? rawGraph.zoneEntries.find((entry) => String(entry?.id) === zone.id)
+      : null;
+    const sourcePoints = Array.isArray(sourceZone?.points) ? sourceZone.points.slice() : [];
+    sourcePoints
+      .sort((left, right) => (Number(left?.order) || 0) - (Number(right?.order) || 0))
+      .forEach((entry) => {
+        const point = entry?.point;
+        if (!isFinitePoint(point) || !isInsideMap(point)) return;
+        points.push({
+          x: point.x,
+          y: point.y,
+          kind: "limit",
+          zoneId: zone.id,
+          task: null,
+        });
+      });
+  });
+
+  return {
+    points,
+    limitZones,
+    routeTaskKey: rawGraph.routeTaskKey,
+    algorithmKey: rawGraph.algorithmKey,
+    activeLimitZoneId: rawGraph.activeLimitZoneId,
+  };
+};
+
+const pickRandomObstacleCenter = ({
+  telemetry,
+  optimizedRoute,
+  points,
+  polygons,
+  obstacle,
+}) => {
+  const allPoints = Array.isArray(points) ? points : [];
+  const route = Array.isArray(optimizedRoute) ? optimizedRoute : [];
+  const obstacleSizeX = Number(obstacle?.sizeX) || 0.8;
+  const obstacleSizeY = Number(obstacle?.sizeY) || 0.8;
+  const obstacleRadius = Math.hypot(obstacleSizeX, obstacleSizeY) * 0.5;
+  const protectedPointRadius = obstacleRadius + 0.55;
+  const routeBiasAttempts = 28;
+  const totalAttempts = 120;
+
+  const isSafe = (candidate) => {
+    if (!isInsideMap(candidate)) return false;
+    if (pointInAnyPolygon(candidate, polygons)) return false;
+
+    const robotDistance = Math.hypot(candidate.x - telemetry.x, candidate.y - telemetry.y);
+    if (robotDistance < 1.1) return false;
+
+    for (const point of allPoints) {
+      if (Math.hypot(candidate.x - point.x, candidate.y - point.y) < protectedPointRadius) {
+        return false;
+      }
+    }
+
+    for (const point of route) {
+      if (Math.hypot(candidate.x - point.x, candidate.y - point.y) < protectedPointRadius) {
+        return false;
+      }
+    }
+
+    return true;
+  };
+
+  for (let attempt = 0; attempt < totalAttempts; attempt += 1) {
+    let candidate = null;
+    const useRouteBias = route.length > 1 && attempt < routeBiasAttempts;
+
+    if (useRouteBias) {
+      const segmentIndex = Math.floor(Math.random() * (route.length - 1));
+      const a = route[segmentIndex];
+      const b = route[segmentIndex + 1];
+      const t = Math.random();
+      const ax = a.x + (b.x - a.x) * t;
+      const ay = a.y + (b.y - a.y) * t;
+      const dx = b.x - a.x;
+      const dy = b.y - a.y;
+      const segmentLength = Math.hypot(dx, dy);
+
+      if (segmentLength > 1e-6) {
+        const normalX = -dy / segmentLength;
+        const normalY = dx / segmentLength;
+        const sign = Math.random() < 0.5 ? -1 : 1;
+        const lateralOffset = randomBetween(0.22, 0.85);
+        candidate = {
+          x: ax + normalX * lateralOffset * sign,
+          y: ay + normalY * lateralOffset * sign,
+        };
+      }
+    }
+
+    if (!candidate) {
+      candidate = {
+        x: randomBetween(-HALF_WIDTH + 1.2, HALF_WIDTH - 1.2),
+        y: randomBetween(-HALF_HEIGHT + 1.2, HALF_HEIGHT - 1.2),
+      };
+    }
+
+    if (isSafe(candidate)) return candidate;
+  }
+
+  return null;
 };
 
 export default function Dashboard() {
@@ -183,6 +432,25 @@ export default function Dashboard() {
   const [batteryRangeMeters, setBatteryRangeMeters] = useState(
     DEFAULT_BATTERY_RANGE_METERS
   );
+  const [cruiseSpeedMps, setCruiseSpeedMps] = useState(
+    DEFAULT_ENERGY_OPTIONS.speedMps
+  );
+  const [payloadKg, setPayloadKg] = useState(DEFAULT_ENERGY_OPTIONS.payloadKg);
+  const [batteryRangeInput, setBatteryRangeInput] = useState(
+    String(DEFAULT_BATTERY_RANGE_METERS)
+  );
+  const [cruiseSpeedInput, setCruiseSpeedInput] = useState(
+    formatNumber(DEFAULT_ENERGY_OPTIONS.speedMps, 3)
+  );
+  const [payloadInput, setPayloadInput] = useState(
+    formatNumber(DEFAULT_ENERGY_OPTIONS.payloadKg, 2)
+  );
+  const [routeEnergyStats, setRouteEnergyStats] = useState({
+    routeEnergy: 0,
+    estimatedTimeSec: 0,
+    limitingMaxSpeedMps: DEFAULT_ENERGY_OPTIONS.speedMps,
+    averageSlipRisk: 0,
+  });
   const [limitZones, setLimitZones] = useState([INITIAL_ZONE]);
   const [activeLimitZoneId, setActiveLimitZoneId] = useState(INITIAL_ZONE.id);
   const [nextZoneNumber, setNextZoneNumber] = useState(2);
@@ -200,6 +468,7 @@ export default function Dashboard() {
     limitZones,
     optimizedRoute,
     activeLimitZoneId,
+    surfaceZones: DEFAULT_SURFACE_ZONES,
   });
   const algorithmFields = getAlgorithmFields(algorithmKey);
   const selectedAlgorithmParams =
@@ -231,7 +500,60 @@ export default function Dashboard() {
       y: Number(point.y.toFixed(4)),
     }))
   );
-  const autoRouteSyncToken = `${zoneSyncPayloadText}|${chargePointsRoutingText}|${batteryRangeMeters}`;
+  const energyOptions = useMemo(
+    () => ({
+      speedMps: cruiseSpeedMps,
+      payloadKg,
+    }),
+    [cruiseSpeedMps, payloadKg]
+  );
+  const autoRouteSyncToken = `${zoneSyncPayloadText}|${chargePointsRoutingText}|${batteryRangeMeters}|${cruiseSpeedMps}|${payloadKg}`;
+
+  const handleImportGraph = (rawGraph, sourceName = "graph.json") => {
+    const imported = normalizeImportedGraph(rawGraph);
+    const importedZones =
+      imported.limitZones.length > 0 ? imported.limitZones : [INITIAL_ZONE];
+
+    setPoints(imported.points);
+    setLimitZones(importedZones);
+    setActiveLimitZoneId(
+      importedZones.some((zone) => zone.id === imported.activeLimitZoneId)
+        ? imported.activeLimitZoneId
+        : importedZones[0].id
+    );
+    setNextZoneNumber(deriveNextZoneNumber(importedZones));
+    setActivePointKind("visit");
+    setExpandedPoint(null);
+    setHoveredPointIndex(null);
+    setRouteSeed([]);
+    setOptimizedRoute([]);
+    setEnergyWarning("");
+    setRouteEnergyStats((prev) => ({
+      ...prev,
+      routeEnergy: 0,
+      estimatedTimeSec: 0,
+      averageSlipRisk: 0,
+    }));
+
+    if (typeof imported.routeTaskKey === "string") {
+      const hasTask = TASK_OPTIONS.some((task) => task.key === imported.routeTaskKey);
+      if (hasTask) setRouteTaskKey(imported.routeTaskKey);
+    }
+
+    if (typeof imported.algorithmKey === "string") {
+      const hasAlgorithm = ALGORITHM_OPTIONS.some(
+        (algorithm) => algorithm.key === imported.algorithmKey
+      );
+      if (hasAlgorithm) setAlgorithmKey(imported.algorithmKey);
+    }
+
+    const visitCount = imported.points.filter((point) => point.kind === "visit").length;
+    const chargeCount = imported.points.filter((point) => point.kind === "charge").length;
+    const zonePointCount = imported.points.filter((point) => point.kind === "limit").length;
+    setStatus(
+      `Граф импортирован из ${sourceName}: точек посещения ${visitCount}, зарядок ${chargeCount}, точек зон ${zonePointCount}.`
+    );
+  };
 
   useEffect(() => {
     let closed = false;
@@ -317,6 +639,12 @@ export default function Dashboard() {
     if (!routeSeed.length) {
       setOptimizedRoute([]);
       setEnergyWarning("");
+      setRouteEnergyStats((prev) => ({
+        ...prev,
+        routeEnergy: 0,
+        estimatedTimeSec: 0,
+        averageSlipRisk: 0,
+      }));
       return;
     }
 
@@ -325,20 +653,36 @@ export default function Dashboard() {
     const nextRoute = buildRouteWithEnergyStops({
       seedRoute: routeSeed,
       polygons: previewPolygons,
+      surfaceZones: plannerModel.surfaceZones,
       chargingStations,
       batteryRangeMeters,
+      energyOptions,
     });
     if (!nextRoute.ok) {
       setOptimizedRoute([]);
       setEnergyWarning(getEnergyWarningText(nextRoute));
+      setRouteEnergyStats((prev) => ({
+        ...prev,
+        routeEnergy: 0,
+        estimatedTimeSec: 0,
+        averageSlipRisk: 0,
+      }));
       setStatus(nextRoute.error || "Маршрут недостижим при текущих ограничениях.");
       return;
     }
     setEnergyWarning("");
     setOptimizedRoute(nextRoute.route);
+    setRouteEnergyStats({
+      routeEnergy: nextRoute.routeEnergy,
+      estimatedTimeSec: nextRoute.estimatedTimeSec,
+      limitingMaxSpeedMps: nextRoute.limitingMaxSpeedMps,
+      averageSlipRisk: nextRoute.averageSlipRisk,
+    });
   }, [
     batteryRangeMeters,
     chargePointsRoutingText,
+    energyOptions,
+    plannerModel.surfaceZones,
     previewPolygonRoutingText,
     routeSeed,
   ]);
@@ -348,6 +692,12 @@ export default function Dashboard() {
     lastAutoRouteZoneSyncRef.current = autoRouteSyncToken;
     if (routeSeed.length < 2) {
       setEnergyWarning("");
+      setRouteEnergyStats((prev) => ({
+        ...prev,
+        routeEnergy: 0,
+        estimatedTimeSec: 0,
+        averageSlipRisk: 0,
+      }));
       return;
     }
 
@@ -362,15 +712,29 @@ export default function Dashboard() {
     const rebuilt = buildRouteWithEnergyStops({
       seedRoute: routeSeed,
       polygons: controllerPolygons,
+      surfaceZones: plannerModel.surfaceZones,
       chargingStations,
       batteryRangeMeters,
+      energyOptions,
     });
     if (!rebuilt.ok) {
       setEnergyWarning(getEnergyWarningText(rebuilt));
+      setRouteEnergyStats((prev) => ({
+        ...prev,
+        routeEnergy: 0,
+        estimatedTimeSec: 0,
+        averageSlipRisk: 0,
+      }));
       setStatus(rebuilt.error || "Невозможно безопасно перестроить маршрут.");
       return;
     }
     setEnergyWarning("");
+    setRouteEnergyStats({
+      routeEnergy: rebuilt.routeEnergy,
+      estimatedTimeSec: rebuilt.estimatedTimeSec,
+      limitingMaxSpeedMps: rebuilt.limitingMaxSpeedMps,
+      averageSlipRisk: rebuilt.averageSlipRisk,
+    });
     const routeForController = sanitizeRouteForController(rebuilt.route);
     if (routeForController.length < 2) {
       setStatus("Маршрут стал слишком коротким после перестройки под зоны.");
@@ -383,6 +747,11 @@ export default function Dashboard() {
         key: algorithmKey,
         task: routeTaskKey,
         params: selectedAlgorithmParams,
+      },
+      motion: {
+        cruiseSpeedMps,
+        payloadKg,
+        batteryRange: batteryRangeMeters,
       },
       route: routeForController.map((point) => ({ x: point.x, y: point.y })),
     };
@@ -402,6 +771,10 @@ export default function Dashboard() {
     autoRouteSyncToken,
     batteryRangeMeters,
     chargePointsRoutingText,
+    cruiseSpeedMps,
+    energyOptions,
+    payloadKg,
+    plannerModel.surfaceZones,
     routeSeed,
     routeTaskKey,
     selectedAlgorithmParams,
@@ -421,6 +794,12 @@ export default function Dashboard() {
       setRouteSeed([]);
       setOptimizedRoute([]);
       setEnergyWarning("");
+      setRouteEnergyStats((prev) => ({
+        ...prev,
+        routeEnergy: 0,
+        estimatedTimeSec: 0,
+        averageSlipRisk: 0,
+      }));
     }
   };
 
@@ -662,12 +1041,87 @@ export default function Dashboard() {
     setEnergyWarning("");
   };
 
-  const handleBatteryRangeChange = (rawValue) => {
-    const parsed = Number(rawValue);
-    if (!Number.isFinite(parsed)) return;
-    setBatteryRangeMeters(Math.max(1, Math.min(10000, Math.round(parsed))));
+  const invalidateEnergyDependentRoute = () => {
     clearRouteState({ dropSolvedRoute: false });
+    setRouteEnergyStats((prev) => ({
+      ...prev,
+      routeEnergy: 0,
+      estimatedTimeSec: 0,
+      averageSlipRisk: 0,
+    }));
     setEnergyWarning("");
+  };
+
+  const handleBatteryRangeChange = (rawValue) => {
+    setBatteryRangeInput(rawValue);
+    const parsed = parseLooseNumber(rawValue);
+    if (!Number.isFinite(parsed)) return;
+    const nextValue = Math.max(1, Math.min(10000, Math.round(parsed)));
+    if (nextValue === batteryRangeMeters) return;
+    setBatteryRangeMeters(nextValue);
+    invalidateEnergyDependentRoute();
+  };
+
+  const handleBatteryRangeBlur = () => {
+    const parsed = parseLooseNumber(batteryRangeInput);
+    if (!Number.isFinite(parsed)) {
+      setBatteryRangeInput(String(batteryRangeMeters));
+      return;
+    }
+    const nextValue = Math.max(1, Math.min(10000, Math.round(parsed)));
+    if (nextValue !== batteryRangeMeters) {
+      setBatteryRangeMeters(nextValue);
+      invalidateEnergyDependentRoute();
+    }
+    setBatteryRangeInput(String(nextValue));
+  };
+
+  const handleCruiseSpeedChange = (rawValue) => {
+    setCruiseSpeedInput(rawValue);
+    const parsed = parseLooseNumber(rawValue);
+    if (!Number.isFinite(parsed)) return;
+    const nextValue = Math.max(0.05, Math.min(0.8, Number(parsed.toFixed(3))));
+    if (Math.abs(nextValue - cruiseSpeedMps) <= 1e-9) return;
+    setCruiseSpeedMps(nextValue);
+    invalidateEnergyDependentRoute();
+  };
+
+  const handleCruiseSpeedBlur = () => {
+    const parsed = parseLooseNumber(cruiseSpeedInput);
+    if (!Number.isFinite(parsed)) {
+      setCruiseSpeedInput(formatNumber(cruiseSpeedMps, 3));
+      return;
+    }
+    const nextValue = Math.max(0.05, Math.min(0.8, Number(parsed.toFixed(3))));
+    if (Math.abs(nextValue - cruiseSpeedMps) > 1e-9) {
+      setCruiseSpeedMps(nextValue);
+      invalidateEnergyDependentRoute();
+    }
+    setCruiseSpeedInput(formatNumber(nextValue, 3));
+  };
+
+  const handlePayloadChange = (rawValue) => {
+    setPayloadInput(rawValue);
+    const parsed = parseLooseNumber(rawValue);
+    if (!Number.isFinite(parsed)) return;
+    const nextValue = Math.max(0, Math.min(500, Number(parsed.toFixed(2))));
+    if (Math.abs(nextValue - payloadKg) <= 1e-9) return;
+    setPayloadKg(nextValue);
+    invalidateEnergyDependentRoute();
+  };
+
+  const handlePayloadBlur = () => {
+    const parsed = parseLooseNumber(payloadInput);
+    if (!Number.isFinite(parsed)) {
+      setPayloadInput(formatNumber(payloadKg, 2));
+      return;
+    }
+    const nextValue = Math.max(0, Math.min(500, Number(parsed.toFixed(2))));
+    if (Math.abs(nextValue - payloadKg) > 1e-9) {
+      setPayloadKg(nextValue);
+      invalidateEnergyDependentRoute();
+    }
+    setPayloadInput(formatNumber(nextValue, 2));
   };
 
   const optimizeRoute = async () => {
@@ -699,12 +1153,20 @@ export default function Dashboard() {
       const routed = buildRouteWithEnergyStops({
         seedRoute: solvedRoute,
         polygons: plannerModel.previewPolygons,
+        surfaceZones: plannerModel.surfaceZones,
         chargingStations: plannerModel.chargePoints,
         batteryRangeMeters,
+        energyOptions,
       });
       if (!routed.ok) {
         setRouteSeed(solvedRoute);
         setOptimizedRoute([]);
+        setRouteEnergyStats((prev) => ({
+          ...prev,
+          routeEnergy: 0,
+          estimatedTimeSec: 0,
+          averageSlipRisk: 0,
+        }));
         setEnergyWarning(getEnergyWarningText(routed));
         setStatus(routed.error || "Не удалось построить достижимый маршрут.");
         return;
@@ -715,20 +1177,33 @@ export default function Dashboard() {
       );
       setRouteSeed(solvedRoute);
       setOptimizedRoute(routed.route);
+      setRouteEnergyStats({
+        routeEnergy: routed.routeEnergy,
+        estimatedTimeSec: routed.estimatedTimeSec,
+        limitingMaxSpeedMps: routed.limitingMaxSpeedMps,
+        averageSlipRisk: routed.averageSlipRisk,
+      });
       setEnergyWarning("");
       const chargingSuffix = routed.stationStopCount
         ? ` Добавлено заездов на зарядку: ${routed.stationStopCount}.`
         : "";
+      const energySuffix = ` Энергия: ${routed.routeEnergy.toFixed(1)} ед., время: ${routed.estimatedTimeSec.toFixed(1)} с.`;
       setStatus(
         blocked
           ? "Маршрут построен, но всё ещё пересекает ограничивающий контур."
           : plannerModel.adjustedVisits.length
-            ? `Маршрут построен: ${getTaskLabel(routeTaskKey)} (${getAlgorithmLabel(algorithmKey)}). ${plannerModel.adjustedVisits.length} точек автоматически сдвинуты к безопасной позиции.${chargingSuffix}`
-            : `Маршрут построен: ${getTaskLabel(routeTaskKey)} (${getAlgorithmLabel(algorithmKey)}).${chargingSuffix}`
+            ? `Маршрут построен: ${getTaskLabel(routeTaskKey)} (${getAlgorithmLabel(algorithmKey)}). ${plannerModel.adjustedVisits.length} точек автоматически сдвинуты к безопасной позиции.${chargingSuffix}${energySuffix}`
+            : `Маршрут построен: ${getTaskLabel(routeTaskKey)} (${getAlgorithmLabel(algorithmKey)}).${chargingSuffix}${energySuffix}`
       );
     } catch (error) {
       setRouteSeed([]);
       setOptimizedRoute([]);
+      setRouteEnergyStats((prev) => ({
+        ...prev,
+        routeEnergy: 0,
+        estimatedTimeSec: 0,
+        averageSlipRisk: 0,
+      }));
       setEnergyWarning("");
       setStatus(
         error instanceof Error ? error.message : "Не удалось построить маршрут."
@@ -755,8 +1230,10 @@ export default function Dashboard() {
       const rebuiltForController = buildRouteWithEnergyStops({
         seedRoute: routeSeed,
         polygons: plannerModel.polygons,
+        surfaceZones: plannerModel.surfaceZones,
         chargingStations: plannerModel.chargePoints,
         batteryRangeMeters,
+        energyOptions,
       });
       if (!rebuiltForController.ok) {
         setEnergyWarning(getEnergyWarningText(rebuiltForController));
@@ -781,6 +1258,11 @@ export default function Dashboard() {
         key: algorithmKey,
         task: routeTaskKey,
         params: selectedAlgorithmParams,
+      },
+      motion: {
+        cruiseSpeedMps,
+        payloadKg,
+        batteryRange: batteryRangeMeters,
       },
       route: routeForController.map((point) => ({ x: point.x, y: point.y })),
     };
@@ -811,6 +1293,47 @@ export default function Dashboard() {
     sendPayload(ws);
   };
 
+  const addRandomObstacle = () => {
+    const obstacle = {
+      sizeX: Number(randomBetween(0.46, 1.15).toFixed(3)),
+      sizeY: Number(randomBetween(0.38, 0.95).toFixed(3)),
+      height: Number(randomBetween(0.32, 0.9).toFixed(3)),
+    };
+    const center = pickRandomObstacleCenter({
+      telemetry,
+      optimizedRoute,
+      points,
+      polygons: plannerModel.polygons,
+      obstacle,
+    });
+
+    if (!center) {
+      setStatus("Не удалось подобрать безопасное место для случайного препятствия.");
+      return;
+    }
+
+    const payload = {
+      type: "spawn_random_obstacle",
+      commandId: Date.now(),
+      obstacle: {
+        x: Number(center.x.toFixed(4)),
+        y: Number(center.y.toFixed(4)),
+        ...obstacle,
+      },
+    };
+
+    sendRouteChannelPayload(routeWsRef, payload, {
+      onSent: () => {
+        setStatus(
+          `Случайное препятствие добавлено: (${payload.obstacle.x.toFixed(2)}, ${payload.obstacle.y.toFixed(2)}).`
+        );
+      },
+      onError: () => {
+        setStatus("Не удалось отправить команду добавления препятствия.");
+      },
+    });
+  };
+
   return (
     <div className="flex h-screen bg-stone-100 text-stone-900">
       <PlannerLeftSidebar
@@ -832,6 +1355,8 @@ export default function Dashboard() {
         isOptimizing={isOptimizing}
         onOptimizeRoute={optimizeRoute}
         onSendRoute={sendRoute}
+        onAddRandomObstacle={addRandomObstacle}
+        onImportGraph={handleImportGraph}
         onClearAll={() => clearPoints()}
         hasRoute={optimizedRoute.length > 0}
         routeLength={plannerModel.routeLength}
@@ -841,8 +1366,18 @@ export default function Dashboard() {
         polygonCount={plannerModel.polygons.length}
         adjustedVisitCount={plannerModel.adjustedVisits.length}
         activeZoneName={plannerModel.activeZoneName}
-        batteryRangeMeters={batteryRangeMeters}
+        batteryRangeInput={batteryRangeInput}
         onBatteryRangeChange={handleBatteryRangeChange}
+        onBatteryRangeBlur={handleBatteryRangeBlur}
+        cruiseSpeedMps={cruiseSpeedMps}
+        cruiseSpeedInput={cruiseSpeedInput}
+        onCruiseSpeedChange={handleCruiseSpeedChange}
+        onCruiseSpeedBlur={handleCruiseSpeedBlur}
+        payloadKg={payloadKg}
+        payloadInput={payloadInput}
+        onPayloadChange={handlePayloadChange}
+        onPayloadBlur={handlePayloadBlur}
+        routeEnergyStats={routeEnergyStats}
       />
 
       <PlannerCanvas

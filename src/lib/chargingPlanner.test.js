@@ -62,6 +62,7 @@ describe("planRouteWithCharging", () => {
     expect(result.stationStopCount).toBeGreaterThan(0);
     expect(result.route.some((point) => point.x === 80 && point.y === 10)).toBe(true);
     expect(result.route[0]).toEqual(route[0]);
+    expect(result.routeEnergy).toBeGreaterThan(0);
   });
 
   it("returns clear error for invalid battery range", () => {

@@ -40,6 +40,7 @@ describe("buildPlannerModel", () => {
     expect(model.adjustedVisits).toHaveLength(1);
     expect(model.routeBlocked).toBe(true);
     expect(model.activeZoneName).toBe("Зона 1");
+    expect(model.surfaceZones.length).toBeGreaterThan(0);
     expect(model.plannedVisitEntries[0].plannedPoint).not.toEqual(model.visitEntries[0].point);
   });
 

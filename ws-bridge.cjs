@@ -26,6 +26,8 @@ const ROUTE_CSV_PATH = path.join(WEB_STATE_DIR, "route.csv");
 const LIMIT_ZONES_JSON_PATH = path.join(WEB_STATE_DIR, "limit_zones.json");
 const LIMIT_ZONES_TXT_PATH = path.join(WEB_STATE_DIR, "limit_zones.txt");
 const ROBOT_STATE_PATH = path.join(WEB_STATE_DIR, "robot_state.json");
+const MOTION_PROFILE_PATH = path.join(WEB_STATE_DIR, "motion_profile.txt");
+const RUNTIME_COMMAND_PATH = path.join(WEB_STATE_DIR, "runtime_command.txt");
 const ROUTE_CSV_HEADER = coordinateContract.routeCsv.header.join(",");
 const TELEMETRY_MESSAGE_TYPE = coordinateContract.telemetry.messageType;
 const TELEMETRY_POSE_KEY = coordinateContract.telemetry.poseKey;
@@ -60,6 +62,12 @@ const DEFAULT_CUCKOO_PARAMS = {
   max_iterations: 200,
   alpha: 0.12,
   beta: 1.5,
+};
+
+const DEFAULT_MOTION_PROFILE = {
+  cruiseSpeedMps: 0.22,
+  payloadKg: 0,
+  batteryRange: 100,
 };
 
 const clamp = (value, min, max) => Math.max(min, Math.min(value, max));
@@ -222,6 +230,46 @@ const safeJsonParse = (text) => {
   }
 };
 
+const sanitizeMotionProfile = (motion) => {
+  const profile = motion || {};
+  return {
+    cruiseSpeedMps: clamp(
+      normalizeNumber(profile.cruiseSpeedMps, DEFAULT_MOTION_PROFILE.cruiseSpeedMps),
+      0.05,
+      0.8
+    ),
+    payloadKg: clamp(
+      normalizeNumber(profile.payloadKg, DEFAULT_MOTION_PROFILE.payloadKg),
+      0,
+      500
+    ),
+    batteryRange: clamp(
+      normalizeNumber(profile.batteryRange, DEFAULT_MOTION_PROFILE.batteryRange),
+      1,
+      100000
+    ),
+  };
+};
+
+const sanitizeRuntimeObstacle = (rawObstacle) => {
+  const obstacle = rawObstacle || {};
+  return {
+    x: clamp(normalizeNumber(obstacle.x, 0), -21.5, 21.5),
+    y: clamp(normalizeNumber(obstacle.y, 0), -16.5, 16.5),
+    sizeX: clamp(normalizeNumber(obstacle.sizeX, 0.8), 0.2, 3.5),
+    sizeY: clamp(normalizeNumber(obstacle.sizeY, 0.8), 0.2, 3.5),
+    height: clamp(normalizeNumber(obstacle.height, 0.6), 0.12, 2.8),
+  };
+};
+
+const normalizeCommandId = (rawCommandId) => {
+  const value = Number(rawCommandId);
+  if (Number.isFinite(value) && value > 0) {
+    return Math.trunc(value);
+  }
+  return Date.now();
+};
+
 const writeRouteArtifacts = async (payload) => {
   await ensureWebStateDir();
 
@@ -229,6 +277,7 @@ const writeRouteArtifacts = async (payload) => {
   const task = resolveTaskKey(payload?.algorithm?.task);
   const algorithmKey = resolveAlgorithmKey(payload?.algorithm?.key);
   const params = payload?.algorithm?.params || {};
+  const motionProfile = sanitizeMotionProfile(payload?.motion);
 
   const routeJson = {
     type: "route",
@@ -239,6 +288,7 @@ const writeRouteArtifacts = async (payload) => {
       key: algorithmKey,
       params,
     },
+    motion: motionProfile,
     route,
   };
 
@@ -254,10 +304,16 @@ const writeRouteArtifacts = async (payload) => {
     );
     csvLines.push(`${point.x},${point.y},${headingDeg}`);
   }
+  const motionLines = [
+    `cruise_speed_mps ${motionProfile.cruiseSpeedMps}`,
+    `payload_kg ${motionProfile.payloadKg}`,
+    `battery_range ${motionProfile.batteryRange}`,
+  ];
 
   await Promise.all([
     fsp.writeFile(ROUTE_JSON_PATH, JSON.stringify(routeJson, null, 2)),
     fsp.writeFile(ROUTE_CSV_PATH, `${csvLines.join("\n")}\n`),
+    fsp.writeFile(MOTION_PROFILE_PATH, `${motionLines.join("\n")}\n`),
   ]);
 };
 
@@ -286,6 +342,22 @@ const writeLimitZoneArtifacts = async (payload) => {
   ]);
 };
 
+const writeRuntimeCommandArtifact = async (payload) => {
+  await ensureWebStateDir();
+  const obstacle = sanitizeRuntimeObstacle(payload?.obstacle);
+  const commandId = normalizeCommandId(payload?.commandId);
+  const lines = [
+    `id ${commandId}`,
+    "type spawn_obstacle",
+    `x ${obstacle.x}`,
+    `y ${obstacle.y}`,
+    `size_x ${obstacle.sizeX}`,
+    `size_y ${obstacle.sizeY}`,
+    `height ${obstacle.height}`,
+  ];
+  await fsp.writeFile(RUNTIME_COMMAND_PATH, `${lines.join("\n")}\n`);
+};
+
 const normalizeFileTelemetry = (raw) => {
   const pose = raw?.[TELEMETRY_POSE_KEY] || null;
   const x = Number(pose?.x ?? raw?.robot?.x ?? raw?.x);
@@ -301,8 +373,16 @@ const normalizeFileTelemetry = (raw) => {
         .map((point) => ({
           x: Number(point?.x),
           y: Number(point?.y),
+          confidence: Number(point?.confidence),
         }))
         .filter((point) => Number.isFinite(point.x) && Number.isFinite(point.y))
+        .map((point) => ({
+          x: point.x,
+          y: point.y,
+          confidence: Number.isFinite(point.confidence)
+            ? clamp(point.confidence, 0, 1)
+            : 1,
+        }))
     : [];
 
   return {
@@ -658,6 +738,12 @@ routeWss.on("connection", (ws, req) => {
         await writeLimitZoneArtifacts(parsed);
       } catch (error) {
         console.error("[route] failed to write limit zone artifacts:", error.message);
+      }
+    } else if (parsed?.type === "spawn_random_obstacle") {
+      try {
+        await writeRuntimeCommandArtifact(parsed);
+      } catch (error) {
+        console.error("[route] failed to write runtime obstacle command:", error.message);
       }
     }
     if (controllerConn && controllerConn.readyState === WebSocket.OPEN) {
