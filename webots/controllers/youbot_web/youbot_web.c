@@ -52,7 +52,7 @@
 #define START_X 0.0
 #define START_Z 0.0
 #define START_HEIGHT 0.102838
-#define MAX_WAYPOINTS 256
+#define MAX_WAYPOINTS 768
 #define ROUTE_RELOAD_INTERVAL 20
 #define MOTION_RELOAD_INTERVAL 20
 #define ZONE_RELOAD_INTERVAL 10
@@ -135,6 +135,19 @@
 #define SURVEY_Y_MIN -8.0
 #define SURVEY_Y_MAX 8.0
 #define SURVEY_STRIP 1.2
+#define MAPPING_SURVEY_GRID_CELL 0.25
+#define MAPPING_SURVEY_MAX_GRID_CELLS 36000
+#define MAPPING_SURVEY_MAX_BOUNDARY_POINTS 4096
+#define MAPPING_SURVEY_CONTOUR_OFFSET 0.45
+#define MAPPING_SURVEY_INTERIOR_OFFSET 0.70
+#define MAPPING_SURVEY_STRIP 1.10
+#define MAPPING_SURVEY_MIN_CONTOUR_STEP 1.15
+#define MAPPING_SURVEY_MAX_CONTOUR_STEP 1.45
+#define MAPPING_SURVEY_MIN_STRIP_LENGTH 0.65
+#define MAPPING_SURVEY_RDP_EPS 0.34
+#define MAPPING_SURVEY_MAP_OBSTACLE_CLEARANCE 0.45
+#define MAPPING_SURVEY_MAX_EXTENT_X 21.5
+#define MAPPING_SURVEY_MAX_EXTENT_Y 16.5
 #define EPS 1e-9
 
 typedef struct {
@@ -191,6 +204,8 @@ typedef struct {
 typedef struct {
   long long id;
   int has_spawn_obstacle;
+  int has_start_mapping_survey;
+  int clear_map;
   double x;
   double y;
   double size_x;
@@ -203,6 +218,30 @@ typedef struct {
   double y;
   int confidence;
 } MapCell;
+
+typedef struct {
+  double x;
+  double y;
+} SurveyPoint;
+
+typedef struct {
+  double start;
+  double end;
+} SurveyInterval;
+
+typedef struct {
+  double min_x;
+  double min_y;
+  double cell;
+  int width;
+  int height;
+  int count;
+  unsigned char free_cell[MAPPING_SURVEY_MAX_GRID_CELLS];
+  unsigned char component_cell[MAPPING_SURVEY_MAX_GRID_CELLS];
+  unsigned char visited_cell[MAPPING_SURVEY_MAX_GRID_CELLS];
+  int parent[MAPPING_SURVEY_MAX_GRID_CELLS];
+  int queue[MAPPING_SURVEY_MAX_GRID_CELLS];
+} SurveyGrid;
 
 typedef struct {
   double expected_front_min_range;
@@ -299,6 +338,8 @@ static int last_pose_valid = 0;
 static long long motion_profile_last_modified = -1;
 static long long runtime_command_last_modified = -1;
 static long long last_processed_runtime_command_id = -1;
+static int route_source_mapping_survey = 0;
+static int mapping_survey_room_zone_index = -1;
 
 static const char *ROUTE_PATH = "..\\..\\..\\web_state\\route.csv";
 static const char *ZONE_PATH = "..\\..\\..\\web_state\\limit_zones.txt";
@@ -313,6 +354,7 @@ static const char *MAP_CSV_TEMP_PATH = "..\\..\\..\\web_state\\obstacle_map_csv.
 
 static int point_near_zone(double x, double y, const LimitZone *zone, double clearance);
 static int point_near_zone_boundary(double x, double y, const LimitZone *zone, double tolerance);
+static int load_route(RouteData *route);
 static void reset_navigation_mode();
 static void set_status(const char *status);
 
@@ -1414,8 +1456,10 @@ static int segment_blocked_by_zones(
     double ay,
     double bx,
     double by,
-    double clearance) {
+    double clearance,
+    int skip_zone_index) {
   for (int zone_index = 0; zone_index < zone_data.count; ++zone_index) {
+    if (zone_index == skip_zone_index) continue;
     const LimitZone *zone = &zone_data.zones[zone_index];
 
     if (point_near_zone(ax, ay, zone, clearance) || point_near_zone(bx, by, zone, clearance)) {
@@ -1442,6 +1486,832 @@ static int segment_blocked_by_zones(
   }
 
   return 0;
+}
+
+static double zone_signed_area(const LimitZone *zone) {
+  if (!zone || zone->point_count < 3) return 0.0;
+  double area = 0.0;
+  for (int i = 0; i < zone->point_count; ++i) {
+    const int next = (i + 1) % zone->point_count;
+    area += zone->points[i].x * zone->points[next].y -
+            zone->points[next].x * zone->points[i].y;
+  }
+  return area * 0.5;
+}
+
+static int find_room_zone_index(double robot_x, double robot_y) {
+  int best_index = -1;
+  double best_area = 0.0;
+  for (int i = 0; i < zone_data.count; ++i) {
+    const LimitZone *zone = &zone_data.zones[i];
+    if (!point_in_zone(robot_x, robot_y, zone)) continue;
+    const double area = fabs(zone_signed_area(zone));
+    if (area > best_area) {
+      best_area = area;
+      best_index = i;
+    }
+  }
+  return best_index;
+}
+
+static void survey_expand_bounds(double x, double y, double *min_x, double *max_x, double *min_y, double *max_y) {
+  if (x < *min_x) *min_x = x;
+  if (x > *max_x) *max_x = x;
+  if (y < *min_y) *min_y = y;
+  if (y > *max_y) *max_y = y;
+}
+
+static int survey_map_obstacle_near(double x, double y, double clearance) {
+  const double clearance_sq = clearance * clearance;
+  for (int i = 0; i < persistent_map_count; ++i) {
+    const double dx = persistent_map[i].x - x;
+    const double dy = persistent_map[i].y - y;
+    if (dx * dx + dy * dy <= clearance_sq) return 1;
+  }
+  return 0;
+}
+
+static int survey_point_safe(double x, double y, int room_zone_index, double clearance) {
+  if (room_zone_index >= 0) {
+    const LimitZone *room = &zone_data.zones[room_zone_index];
+    if (!point_in_zone(x, y, room)) return 0;
+    if (point_near_zone_boundary(x, y, room, clearance * 0.72)) return 0;
+  } else if (x < -MAPPING_SURVEY_MAX_EXTENT_X || x > MAPPING_SURVEY_MAX_EXTENT_X ||
+             y < -MAPPING_SURVEY_MAX_EXTENT_Y || y > MAPPING_SURVEY_MAX_EXTENT_Y) {
+    return 0;
+  }
+
+  for (int i = 0; i < zone_data.count; ++i) {
+    if (i == room_zone_index) continue;
+    if (point_near_zone(x, y, &zone_data.zones[i], clearance)) return 0;
+  }
+
+  return !survey_map_obstacle_near(x, y, fmax(clearance, MAPPING_SURVEY_MAP_OBSTACLE_CLEARANCE));
+}
+
+static int survey_segment_safe(double ax, double ay, double bx, double by, int room_zone_index, double clearance) {
+  const double length = hypot2(bx - ax, by - ay);
+  const int steps = (int)ceil(length / fmax(MAPPING_SURVEY_GRID_CELL * 0.72, 0.05));
+  for (int i = 0; i <= steps; ++i) {
+    const double t = steps > 0 ? (double)i / (double)steps : 0.0;
+    const double x = ax + (bx - ax) * t;
+    const double y = ay + (by - ay) * t;
+    if (!survey_point_safe(x, y, room_zone_index, clearance)) return 0;
+  }
+  return 1;
+}
+
+static void survey_route_add(SurveyPoint *route, int *count, double x, double y) {
+  if (*count >= MAX_WAYPOINTS) return;
+  if (*count > 0) {
+    SurveyPoint *last = &route[*count - 1];
+    if (hypot2(last->x - x, last->y - y) < 0.18) {
+      last->x = x;
+      last->y = y;
+      return;
+    }
+  }
+  route[*count] = (SurveyPoint){x, y};
+  *count += 1;
+}
+
+static void survey_route_add_segment(SurveyPoint *route, int *count, SurveyPoint from, SurveyPoint to) {
+  const double length = hypot2(to.x - from.x, to.y - from.y);
+  const int steps = (int)fmax(1.0, ceil(length / MAPPING_SURVEY_MAX_CONTOUR_STEP));
+  for (int i = 1; i <= steps; ++i) {
+    const double t = (double)i / (double)steps;
+    survey_route_add(route, count, from.x + (to.x - from.x) * t, from.y + (to.y - from.y) * t);
+  }
+}
+
+static int line_intersection(
+    double ax, double ay, double bx, double by,
+    double cx, double cy, double dx, double dy,
+    double *out_x, double *out_y) {
+  const double r_x = bx - ax;
+  const double r_y = by - ay;
+  const double s_x = dx - cx;
+  const double s_y = dy - cy;
+  const double denom = r_x * s_y - r_y * s_x;
+  if (fabs(denom) < 1e-8) return 0;
+  const double t = ((cx - ax) * s_y - (cy - ay) * s_x) / denom;
+  *out_x = ax + r_x * t;
+  *out_y = ay + r_y * t;
+  return 1;
+}
+
+static int build_offset_zone_contour(
+    const LimitZone *room,
+    double offset,
+    SurveyPoint *out,
+    int *out_count) {
+  if (!room || room->point_count < 3) return 0;
+  const double area = zone_signed_area(room);
+  const double orient = area >= 0.0 ? 1.0 : -1.0;
+  int count = 0;
+
+  for (int i = 0; i < room->point_count; ++i) {
+    const int prev = (i + room->point_count - 1) % room->point_count;
+    const int next = (i + 1) % room->point_count;
+    const double px = room->points[prev].x;
+    const double py = room->points[prev].y;
+    const double cx = room->points[i].x;
+    const double cy = room->points[i].y;
+    const double nx = room->points[next].x;
+    const double ny = room->points[next].y;
+    const double e1x = cx - px;
+    const double e1y = cy - py;
+    const double e2x = nx - cx;
+    const double e2y = ny - cy;
+    const double e1l = hypot2(e1x, e1y);
+    const double e2l = hypot2(e2x, e2y);
+    if (e1l <= EPS || e2l <= EPS) continue;
+
+    const double n1x = orient * (-e1y / e1l);
+    const double n1y = orient * (e1x / e1l);
+    const double n2x = orient * (-e2y / e2l);
+    const double n2y = orient * (e2x / e2l);
+    double ox = cx + (n1x + n2x) * 0.5 * offset;
+    double oy = cy + (n1y + n2y) * 0.5 * offset;
+
+    if (!line_intersection(
+            px + n1x * offset, py + n1y * offset,
+            cx + n1x * offset, cy + n1y * offset,
+            cx + n2x * offset, cy + n2y * offset,
+            nx + n2x * offset, ny + n2y * offset,
+            &ox, &oy)) {
+      const double bx = n1x + n2x;
+      const double by = n1y + n2y;
+      const double bl = hypot2(bx, by);
+      if (bl > EPS) {
+        ox = cx + bx / bl * offset;
+        oy = cy + by / bl * offset;
+      }
+    }
+
+    if (!point_in_zone(ox, oy, room)) {
+      ox = cx + (n1x + n2x) * 0.25 * offset;
+      oy = cy + (n1y + n2y) * 0.25 * offset;
+    }
+
+    if (count < MAX_ZONE_POINTS) {
+      out[count++] = (SurveyPoint){ox, oy};
+    }
+  }
+
+  *out_count = count;
+  return count >= 3;
+}
+
+static int append_room_contour_phase(
+    SurveyPoint *route,
+    int *route_count,
+    int room_zone_index,
+    double robot_x,
+    double robot_y) {
+  if (room_zone_index < 0) return 0;
+  SurveyPoint contour[MAX_ZONE_POINTS];
+  int contour_count = 0;
+  if (!build_offset_zone_contour(
+          &zone_data.zones[room_zone_index],
+          MAPPING_SURVEY_CONTOUR_OFFSET,
+          contour,
+          &contour_count)) {
+    return 0;
+  }
+
+  int start_index = 0;
+  double best_dist = 1e30;
+  for (int i = 0; i < contour_count; ++i) {
+    const double dist = hypot2(contour[i].x - robot_x, contour[i].y - robot_y);
+    if (dist < best_dist) {
+      best_dist = dist;
+      start_index = i;
+    }
+  }
+
+  SurveyPoint start = contour[start_index];
+  if (survey_point_safe(start.x, start.y, room_zone_index, MAPPING_SURVEY_CONTOUR_OFFSET * 0.72)) {
+    survey_route_add(route, route_count, start.x, start.y);
+  }
+
+  SurveyPoint previous = start;
+  for (int step = 1; step <= contour_count; ++step) {
+    const int index = (start_index + step) % contour_count;
+    SurveyPoint next = contour[index];
+    if (!survey_point_safe(next.x, next.y, room_zone_index, MAPPING_SURVEY_CONTOUR_OFFSET * 0.72)) {
+      continue;
+    }
+    survey_route_add_segment(route, route_count, previous, next);
+    previous = next;
+  }
+  survey_route_add_segment(route, route_count, previous, start);
+  return *route_count > 2;
+}
+
+static int survey_build_grid(
+    SurveyGrid *grid,
+    int room_zone_index,
+    double robot_x,
+    double robot_y,
+    double clearance) {
+  double min_x = SURVEY_X_MIN;
+  double max_x = SURVEY_X_MAX;
+  double min_y = SURVEY_Y_MIN;
+  double max_y = SURVEY_Y_MAX;
+
+  survey_expand_bounds(robot_x, robot_y, &min_x, &max_x, &min_y, &max_y);
+  if (room_zone_index >= 0) {
+    const LimitZone *room = &zone_data.zones[room_zone_index];
+    min_x = max_x = room->points[0].x;
+    min_y = max_y = room->points[0].y;
+    for (int i = 1; i < room->point_count; ++i) {
+      survey_expand_bounds(room->points[i].x, room->points[i].y, &min_x, &max_x, &min_y, &max_y);
+    }
+  } else {
+    for (int zone_index = 0; zone_index < zone_data.count; ++zone_index) {
+      for (int point_index = 0; point_index < zone_data.zones[zone_index].point_count; ++point_index) {
+        survey_expand_bounds(
+            zone_data.zones[zone_index].points[point_index].x,
+            zone_data.zones[zone_index].points[point_index].y,
+            &min_x,
+            &max_x,
+            &min_y,
+            &max_y);
+      }
+    }
+    for (int i = 0; i < persistent_map_count; ++i) {
+      survey_expand_bounds(persistent_map[i].x, persistent_map[i].y, &min_x, &max_x, &min_y, &max_y);
+    }
+  }
+
+  const double margin = clearance + 1.0;
+  min_x = clamp_value(min_x - margin, -MAPPING_SURVEY_MAX_EXTENT_X, MAPPING_SURVEY_MAX_EXTENT_X);
+  max_x = clamp_value(max_x + margin, -MAPPING_SURVEY_MAX_EXTENT_X, MAPPING_SURVEY_MAX_EXTENT_X);
+  min_y = clamp_value(min_y - margin, -MAPPING_SURVEY_MAX_EXTENT_Y, MAPPING_SURVEY_MAX_EXTENT_Y);
+  max_y = clamp_value(max_y + margin, -MAPPING_SURVEY_MAX_EXTENT_Y, MAPPING_SURVEY_MAX_EXTENT_Y);
+
+  double cell = MAPPING_SURVEY_GRID_CELL;
+  int width = (int)ceil((max_x - min_x) / cell) + 1;
+  int height = (int)ceil((max_y - min_y) / cell) + 1;
+  while (width * height > MAPPING_SURVEY_MAX_GRID_CELLS) {
+    cell *= 1.18;
+    width = (int)ceil((max_x - min_x) / cell) + 1;
+    height = (int)ceil((max_y - min_y) / cell) + 1;
+  }
+
+  grid->min_x = min_x;
+  grid->min_y = min_y;
+  grid->cell = cell;
+  grid->width = width;
+  grid->height = height;
+  grid->count = width * height;
+  memset(grid->free_cell, 0, (size_t)grid->count);
+  memset(grid->component_cell, 0, (size_t)grid->count);
+
+  for (int y = 0; y < height; ++y) {
+    for (int x = 0; x < width; ++x) {
+      const int index = y * width + x;
+      const double wx = min_x + (double)x * cell;
+      const double wy = min_y + (double)y * cell;
+      grid->free_cell[index] = survey_point_safe(wx, wy, room_zone_index, clearance) ? 1 : 0;
+    }
+  }
+
+  return grid->count > 0;
+}
+
+static int survey_grid_index_for_point(const SurveyGrid *grid, double x, double y) {
+  int gx = (int)round((x - grid->min_x) / grid->cell);
+  int gy = (int)round((y - grid->min_y) / grid->cell);
+  gx = (int)clamp_value((double)gx, 0.0, (double)(grid->width - 1));
+  gy = (int)clamp_value((double)gy, 0.0, (double)(grid->height - 1));
+  return gy * grid->width + gx;
+}
+
+static SurveyPoint survey_grid_point(const SurveyGrid *grid, int index) {
+  const int gx = index % grid->width;
+  const int gy = index / grid->width;
+  return (SurveyPoint){grid->min_x + (double)gx * grid->cell, grid->min_y + (double)gy * grid->cell};
+}
+
+static int survey_flood_component(SurveyGrid *grid, double robot_x, double robot_y) {
+  int start = survey_grid_index_for_point(grid, robot_x, robot_y);
+  if (!grid->free_cell[start]) {
+    double best_dist = 1e30;
+    for (int i = 0; i < grid->count; ++i) {
+      if (!grid->free_cell[i]) continue;
+      SurveyPoint p = survey_grid_point(grid, i);
+      const double dist = hypot2(p.x - robot_x, p.y - robot_y);
+      if (dist < best_dist) {
+        best_dist = dist;
+        start = i;
+      }
+    }
+    if (!grid->free_cell[start]) return 0;
+  }
+
+  int head = 0;
+  int tail = 0;
+  grid->queue[tail++] = start;
+  grid->component_cell[start] = 1;
+  int component_count = 0;
+  const int dx[4] = {1, -1, 0, 0};
+  const int dy[4] = {0, 0, 1, -1};
+  while (head < tail) {
+    const int current = grid->queue[head++];
+    component_count += 1;
+    const int cx = current % grid->width;
+    const int cy = current / grid->width;
+    for (int d = 0; d < 4; ++d) {
+      const int nx = cx + dx[d];
+      const int ny = cy + dy[d];
+      if (nx < 0 || nx >= grid->width || ny < 0 || ny >= grid->height) continue;
+      const int ni = ny * grid->width + nx;
+      if (!grid->free_cell[ni] || grid->component_cell[ni]) continue;
+      grid->component_cell[ni] = 1;
+      grid->queue[tail++] = ni;
+    }
+  }
+
+  return component_count;
+}
+
+static int survey_cell_is_boundary(const SurveyGrid *grid, int index) {
+  if (!grid->component_cell[index]) return 0;
+  const int cx = index % grid->width;
+  const int cy = index / grid->width;
+  for (int oy = -1; oy <= 1; ++oy) {
+    for (int ox = -1; ox <= 1; ++ox) {
+      if (ox == 0 && oy == 0) continue;
+      const int nx = cx + ox;
+      const int ny = cy + oy;
+      if (nx < 0 || nx >= grid->width || ny < 0 || ny >= grid->height) return 1;
+      if (!grid->component_cell[ny * grid->width + nx]) return 1;
+    }
+  }
+  return 0;
+}
+
+static double point_line_distance(SurveyPoint p, SurveyPoint a, SurveyPoint b) {
+  return distance_point_to_segment(p.x, p.y, a.x, a.y, b.x, b.y);
+}
+
+static void survey_rdp_keep(const SurveyPoint *points, int first, int last, unsigned char *keep) {
+  if (last <= first + 1) return;
+  double best_distance = 0.0;
+  int best_index = -1;
+  for (int i = first + 1; i < last; ++i) {
+    const double distance = point_line_distance(points[i], points[first], points[last]);
+    if (distance > best_distance) {
+      best_distance = distance;
+      best_index = i;
+    }
+  }
+  if (best_index >= 0 && best_distance > MAPPING_SURVEY_RDP_EPS) {
+    keep[best_index] = 1;
+    survey_rdp_keep(points, first, best_index, keep);
+    survey_rdp_keep(points, best_index, last, keep);
+  }
+}
+
+static int append_grid_boundary_contour_phase(SurveyGrid *grid, SurveyPoint *route, int *route_count, double robot_x, double robot_y) {
+  SurveyPoint boundary[MAPPING_SURVEY_MAX_BOUNDARY_POINTS];
+  unsigned char used[MAPPING_SURVEY_MAX_BOUNDARY_POINTS];
+  int boundary_count = 0;
+
+  for (int i = 0; i < grid->count && boundary_count < MAPPING_SURVEY_MAX_BOUNDARY_POINTS; ++i) {
+    if (!survey_cell_is_boundary(grid, i)) continue;
+    boundary[boundary_count++] = survey_grid_point(grid, i);
+  }
+  if (boundary_count < 3) return 0;
+
+  memset(used, 0, (size_t)boundary_count);
+  SurveyPoint ordered[MAPPING_SURVEY_MAX_BOUNDARY_POINTS];
+  int ordered_count = 0;
+  int current = 0;
+  double best_dist = 1e30;
+  for (int i = 0; i < boundary_count; ++i) {
+    const double dist = hypot2(boundary[i].x - robot_x, boundary[i].y - robot_y);
+    if (dist < best_dist) {
+      best_dist = dist;
+      current = i;
+    }
+  }
+
+  while (ordered_count < boundary_count) {
+    ordered[ordered_count++] = boundary[current];
+    used[current] = 1;
+    int next = -1;
+    double next_dist = 1e30;
+    for (int i = 0; i < boundary_count; ++i) {
+      if (used[i]) continue;
+      const double dist = hypot2(boundary[i].x - boundary[current].x, boundary[i].y - boundary[current].y);
+      if (dist < next_dist) {
+        next_dist = dist;
+        next = i;
+      }
+    }
+    if (next < 0 || next_dist > grid->cell * 3.2) break;
+    current = next;
+  }
+
+  if (ordered_count < 3) return 0;
+  unsigned char keep[MAPPING_SURVEY_MAX_BOUNDARY_POINTS];
+  memset(keep, 0, (size_t)ordered_count);
+  keep[0] = 1;
+  keep[ordered_count - 1] = 1;
+  survey_rdp_keep(ordered, 0, ordered_count - 1, keep);
+
+  SurveyPoint simplified[MAPPING_SURVEY_MAX_BOUNDARY_POINTS];
+  int simplified_count = 0;
+  for (int i = 0; i < ordered_count; ++i) {
+    if (!keep[i]) continue;
+    simplified[simplified_count++] = ordered[i];
+  }
+  if (simplified_count < 3) return 0;
+
+  survey_route_add(route, route_count, simplified[0].x, simplified[0].y);
+  for (int i = 1; i < simplified_count; ++i) {
+    survey_route_add_segment(route, route_count, simplified[i - 1], simplified[i]);
+  }
+  survey_route_add_segment(route, route_count, simplified[simplified_count - 1], simplified[0]);
+  return 1;
+}
+
+static void survey_sort_values(double *values, int count) {
+  for (int i = 1; i < count; ++i) {
+    const double value = values[i];
+    int j = i - 1;
+    while (j >= 0 && values[j] > value) {
+      values[j + 1] = values[j];
+      --j;
+    }
+    values[j + 1] = value;
+  }
+}
+
+static void survey_subtract_interval(SurveyInterval *intervals, int *count, double block_start, double block_end) {
+  SurveyInterval next[64];
+  int next_count = 0;
+  if (block_end < block_start) {
+    const double tmp = block_start;
+    block_start = block_end;
+    block_end = tmp;
+  }
+  for (int i = 0; i < *count && next_count < 64; ++i) {
+    const SurveyInterval current = intervals[i];
+    if (block_end <= current.start || block_start >= current.end) {
+      next[next_count++] = current;
+      continue;
+    }
+    if (block_start > current.start) {
+      next[next_count++] = (SurveyInterval){current.start, fmin(block_start, current.end)};
+    }
+    if (block_end < current.end && next_count < 64) {
+      next[next_count++] = (SurveyInterval){fmax(block_end, current.start), current.end};
+    }
+  }
+  for (int i = 0; i < next_count; ++i) intervals[i] = next[i];
+  *count = next_count;
+}
+
+static void survey_subtract_zone_band(
+    SurveyInterval *intervals,
+    int *count,
+    const LimitZone *zone,
+    double y,
+    double clearance) {
+  if (!zone || zone->point_count < 3 || *count <= 0) return;
+
+  double min_y = zone->points[0].y;
+  double max_y = zone->points[0].y;
+  double near_min_x = 1e30;
+  double near_max_x = -1e30;
+  int near_band_hit = 0;
+
+  for (int i = 0; i < zone->point_count; ++i) {
+    if (zone->points[i].y < min_y) min_y = zone->points[i].y;
+    if (zone->points[i].y > max_y) max_y = zone->points[i].y;
+    if (fabs(zone->points[i].y - y) <= clearance) {
+      if (zone->points[i].x < near_min_x) near_min_x = zone->points[i].x;
+      if (zone->points[i].x > near_max_x) near_max_x = zone->points[i].x;
+      near_band_hit = 1;
+    }
+  }
+
+  if (y < min_y - clearance || y > max_y + clearance) return;
+
+  static const double sample_offsets[] = {-1.0, -0.5, 0.0, 0.5, 1.0};
+  for (int sample_index = 0; sample_index < 5; ++sample_index) {
+    const double sample_y = y + sample_offsets[sample_index] * clearance;
+    double xs[MAX_ZONE_POINTS];
+    int xs_count = 0;
+
+    for (int i = 0; i < zone->point_count; ++i) {
+      const int next = (i + 1) % zone->point_count;
+      const double ax = zone->points[i].x;
+      const double ay = zone->points[i].y;
+      const double bx = zone->points[next].x;
+      const double by = zone->points[next].y;
+
+      if (fabs(ay - by) < EPS) {
+        if (fabs(ay - y) <= clearance) {
+          if (fmin(ax, bx) < near_min_x) near_min_x = fmin(ax, bx);
+          if (fmax(ax, bx) > near_max_x) near_max_x = fmax(ax, bx);
+          near_band_hit = 1;
+        }
+        continue;
+      }
+
+      if ((ay <= sample_y && by > sample_y) || (by <= sample_y && ay > sample_y)) {
+        xs[xs_count++] = ax + (sample_y - ay) * (bx - ax) / (by - ay);
+      }
+    }
+
+    survey_sort_values(xs, xs_count);
+    for (int i = 0; i + 1 < xs_count; i += 2) {
+      survey_subtract_interval(
+          intervals,
+          count,
+          xs[i] - clearance,
+          xs[i + 1] + clearance);
+    }
+  }
+
+  if (near_band_hit && near_max_x >= near_min_x) {
+    survey_subtract_interval(
+        intervals,
+        count,
+        near_min_x - clearance,
+        near_max_x + clearance);
+  }
+}
+
+static int build_scanline_intervals(
+    double y,
+    int room_zone_index,
+    const SurveyGrid *grid,
+    SurveyInterval *intervals,
+    int max_intervals) {
+  int count = 0;
+  if (room_zone_index >= 0) {
+    const LimitZone *room = &zone_data.zones[room_zone_index];
+    double xs[MAX_ZONE_POINTS];
+    int xs_count = 0;
+    for (int i = 0; i < room->point_count; ++i) {
+      const int next = (i + 1) % room->point_count;
+      const double ax = room->points[i].x;
+      const double ay = room->points[i].y;
+      const double bx = room->points[next].x;
+      const double by = room->points[next].y;
+      if (fabs(ay - by) < EPS) continue;
+      if ((ay <= y && by > y) || (by <= y && ay > y)) {
+        xs[xs_count++] = ax + (y - ay) * (bx - ax) / (by - ay);
+      }
+    }
+    survey_sort_values(xs, xs_count);
+    for (int i = 0; i + 1 < xs_count && count < max_intervals; i += 2) {
+      double start = xs[i] + MAPPING_SURVEY_INTERIOR_OFFSET;
+      double end = xs[i + 1] - MAPPING_SURVEY_INTERIOR_OFFSET;
+      if (end - start >= MAPPING_SURVEY_MIN_STRIP_LENGTH) {
+        intervals[count++] = (SurveyInterval){start, end};
+      }
+    }
+  } else if (grid) {
+    const int row = (int)round((y - grid->min_y) / grid->cell);
+    if (row >= 0 && row < grid->height) {
+      int run_start = -1;
+      for (int x = 0; x <= grid->width; ++x) {
+        const int in_component = x < grid->width && grid->component_cell[row * grid->width + x];
+        if (in_component && run_start < 0) run_start = x;
+        if ((!in_component || x == grid->width) && run_start >= 0) {
+          const int run_end = x - 1;
+          const double start = grid->min_x + (double)run_start * grid->cell + MAPPING_SURVEY_INTERIOR_OFFSET;
+          const double end = grid->min_x + (double)run_end * grid->cell - MAPPING_SURVEY_INTERIOR_OFFSET;
+          if (end - start >= MAPPING_SURVEY_MIN_STRIP_LENGTH && count < max_intervals) {
+            intervals[count++] = (SurveyInterval){start, end};
+          }
+          run_start = -1;
+        }
+      }
+    }
+  }
+
+  for (int zone_index = 0; zone_index < zone_data.count; ++zone_index) {
+    if (zone_index == room_zone_index) continue;
+    survey_subtract_zone_band(
+        intervals,
+        &count,
+        &zone_data.zones[zone_index],
+        y,
+        MAPPING_SURVEY_INTERIOR_OFFSET);
+  }
+
+  for (int i = 0; i < persistent_map_count; ++i) {
+    if (fabs(persistent_map[i].y - y) > MAPPING_SURVEY_INTERIOR_OFFSET) continue;
+    survey_subtract_interval(
+        intervals,
+        &count,
+        persistent_map[i].x - MAPPING_SURVEY_INTERIOR_OFFSET,
+        persistent_map[i].x + MAPPING_SURVEY_INTERIOR_OFFSET);
+  }
+
+  int write = 0;
+  for (int i = 0; i < count; ++i) {
+    if (intervals[i].end - intervals[i].start < MAPPING_SURVEY_MIN_STRIP_LENGTH) continue;
+    intervals[write++] = intervals[i];
+  }
+  return write;
+}
+
+static int survey_find_grid_path(
+    SurveyGrid *grid,
+    SurveyPoint from,
+    SurveyPoint to,
+    SurveyPoint *path,
+    int *path_count,
+    int max_path_count) {
+  const int start = survey_grid_index_for_point(grid, from.x, from.y);
+  const int goal = survey_grid_index_for_point(grid, to.x, to.y);
+  if (!grid->component_cell[start] || !grid->component_cell[goal]) return 0;
+
+  memset(grid->visited_cell, 0, (size_t)grid->count);
+  for (int i = 0; i < grid->count; ++i) grid->parent[i] = -1;
+
+  int head = 0;
+  int tail = 0;
+  grid->queue[tail++] = start;
+  grid->visited_cell[start] = 1;
+  const int dx[8] = {1, -1, 0, 0, 1, 1, -1, -1};
+  const int dy[8] = {0, 0, 1, -1, 1, -1, 1, -1};
+
+  while (head < tail && !grid->visited_cell[goal]) {
+    const int current = grid->queue[head++];
+    const int cx = current % grid->width;
+    const int cy = current / grid->width;
+    for (int d = 0; d < 8; ++d) {
+      const int nx = cx + dx[d];
+      const int ny = cy + dy[d];
+      if (nx < 0 || nx >= grid->width || ny < 0 || ny >= grid->height) continue;
+      const int ni = ny * grid->width + nx;
+      if (!grid->component_cell[ni] || grid->visited_cell[ni]) continue;
+      grid->visited_cell[ni] = 1;
+      grid->parent[ni] = current;
+      grid->queue[tail++] = ni;
+    }
+  }
+
+  if (!grid->visited_cell[goal]) return 0;
+  int reverse[1024];
+  int reverse_count = 0;
+  for (int cur = goal; cur >= 0 && reverse_count < 1024; cur = grid->parent[cur]) {
+    reverse[reverse_count++] = cur;
+    if (cur == start) break;
+  }
+  if (reverse_count <= 0) return 0;
+
+  *path_count = 0;
+  for (int i = reverse_count - 1; i >= 0 && *path_count < max_path_count; i -= 3) {
+    path[*path_count] = survey_grid_point(grid, reverse[i]);
+    *path_count += 1;
+  }
+  if (*path_count < max_path_count) {
+    path[*path_count] = to;
+    *path_count += 1;
+  }
+  return *path_count > 0;
+}
+
+static void append_safe_transition(
+    SurveyGrid *grid,
+    SurveyPoint *route,
+    int *route_count,
+    SurveyPoint target,
+    int room_zone_index) {
+  if (*route_count <= 0) {
+    survey_route_add(route, route_count, target.x, target.y);
+    return;
+  }
+
+  const SurveyPoint from = route[*route_count - 1];
+  if (survey_segment_safe(from.x, from.y, target.x, target.y, room_zone_index, MAPPING_SURVEY_INTERIOR_OFFSET)) {
+    survey_route_add(route, route_count, target.x, target.y);
+    return;
+  }
+
+  SurveyPoint path[256];
+  int path_count = 0;
+  if (grid && survey_find_grid_path(grid, from, target, path, &path_count, 256)) {
+    for (int i = 1; i < path_count; ++i) {
+      survey_route_add(route, route_count, path[i].x, path[i].y);
+    }
+    return;
+  }
+}
+
+static void append_scanline_coverage_phase(
+    SurveyGrid *grid,
+    SurveyPoint *route,
+    int *route_count,
+    int room_zone_index) {
+  double min_y = grid->min_y + MAPPING_SURVEY_INTERIOR_OFFSET;
+  double max_y = grid->min_y + (double)(grid->height - 1) * grid->cell - MAPPING_SURVEY_INTERIOR_OFFSET;
+
+  if (room_zone_index >= 0) {
+    const LimitZone *room = &zone_data.zones[room_zone_index];
+    min_y = max_y = room->points[0].y;
+    for (int i = 1; i < room->point_count; ++i) {
+      if (room->points[i].y < min_y) min_y = room->points[i].y;
+      if (room->points[i].y > max_y) max_y = room->points[i].y;
+    }
+    min_y += MAPPING_SURVEY_INTERIOR_OFFSET;
+    max_y -= MAPPING_SURVEY_INTERIOR_OFFSET;
+  }
+
+  int forward = 1;
+  for (double y = min_y; y <= max_y + 0.01 && *route_count < MAX_WAYPOINTS - 4; y += MAPPING_SURVEY_STRIP) {
+    SurveyInterval intervals[64];
+    int interval_count = build_scanline_intervals(y, room_zone_index, grid, intervals, 64);
+    if (!forward) {
+      for (int left = 0, right = interval_count - 1; left < right; ++left, --right) {
+        const SurveyInterval tmp = intervals[left];
+        intervals[left] = intervals[right];
+        intervals[right] = tmp;
+      }
+    }
+
+    for (int i = 0; i < interval_count && *route_count < MAX_WAYPOINTS - 2; ++i) {
+      SurveyPoint a = forward
+                          ? (SurveyPoint){intervals[i].start, y}
+                          : (SurveyPoint){intervals[i].end, y};
+      SurveyPoint b = forward
+                          ? (SurveyPoint){intervals[i].end, y}
+                          : (SurveyPoint){intervals[i].start, y};
+      if (!survey_point_safe(a.x, a.y, room_zone_index, MAPPING_SURVEY_INTERIOR_OFFSET) ||
+          !survey_point_safe(b.x, b.y, room_zone_index, MAPPING_SURVEY_INTERIOR_OFFSET)) {
+        continue;
+      }
+      append_safe_transition(grid, route, route_count, a, room_zone_index);
+      if (survey_segment_safe(a.x, a.y, b.x, b.y, room_zone_index, MAPPING_SURVEY_INTERIOR_OFFSET)) {
+        survey_route_add(route, route_count, b.x, b.y);
+      } else {
+        append_safe_transition(grid, route, route_count, b, room_zone_index);
+      }
+    }
+    forward = !forward;
+  }
+}
+
+static void write_mapping_survey_route_file(const char *path, const SurveyPoint *route, int route_count) {
+  FILE *file = fopen(path, "w");
+  if (!file) {
+    set_error("Cannot write mapping survey route to route.csv");
+    return;
+  }
+
+  fprintf(file, "# Auto-generated mapping survey route: perimeter first, then scanline coverage\n");
+  fprintf(file, "# x,y\n");
+  for (int i = 0; i < route_count; ++i) {
+    fprintf(file, "%.3f,%.3f\n", route[i].x, route[i].y);
+  }
+  fclose(file);
+}
+
+static int generate_mapping_survey_route(const char *path, int clear_map_before_start) {
+  if (clear_map_before_start) clear_persistent_map();
+
+  double robot_x = 0.0;
+  double robot_y = 0.0;
+  double heading = 0.0;
+  read_pose(&robot_x, &robot_y, &heading);
+
+  const int room_zone_index = find_room_zone_index(robot_x, robot_y);
+  mapping_survey_room_zone_index = room_zone_index;
+  static SurveyGrid grid;
+  if (!survey_build_grid(&grid, room_zone_index, robot_x, robot_y, MAPPING_SURVEY_INTERIOR_OFFSET)) {
+    set_error("Cannot build mapping survey occupancy grid");
+    return 0;
+  }
+  if (survey_flood_component(&grid, robot_x, robot_y) <= 0) {
+    set_error("Cannot find connected free room for mapping survey");
+    return 0;
+  }
+
+  SurveyPoint route[MAX_WAYPOINTS];
+  int route_count = 0;
+  if (!append_room_contour_phase(route, &route_count, room_zone_index, robot_x, robot_y)) {
+    append_grid_boundary_contour_phase(&grid, route, &route_count, robot_x, robot_y);
+  }
+  append_scanline_coverage_phase(&grid, route, &route_count, room_zone_index);
+
+  if (route_count < 2) {
+    set_error("Mapping survey route is empty");
+    return 0;
+  }
+
+  write_mapping_survey_route_file(path, route, route_count);
+  return 1;
 }
 
 static int same_zone_data(const ZoneData *left, const ZoneData *right) {
@@ -1701,6 +2571,7 @@ static int load_runtime_command(RuntimeCommand *command) {
 
   RuntimeCommand parsed = {0};
   parsed.id = -1;
+  parsed.clear_map = 1;
   parsed.size_x = 0.8;
   parsed.size_y = 0.8;
   parsed.height = 0.6;
@@ -1717,6 +2588,11 @@ static int load_runtime_command(RuntimeCommand *command) {
     }
     if (sscanf(line, " type %63s", token) == 1) {
       parsed.has_spawn_obstacle = strcmp(token, "spawn_obstacle") == 0 ? 1 : 0;
+      parsed.has_start_mapping_survey = strcmp(token, "start_mapping_survey") == 0 ? 1 : 0;
+      continue;
+    }
+    if (sscanf(line, " clear_map %lf", &numeric) == 1) {
+      parsed.clear_map = fabs(numeric) > EPS ? 1 : 0;
       continue;
     }
     if (sscanf(line, " x %lf", &numeric) == 1) {
@@ -1742,7 +2618,7 @@ static int load_runtime_command(RuntimeCommand *command) {
   }
 
   fclose(file);
-  if (parsed.id < 0 || !parsed.has_spawn_obstacle) return 0;
+  if (parsed.id < 0 || (!parsed.has_spawn_obstacle && !parsed.has_start_mapping_survey)) return 0;
   *command = parsed;
   return 1;
 }
@@ -1763,6 +2639,23 @@ static void maybe_reload_runtime_command() {
   runtime_command_last_modified = mtime;
   if (command.id <= last_processed_runtime_command_id) return;
   last_processed_runtime_command_id = command.id;
+
+  if (command.has_start_mapping_survey) {
+    clear_error();
+    if (generate_mapping_survey_route(ROUTE_PATH, command.clear_map)) {
+      RouteData next_route = {0};
+      if (load_route(&next_route)) {
+        route_data = next_route;
+        current_waypoint_index = 0;
+        route_finished = 0;
+        route_source_mapping_survey = 1;
+        reset_navigation_mode();
+        set_status("mapping_survey_started");
+      }
+    }
+    return;
+  }
+
   spawn_runtime_obstacle_from_command(&command);
   clear_error();
   set_status("runtime_obstacle_spawned");
@@ -1846,6 +2739,8 @@ static void maybe_reload_route() {
     route_data = next_route;
     current_waypoint_index = 0;
     route_finished = 0;
+    route_source_mapping_survey = 0;
+    mapping_survey_room_zone_index = -1;
     reset_navigation_mode();
     set_status("route_reloaded");
   }
@@ -1856,6 +2751,8 @@ static void wait_for_fresh_route() {
   route_data.last_modified = get_file_mtime(ROUTE_PATH);
   current_waypoint_index = 0;
   route_finished = 0;
+  route_source_mapping_survey = 0;
+  mapping_survey_room_zone_index = -1;
   reset_navigation_mode();
   distance_to_target = 0.0;
   clear_error();
@@ -1951,17 +2848,39 @@ static void run_navigation_step() {
     }
   }
 
+  int target_blocked_by_zone = 0;
   for (int zone_index = 0; zone_index < zone_data.count; ++zone_index) {
+    if (route_source_mapping_survey && zone_index == mapping_survey_room_zone_index) continue;
     if (point_near_zone(target.x, target.z, &zone_data.zones[zone_index], ZONE_CLEARANCE)) {
-      set_status("blocked_by_dynamic_zone");
-      set_error("Current waypoint is blocked by a dynamic zone");
-      distance_to_target = hypot2(target.x - x, target.z - z);
-      stop_robot();
-      return;
+      target_blocked_by_zone = 1;
+      break;
     }
   }
+  if (target_blocked_by_zone) {
+    if (route_source_mapping_survey && current_waypoint_index + 1 < route_data.count) {
+      ++current_waypoint_index;
+      begin_navigation_for_waypoint(current_waypoint_index, x, z);
+      clear_error();
+      set_status("mapping_survey_skipped_blocked_waypoint");
+      return;
+    }
+    set_status("blocked_by_dynamic_zone");
+    set_error("Current waypoint is blocked by a dynamic zone");
+    distance_to_target = hypot2(target.x - x, target.z - z);
+    stop_robot();
+    return;
+  }
 
-  if (segment_blocked_by_zones(x, z, target.x, target.z, ZONE_CLEARANCE)) {
+  const int segment_skip_zone =
+      route_source_mapping_survey ? mapping_survey_room_zone_index : -1;
+  if (segment_blocked_by_zones(x, z, target.x, target.z, ZONE_CLEARANCE, segment_skip_zone)) {
+    if (route_source_mapping_survey && current_waypoint_index + 1 < route_data.count) {
+      ++current_waypoint_index;
+      begin_navigation_for_waypoint(current_waypoint_index, x, z);
+      clear_error();
+      set_status("mapping_survey_skipped_blocked_segment");
+      return;
+    }
     set_status("blocked_by_dynamic_zone");
     set_error("Dynamic zone blocks the current segment");
     distance_to_target = hypot2(target.x - x, target.z - z);

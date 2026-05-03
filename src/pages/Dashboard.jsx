@@ -1338,6 +1338,23 @@ export default function Dashboard() {
     });
   };
 
+  const startMappingSurvey = () => {
+    const payload = {
+      type: "start_mapping_survey",
+      commandId: Date.now(),
+      clearMap: true,
+    };
+
+    sendRouteChannelPayload(routeWsRef, payload, {
+      onSent: () => {
+        setStatus("Запущен объезд карты: сначала контур комнаты, затем змейка.");
+      },
+      onError: () => {
+        setStatus("Не удалось отправить команду объезда карты.");
+      },
+    });
+  };
+
   const exportMapImage = () => {
     if (!telemetry.obstacleMap?.cells?.length) {
       setStatus("Пока нет накопленной карты препятствий для экспорта.");
@@ -1469,6 +1486,7 @@ export default function Dashboard() {
         telemetryWsUp={telemetryWsUp}
         routeWsUp={routeWsUp}
         solverApiUp={solverApiUp}
+        onStartMappingSurvey={startMappingSurvey}
         onExportMapImage={exportMapImage}
         onCreateZone={createZone}
         onSelectZone={selectZone}

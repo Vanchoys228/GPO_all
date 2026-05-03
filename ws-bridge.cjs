@@ -391,8 +391,20 @@ const writeLimitZoneArtifacts = async (payload) => {
 
 const writeRuntimeCommandArtifact = async (payload) => {
   await ensureWebStateDir();
-  const obstacle = sanitizeRuntimeObstacle(payload?.obstacle);
   const commandId = normalizeCommandId(payload?.commandId);
+
+  if (payload?.type === "start_mapping_survey") {
+    const clearMap = payload?.clearMap === undefined ? true : Boolean(payload.clearMap);
+    const lines = [
+      `id ${commandId}`,
+      "type start_mapping_survey",
+      `clear_map ${clearMap ? 1 : 0}`,
+    ];
+    await fsp.writeFile(RUNTIME_COMMAND_PATH, `${lines.join("\n")}\n`);
+    return;
+  }
+
+  const obstacle = sanitizeRuntimeObstacle(payload?.obstacle);
   const lines = [
     `id ${commandId}`,
     "type spawn_obstacle",
@@ -795,11 +807,11 @@ routeWss.on("connection", (ws, req) => {
       } catch (error) {
         console.error("[route] failed to write limit zone artifacts:", error.message);
       }
-    } else if (parsed?.type === "spawn_random_obstacle") {
+    } else if (parsed?.type === "spawn_random_obstacle" || parsed?.type === "start_mapping_survey") {
       try {
         await writeRuntimeCommandArtifact(parsed);
       } catch (error) {
-        console.error("[route] failed to write runtime obstacle command:", error.message);
+        console.error("[route] failed to write runtime command:", error.message);
       }
     }
     if (controllerConn && controllerConn.readyState === WebSocket.OPEN) {
