@@ -53,6 +53,15 @@ import PlannerRightSidebar from "../components/dashboard/PlannerRightSidebar";
 const ENERGY_SHORTAGE_FALLBACK =
   "Запаса хода не хватает: добавьте станции зарядки или увеличьте запас.";
 
+const MAPPING_SURVEY_MODES = [
+  { key: "snake", label: "Змейка" },
+  { key: "double", label: "Двойной объезд" },
+];
+
+const getMappingSurveyModeLabel = (modeKey) =>
+  MAPPING_SURVEY_MODES.find((mode) => mode.key === modeKey)?.label ||
+  MAPPING_SURVEY_MODES[0].label;
+
 const getEnergyWarningText = (routeBuildResult) => {
   if (!routeBuildResult || routeBuildResult.ok) return "";
   if (routeBuildResult.reason === "insufficient_range") {
@@ -458,6 +467,9 @@ export default function Dashboard() {
   const [limitZones, setLimitZones] = useState([INITIAL_ZONE]);
   const [activeLimitZoneId, setActiveLimitZoneId] = useState(INITIAL_ZONE.id);
   const [nextZoneNumber, setNextZoneNumber] = useState(2);
+  const [mappingSurveyMode, setMappingSurveyMode] = useState(
+    MAPPING_SURVEY_MODES[0].key
+  );
   const [algorithmParams, setAlgorithmParams] = useState(() =>
     Object.fromEntries(
       ALGORITHM_OPTIONS.map((option) => [
@@ -1343,11 +1355,15 @@ export default function Dashboard() {
       type: "start_mapping_survey",
       commandId: Date.now(),
       clearMap: true,
+      mode: mappingSurveyMode,
     };
+    const modeLabel = getMappingSurveyModeLabel(mappingSurveyMode);
 
     sendRouteChannelPayload(routeWsRef, payload, {
       onSent: () => {
-        setStatus("Запущен объезд карты: сначала контур комнаты, затем змейка.");
+        setStatus(
+          `Запущено обследование карты: сначала периметр, затем "${modeLabel}".`
+        );
       },
       onError: () => {
         setStatus("Не удалось отправить команду объезда карты.");
@@ -1486,6 +1502,9 @@ export default function Dashboard() {
         telemetryWsUp={telemetryWsUp}
         routeWsUp={routeWsUp}
         solverApiUp={solverApiUp}
+        mappingSurveyMode={mappingSurveyMode}
+        mappingSurveyModes={MAPPING_SURVEY_MODES}
+        onMappingSurveyModeChange={setMappingSurveyMode}
         onStartMappingSurvey={startMappingSurvey}
         onExportMapImage={exportMapImage}
         onCreateZone={createZone}

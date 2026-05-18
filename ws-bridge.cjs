@@ -223,6 +223,12 @@ const validatePolygons = (zones) => {
   });
 };
 
+const sanitizeMappingSurveyMode = (rawMode) => {
+  const mode = String(rawMode || "snake").trim().toLowerCase();
+  if (["snake", "double"].includes(mode)) return mode;
+  return "snake";
+};
+
 const safeJsonParse = (text) => {
   try {
     return JSON.parse(text);
@@ -395,10 +401,12 @@ const writeRuntimeCommandArtifact = async (payload) => {
 
   if (payload?.type === "start_mapping_survey") {
     const clearMap = payload?.clearMap === undefined ? true : Boolean(payload.clearMap);
+    const mode = sanitizeMappingSurveyMode(payload?.mode);
     const lines = [
       `id ${commandId}`,
       "type start_mapping_survey",
       `clear_map ${clearMap ? 1 : 0}`,
+      `mode ${mode}`,
     ];
     await fsp.writeFile(RUNTIME_COMMAND_PATH, `${lines.join("\n")}\n`);
     return;

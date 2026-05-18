@@ -33,6 +33,9 @@ export default function PlannerRightSidebar({
   telemetryWsUp,
   routeWsUp,
   solverApiUp,
+  mappingSurveyMode,
+  mappingSurveyModes,
+  onMappingSurveyModeChange,
   onStartMappingSurvey,
   onExportMapImage,
   onCreateZone,
@@ -293,11 +296,26 @@ export default function PlannerRightSidebar({
           <div className="mt-1 text-xs text-cyan-900">
             Постоянная карта строится из лидарных попаданий и рисуется поверх рабочей сетки.
           </div>
+          <label className="mt-3 block">
+            <div className="mb-1 text-xs font-medium text-cyan-900">Режим обследования</div>
+            <select
+              className={selectCls}
+              data-testid="mapping-survey-mode"
+              value={mappingSurveyMode}
+              onChange={(event) => onMappingSurveyModeChange(event.target.value)}
+            >
+              {mappingSurveyModes.map((mode) => (
+                <option key={mode.key} value={mode.key}>
+                  {mode.label}
+                </option>
+              ))}
+            </select>
+          </label>
           <button
             onClick={onStartMappingSurvey}
             className="mt-3 w-full rounded-xl bg-emerald-700 px-3 py-2 text-xs font-semibold text-white shadow-sm transition hover:bg-emerald-800"
           >
-            Запустить объезд карты
+            {mappingSurveyMode === "double" ? "Двойной объезд" : "Обследование карты"}
           </button>
           <button
             onClick={onExportMapImage}
