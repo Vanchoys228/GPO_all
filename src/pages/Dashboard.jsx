@@ -45,7 +45,11 @@ import {
   DEFAULT_BATTERY_RANGE_METERS,
   planRouteWithCharging,
 } from "../lib/chargingPlanner";
-import { DEFAULT_ENERGY_OPTIONS } from "../lib/energyModel";
+import {
+  DEFAULT_ENERGY_OPTIONS,
+  SURFACE_PROFILE_OPTIONS,
+  analyzeRouteInfluence,
+} from "../lib/energyModel";
 import PlannerCanvas from "../components/dashboard/PlannerCanvas";
 import PlannerLeftSidebar from "../components/dashboard/PlannerLeftSidebar";
 import PlannerRightSidebar from "../components/dashboard/PlannerRightSidebar";
@@ -53,6 +57,29 @@ import * as XLSX from "xlsx";
 
 const ENERGY_SHORTAGE_FALLBACK =
   "Запаса хода не хватает: добавьте станции зарядки или увеличьте запас.";
+const CRUISE_SPEED_STORAGE_KEY = "gpo_dashboard_cruise_speed_mps";
+
+const readStoredNumber = (key, fallback, min, max) => {
+  if (typeof window === "undefined") return fallback;
+  try {
+    const stored = window.localStorage.getItem(key);
+    if (stored == null) return fallback;
+    const parsed = Number(stored);
+    if (!Number.isFinite(parsed)) return fallback;
+    return Math.max(min, Math.min(max, parsed));
+  } catch {
+    return fallback;
+  }
+};
+
+const writeStoredNumber = (key, value) => {
+  if (typeof window === "undefined" || !Number.isFinite(value)) return;
+  try {
+    window.localStorage.setItem(key, String(value));
+  } catch {
+    // Storage can be disabled in private browser modes.
+  }
+};
 
 const MAPPING_SURVEY_MODES = [
   { key: "snake", label: "Змейка" },
@@ -95,6 +122,98 @@ const buildLimitZonePayload = (polygons) => ({
       y: point.y,
     })),
   })),
+});
+
+const surfaceProfileKeys = new Set(SURFACE_PROFILE_OPTIONS.map((profile) => profile.key));
+const DEFAULT_SURFACE_PROFILE_KEY =
+  SURFACE_PROFILE_OPTIONS.find((profile) => profile.key !== "neutral")?.key ||
+  SURFACE_PROFILE_OPTIONS[0]?.key ||
+  "neutral";
+
+const normalizeSurfacePoint = (point) => {
+  const x = Number(point?.x);
+  const y = Number(point?.y);
+  if (!Number.isFinite(x) || !Number.isFinite(y)) return null;
+  const normalized = { x, y };
+  return isInsideMap(normalized) ? normalized : null;
+};
+
+const createSurfaceZoneDraft = (number, surfaceKey = DEFAULT_SURFACE_PROFILE_KEY) => ({
+  id: `surface-zone-${number}`,
+  name: `Покрытие ${number}`,
+  surfaceKey,
+  closed: false,
+  points: [],
+});
+
+const normalizeSurfaceZoneForState = (zone, index) => {
+  const points = (Array.isArray(zone?.points) ? zone.points : [])
+    .map(normalizeSurfacePoint)
+    .filter(Boolean);
+  const surfaceKey = surfaceProfileKeys.has(zone?.surfaceKey)
+    ? zone.surfaceKey
+    : DEFAULT_SURFACE_PROFILE_KEY;
+
+  return {
+    id:
+      typeof zone?.id === "string" && zone.id.trim()
+        ? zone.id.trim()
+        : `surface-zone-${index + 1}`,
+    name:
+      typeof zone?.name === "string" && zone.name.trim()
+        ? zone.name.trim()
+        : `Покрытие ${index + 1}`,
+    surfaceKey,
+    closed: zone?.closed === undefined ? points.length >= 3 : Boolean(zone.closed),
+    points,
+  };
+};
+
+const createInitialSurfaceZones = () => {
+  const presetZones = DEFAULT_SURFACE_ZONES.map((zone, index) =>
+    normalizeSurfaceZoneForState({ ...zone, closed: true }, index)
+  );
+  const draftNumber = presetZones.length + 1;
+  return [...presetZones, createSurfaceZoneDraft(draftNumber)];
+};
+
+const deriveNextSurfaceZoneNumber = (zones) => {
+  const maxNumber = zones.reduce((best, zone) => {
+    const idMatch = String(zone?.id ?? "").match(/surface-zone-(\d+)/i);
+    const nameMatch = String(zone?.name ?? "").match(/(\d+)/);
+    const candidates = [idMatch?.[1], nameMatch?.[1]]
+      .map((value) => Number(value))
+      .filter(Number.isFinite);
+
+    return candidates.length ? Math.max(best, ...candidates) : best;
+  }, 0);
+
+  return Math.max(1, maxNumber + 1);
+};
+
+const normalizeSurfaceZonesForImport = (surfaceZones) => {
+  if (!Array.isArray(surfaceZones)) return null;
+  const normalized = surfaceZones
+    .map((zone, index) => normalizeSurfaceZoneForState(zone, index))
+    .filter((zone) => zone.points.length > 0);
+  return normalized.length ? normalized : null;
+};
+
+const buildSurfaceZonePayload = (surfaceZones) => ({
+  type: "surface_zones",
+  zones: (Array.isArray(surfaceZones) ? surfaceZones : [])
+    .filter((zone) => zone?.closed !== false && Array.isArray(zone?.points) && zone.points.length >= 3)
+    .map((zone) => ({
+      id: zone.id,
+      name: zone.name,
+      surfaceKey: surfaceProfileKeys.has(zone.surfaceKey)
+        ? zone.surfaceKey
+        : DEFAULT_SURFACE_PROFILE_KEY,
+      points: zone.points.map((point) => ({
+        x: point.x,
+        y: point.y,
+      })),
+    })),
 });
 
 const sendRouteChannelPayload = (routeWsRef, payload, { onSent, onError } = {}) => {
@@ -195,7 +314,256 @@ const parseLooseNumber = (rawValue) => {
 const formatNumber = (value, digits) =>
   Number(value.toFixed(digits)).toString();
 
+const OFF_ROUTE_NAVIGATION_STATUSES = new Set([
+  "passing_lidar_gap",
+  "tracking_lidar_priority",
+  "turning_lidar_priority",
+  "reacquired_free_space",
+]);
+
+const isNavigationOffRoute = (navigation) => {
+  if (!navigation || typeof navigation !== "object") return false;
+  if (navigation.offRouteActive || navigation.avoidanceActive) return true;
+  const status = typeof navigation.status === "string" ? navigation.status : "";
+  return status.startsWith("avoiding_") || OFF_ROUTE_NAVIGATION_STATUSES.has(status);
+};
+
+const clampCanvasValue = (value, min, max) => Math.max(min, Math.min(max, value));
+
+const loadCanvasImage = (src) =>
+  new Promise((resolve) => {
+    if (!src) {
+      resolve(null);
+      return;
+    }
+
+    const image = new Image();
+    image.onload = () => resolve(image);
+    image.onerror = () => resolve(null);
+    image.src = src;
+  });
+
+const drawCoveredImage = (ctx, image, x, y, width, height) => {
+  const scale = Math.max(width / image.width, height / image.height);
+  const sourceWidth = width / scale;
+  const sourceHeight = height / scale;
+  const sourceX = Math.max(0, (image.width - sourceWidth) / 2);
+  const sourceY = Math.max(0, (image.height - sourceHeight) / 2);
+  ctx.drawImage(image, sourceX, sourceY, sourceWidth, sourceHeight, x, y, width, height);
+};
+
+const drawCameraMapExport = async (ctx, exportCanvas, selectedMap, camera) => {
+  const cells = Array.isArray(selectedMap?.cells) ? selectedMap.cells : [];
+  const freeCells = Array.isArray(selectedMap?.freeCells) ? selectedMap.freeCells : [];
+  const width = exportCanvas.width;
+  const height = exportCanvas.height;
+  const centerX = width / 2;
+  const floorTop = height * 0.14;
+  const floorBottom = height * 0.94;
+  const farWidth = width * 0.40;
+  const nearWidth = width * 0.96;
+  const cameraFrame = await loadCanvasImage(camera?.frameDataUrl);
+
+  const background = ctx.createLinearGradient(0, 0, width, height);
+  background.addColorStop(0, "#07111f");
+  background.addColorStop(0.48, "#121827");
+  background.addColorStop(1, "#25113a");
+  ctx.fillStyle = background;
+  ctx.fillRect(0, 0, width, height);
+
+  ctx.save();
+  ctx.beginPath();
+  ctx.moveTo(centerX - farWidth / 2, floorTop);
+  ctx.lineTo(centerX + farWidth / 2, floorTop);
+  ctx.lineTo(centerX + nearWidth / 2, floorBottom);
+  ctx.lineTo(centerX - nearWidth / 2, floorBottom);
+  ctx.closePath();
+  ctx.clip();
+
+  const floorGradient = ctx.createLinearGradient(0, floorTop, 0, floorBottom);
+  floorGradient.addColorStop(0, "rgba(76,29,149,0.34)");
+  floorGradient.addColorStop(0.58, "rgba(30,41,59,0.78)");
+  floorGradient.addColorStop(1, "rgba(2,6,23,0.94)");
+  ctx.fillStyle = floorGradient;
+  ctx.fillRect(0, floorTop, width, floorBottom - floorTop);
+
+  if (cameraFrame) {
+    ctx.save();
+    ctx.globalAlpha = 0.18;
+    ctx.filter = "saturate(1.15) contrast(1.15)";
+    drawCoveredImage(ctx, cameraFrame, centerX - nearWidth / 2, floorTop, nearWidth, floorBottom - floorTop);
+    ctx.restore();
+  }
+
+  for (let depthIndex = 0; depthIndex <= 18; depthIndex += 1) {
+    const t = depthIndex / 18;
+    const y = floorTop + (floorBottom - floorTop) * t;
+    const lineWidth = farWidth + (nearWidth - farWidth) * t;
+    const alpha = 0.08 + t * 0.10;
+    ctx.strokeStyle = `rgba(148,163,184,${alpha})`;
+    ctx.lineWidth = 1;
+    ctx.beginPath();
+    ctx.moveTo(centerX - lineWidth / 2, y);
+    ctx.lineTo(centerX + lineWidth / 2, y);
+    ctx.stroke();
+  }
+  for (let lateralIndex = -10; lateralIndex <= 10; lateralIndex += 1) {
+    const offset = lateralIndex / 20;
+    ctx.strokeStyle = "rgba(148,163,184,0.12)";
+    ctx.lineWidth = 1;
+    ctx.beginPath();
+    ctx.moveTo(centerX + offset * farWidth, floorTop);
+    ctx.lineTo(centerX + offset * nearWidth, floorBottom);
+    ctx.stroke();
+  }
+
+  const project = (cell) => {
+    const x = clampCanvasValue(Number(cell.x), -HALF_WIDTH, HALF_WIDTH);
+    const y = clampCanvasValue(Number(cell.y), -HALF_HEIGHT, HALF_HEIGHT);
+    const depth = clampCanvasValue((HALF_HEIGHT - y) / (HALF_HEIGHT * 2), 0, 1);
+    const lateral = x / (HALF_WIDTH * 2);
+    const widthAtDepth = farWidth + (nearWidth - farWidth) * depth;
+    return {
+      x: centerX + lateral * widthAtDepth,
+      y: floorTop + depth * (floorBottom - floorTop),
+      depth,
+    };
+  };
+
+  const orderedCells = cells
+    .map((cell) => ({ cell, point: project(cell) }))
+    .sort((left, right) => left.point.depth - right.point.depth);
+  const orderedFreeCells = freeCells
+    .map((cell) => ({ cell, point: project(cell) }))
+    .sort((left, right) => left.point.depth - right.point.depth);
+
+  orderedFreeCells.forEach(({ cell, point }) => {
+    const confidence = Math.max(0, Number(cell.confidence) || 0);
+    const strength = clampCanvasValue(confidence / 12, 0.12, 1);
+    const radius = 3 + point.depth * 9 + strength * 4;
+    const alpha = clampCanvasValue(0.10 + strength * 0.28, 0.12, 0.42);
+
+    ctx.fillStyle = `rgba(45,212,191,${alpha})`;
+    ctx.strokeStyle = `rgba(103,232,249,${alpha * 0.70})`;
+    ctx.lineWidth = 1;
+    ctx.beginPath();
+    ctx.ellipse(point.x, point.y, radius * 1.75, radius * 0.62, 0, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.stroke();
+  });
+
+  orderedCells.forEach(({ cell, point }) => {
+    const confidence = Math.max(0, Number(cell.confidence) || 0);
+    const strength = clampCanvasValue(confidence / 9, 0.24, 1);
+    const radius = 4 + point.depth * 8 + strength * 4;
+    const columnHeight = 16 + point.depth * 48 + strength * 34;
+    const alpha = clampCanvasValue(0.28 + strength * 0.64, 0.32, 0.96);
+
+    const shadow = ctx.createRadialGradient(point.x, point.y, 0, point.x, point.y, radius * 3.2);
+    shadow.addColorStop(0, `rgba(217,70,239,${alpha * 0.46})`);
+    shadow.addColorStop(0.45, `rgba(124,58,237,${alpha * 0.24})`);
+    shadow.addColorStop(1, "rgba(124,58,237,0)");
+    ctx.fillStyle = shadow;
+    ctx.beginPath();
+    ctx.ellipse(point.x, point.y, radius * 2.6, radius * 0.95, 0, 0, Math.PI * 2);
+    ctx.fill();
+
+    const column = ctx.createLinearGradient(point.x, point.y - columnHeight, point.x, point.y);
+    column.addColorStop(0, `rgba(255,228,245,${alpha})`);
+    column.addColorStop(0.42, `rgba(232,121,249,${alpha * 0.96})`);
+    column.addColorStop(1, `rgba(126,34,206,${alpha * 0.20})`);
+    ctx.strokeStyle = column;
+    ctx.lineWidth = Math.max(4, radius * 0.72);
+    ctx.lineCap = "round";
+    ctx.beginPath();
+    ctx.moveTo(point.x, point.y);
+    ctx.lineTo(point.x - radius * 0.42, point.y - columnHeight);
+    ctx.stroke();
+
+    ctx.fillStyle = `rgba(251,207,232,${alpha})`;
+    ctx.beginPath();
+    ctx.ellipse(
+      point.x - radius * 0.42,
+      point.y - columnHeight,
+      radius * 0.78,
+      radius * 0.46,
+      -0.25,
+      0,
+      Math.PI * 2
+    );
+    ctx.fill();
+  });
+
+  ctx.restore();
+
+  ctx.strokeStyle = "rgba(34,211,238,0.32)";
+  ctx.lineWidth = 2;
+  ctx.beginPath();
+  ctx.moveTo(centerX - farWidth / 2, floorTop);
+  ctx.lineTo(centerX + farWidth / 2, floorTop);
+  ctx.lineTo(centerX + nearWidth / 2, floorBottom);
+  ctx.lineTo(centerX - nearWidth / 2, floorBottom);
+  ctx.closePath();
+  ctx.stroke();
+
+  const robotX = centerX;
+  const robotY = floorBottom - 26;
+  ctx.fillStyle = "rgba(52,211,153,0.95)";
+  ctx.shadowColor = "rgba(52,211,153,0.85)";
+  ctx.shadowBlur = 20;
+  ctx.beginPath();
+  ctx.arc(robotX, robotY, 10, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.shadowBlur = 0;
+  ctx.strokeStyle = "rgba(236,253,245,0.92)";
+  ctx.lineWidth = 2;
+  ctx.stroke();
+
+  ctx.strokeStyle = "rgba(45,212,191,0.26)";
+  ctx.lineWidth = 2;
+  ctx.setLineDash([10, 12]);
+  ctx.beginPath();
+  ctx.moveTo(robotX, robotY);
+  ctx.lineTo(centerX - farWidth / 2, floorTop);
+  ctx.moveTo(robotX, robotY);
+  ctx.lineTo(centerX + farWidth / 2, floorTop);
+  ctx.stroke();
+  ctx.setLineDash([]);
+
+  const vignette = ctx.createRadialGradient(centerX, height * 0.5, height * 0.12, centerX, height * 0.5, height * 0.86);
+  vignette.addColorStop(0, "rgba(0,0,0,0)");
+  vignette.addColorStop(1, "rgba(0,0,0,0.46)");
+  ctx.fillStyle = vignette;
+  ctx.fillRect(0, 0, width, height);
+};
+
 const randomBetween = (min, max) => min + Math.random() * (max - min);
+const RANDOM_OBSTACLE_ROBOT_POINT_CLEARANCE_M = 0.85;
+const RANDOM_OBSTACLE_ROUTE_POINT_CLEARANCE_M = 0.72;
+const RANDOM_OBSTACLE_SEGMENT_ENDPOINT_MARGIN = 0.18;
+const createIdleRouteTiming = () => ({
+  status: "idle",
+  startedAtMs: null,
+  actualTimeSec: null,
+  seenUnfinished: false,
+});
+const createEmptyRouteEnergyStats = () => ({
+  routeEnergy: 0,
+  distanceMeters: 0,
+  estimatedTimeSec: 0,
+  limitingMaxSpeedMps: DEFAULT_ENERGY_OPTIONS.speedMps,
+  averageSlipRisk: 0,
+  stationStopCount: 0,
+});
+
+const buildRouteEnergyStats = (routeResult) => ({
+  routeEnergy: routeResult.routeEnergy,
+  distanceMeters: routeResult.routeDistance || 0,
+  estimatedTimeSec: routeResult.estimatedTimeSec,
+  limitingMaxSpeedMps: routeResult.limitingMaxSpeedMps,
+  averageSlipRisk: routeResult.averageSlipRisk,
+  stationStopCount: routeResult.stationStopCount || 0,
+});
 
 const isFinitePoint = (point) =>
   Number.isFinite(point?.x) && Number.isFinite(point?.y);
@@ -276,6 +644,7 @@ const normalizeImportedGraph = (rawGraph) => {
     return {
       points,
       limitZones,
+      surfaceZones: normalizeSurfaceZonesForImport(rawGraph.surfaceZones),
       routeTaskKey: rawGraph.routeTaskKey,
       algorithmKey: rawGraph.algorithmKey,
       activeLimitZoneId: rawGraph.activeLimitZoneId,
@@ -334,6 +703,7 @@ const normalizeImportedGraph = (rawGraph) => {
   return {
     points,
     limitZones,
+    surfaceZones: normalizeSurfaceZonesForImport(rawGraph.surfaceZones),
     routeTaskKey: rawGraph.routeTaskKey,
     algorithmKey: rawGraph.algorithmKey,
     activeLimitZoneId: rawGraph.activeLimitZoneId,
@@ -352,7 +722,8 @@ const pickRandomObstacleCenter = ({
   const obstacleSizeX = Number(obstacle?.sizeX) || 0.8;
   const obstacleSizeY = Number(obstacle?.sizeY) || 0.8;
   const obstacleRadius = Math.hypot(obstacleSizeX, obstacleSizeY) * 0.5;
-  const protectedPointRadius = obstacleRadius + 0.55;
+  const protectedPointRadius = obstacleRadius + RANDOM_OBSTACLE_ROBOT_POINT_CLEARANCE_M;
+  const protectedRoutePointRadius = obstacleRadius + RANDOM_OBSTACLE_ROUTE_POINT_CLEARANCE_M;
   const routeBiasAttempts = 28;
   const totalAttempts = 120;
 
@@ -370,7 +741,7 @@ const pickRandomObstacleCenter = ({
     }
 
     for (const point of route) {
-      if (Math.hypot(candidate.x - point.x, candidate.y - point.y) < protectedPointRadius) {
+      if (Math.hypot(candidate.x - point.x, candidate.y - point.y) < protectedRoutePointRadius) {
         return false;
       }
     }
@@ -386,7 +757,10 @@ const pickRandomObstacleCenter = ({
       const segmentIndex = Math.floor(Math.random() * (route.length - 1));
       const a = route[segmentIndex];
       const b = route[segmentIndex + 1];
-      const t = Math.random();
+      const t = randomBetween(
+        RANDOM_OBSTACLE_SEGMENT_ENDPOINT_MARGIN,
+        1 - RANDOM_OBSTACLE_SEGMENT_ENDPOINT_MARGIN
+      );
       const ax = a.x + (b.x - a.x) * t;
       const ay = a.y + (b.y - a.y) * t;
       const dx = b.x - a.x;
@@ -422,6 +796,7 @@ export default function Dashboard() {
   const canvasRef = useRef(null);
   const routeWsRef = useRef(null);
   const lastAutoRouteZoneSyncRef = useRef(null);
+  const motionProfileTouchedRef = useRef(false);
   const dragStateRef = useRef({
     pointIndex: null,
     moved: false,
@@ -443,27 +818,41 @@ export default function Dashboard() {
   const [routeTaskKey, setRouteTaskKey] = useState("tsp");
   const [algorithmKey, setAlgorithmKey] = useState("ga_tabu");
   const [activePointKind, setActivePointKind] = useState("visit");
+  const [surfaceZones, setSurfaceZones] = useState(createInitialSurfaceZones);
+  const [activeSurfaceZoneId, setActiveSurfaceZoneId] = useState(
+    () => `surface-zone-${DEFAULT_SURFACE_ZONES.length + 1}`
+  );
+  const [activeSurfaceProfileKey, setActiveSurfaceProfileKey] = useState(
+    DEFAULT_SURFACE_PROFILE_KEY
+  );
+  const [nextSurfaceZoneNumber, setNextSurfaceZoneNumber] = useState(
+    () => DEFAULT_SURFACE_ZONES.length + 2
+  );
+  const [mapExportPromptOpen, setMapExportPromptOpen] = useState(false);
   const [batteryRangeMeters, setBatteryRangeMeters] = useState(
     DEFAULT_BATTERY_RANGE_METERS
   );
-  const [cruiseSpeedMps, setCruiseSpeedMps] = useState(
-    DEFAULT_ENERGY_OPTIONS.speedMps
+  const [cruiseSpeedMps, setCruiseSpeedMps] = useState(() =>
+    readStoredNumber(CRUISE_SPEED_STORAGE_KEY, DEFAULT_ENERGY_OPTIONS.speedMps, 0.05, 0.8)
   );
   const [payloadKg, setPayloadKg] = useState(DEFAULT_ENERGY_OPTIONS.payloadKg);
   const [batteryRangeInput, setBatteryRangeInput] = useState(
     String(DEFAULT_BATTERY_RANGE_METERS)
   );
-  const [cruiseSpeedInput, setCruiseSpeedInput] = useState(
-    formatNumber(DEFAULT_ENERGY_OPTIONS.speedMps, 3)
+  const [cruiseSpeedInput, setCruiseSpeedInput] = useState(() =>
+    formatNumber(
+      readStoredNumber(CRUISE_SPEED_STORAGE_KEY, DEFAULT_ENERGY_OPTIONS.speedMps, 0.05, 0.8),
+      3
+    )
   );
   const [payloadInput, setPayloadInput] = useState(
     formatNumber(DEFAULT_ENERGY_OPTIONS.payloadKg, 2)
   );
-  const [routeEnergyStats, setRouteEnergyStats] = useState({
-    routeEnergy: 0,
-    estimatedTimeSec: 0,
-    limitingMaxSpeedMps: DEFAULT_ENERGY_OPTIONS.speedMps,
-    averageSlipRisk: 0,
+  const [routeEnergyStats, setRouteEnergyStats] = useState(createEmptyRouteEnergyStats);
+  const [routeTiming, setRouteTiming] = useState(createIdleRouteTiming);
+  const [routeOffRouteTiming, setRouteOffRouteTiming] = useState({
+    accumulatedSec: 0,
+    startedAtMs: null,
   });
   const [limitZones, setLimitZones] = useState([INITIAL_ZONE]);
   const [activeLimitZoneId, setActiveLimitZoneId] = useState(INITIAL_ZONE.id);
@@ -485,8 +874,10 @@ export default function Dashboard() {
     limitZones,
     optimizedRoute,
     activeLimitZoneId,
-    surfaceZones: DEFAULT_SURFACE_ZONES,
+    surfaceZones,
   });
+  const activeSurfaceZone =
+    surfaceZones.find((zone) => zone.id === activeSurfaceZoneId) || surfaceZones[0] || null;
   const algorithmFields = getAlgorithmFields(algorithmKey);
   const selectedAlgorithmParams =
     algorithmParams[algorithmKey] || getDefaultAlgorithmParams(algorithmKey);
@@ -517,6 +908,17 @@ export default function Dashboard() {
       y: Number(point.y.toFixed(4)),
     }))
   );
+  const surfaceSyncPayloadText = JSON.stringify(
+    buildSurfaceZonePayload(
+      plannerModel.surfaceZones.map((zone) => ({
+        ...zone,
+        points: zone.points.map((point) => ({
+          x: Number(point.x.toFixed(4)),
+          y: Number(point.y.toFixed(4)),
+        })),
+      }))
+    )
+  );
   const energyOptions = useMemo(
     () => ({
       speedMps: cruiseSpeedMps,
@@ -524,7 +926,76 @@ export default function Dashboard() {
     }),
     [cruiseSpeedMps, payloadKg]
   );
-  const autoRouteSyncToken = `${zoneSyncPayloadText}|${chargePointsRoutingText}|${batteryRangeMeters}|${cruiseSpeedMps}|${payloadKg}`;
+  const autoRouteSyncToken = `${zoneSyncPayloadText}|${chargePointsRoutingText}|${surfaceSyncPayloadText}|${batteryRangeMeters}`;
+  const routeTimingDisplay = {
+    status: routeTiming.status,
+    actualTimeSec:
+      routeTiming.status === "running" && routeTiming.startedAtMs !== null
+        ? (Date.now() - routeTiming.startedAtMs) / 1000
+        : routeTiming.actualTimeSec,
+  };
+  const routeOffRouteActive = isNavigationOffRoute(telemetry.navigation);
+  const telemetryAvoidanceTimeSec = Number(telemetry.navigation?.avoidanceTimeSec) || 0;
+  const localAvoidanceTimeSec =
+    routeOffRouteTiming.accumulatedSec +
+    (routeOffRouteTiming.startedAtMs !== null
+      ? (Date.now() - routeOffRouteTiming.startedAtMs) / 1000
+      : 0);
+  const routeAvoidanceTimeSec = Math.max(telemetryAvoidanceTimeSec, localAvoidanceTimeSec);
+  const telemetryForSidebar = useMemo(
+    () => ({
+      ...telemetry,
+      navigation: {
+        ...telemetry.navigation,
+        avoidanceTimeSec: routeAvoidanceTimeSec,
+        offRouteActive: routeOffRouteActive,
+      },
+    }),
+    [routeAvoidanceTimeSec, routeOffRouteActive, telemetry]
+  );
+  const routeInfluenceRows = useMemo(
+    () =>
+      analyzeRouteInfluence(optimizedRoute, {
+        surfaceZones: plannerModel.surfaceZones,
+        speedMps: cruiseSpeedMps,
+        payloadKg,
+        stationStopCount: routeEnergyStats.stationStopCount,
+        plannedTimeSec: routeEnergyStats.estimatedTimeSec,
+        actualTimeSec: routeTimingDisplay.actualTimeSec,
+        avoidanceTimeSec: routeAvoidanceTimeSec,
+      }),
+    [
+      cruiseSpeedMps,
+      optimizedRoute,
+      payloadKg,
+      plannerModel.surfaceZones,
+      routeAvoidanceTimeSec,
+      routeEnergyStats.estimatedTimeSec,
+      routeEnergyStats.stationStopCount,
+      routeTimingDisplay.actualTimeSec,
+    ]
+  );
+
+  const startRouteTiming = () => {
+    setRouteTiming({
+      status: "running",
+      startedAtMs: Date.now(),
+      actualTimeSec: null,
+      seenUnfinished: false,
+    });
+    setRouteOffRouteTiming({
+      accumulatedSec: 0,
+      startedAtMs: null,
+    });
+  };
+
+  const resetRouteTiming = () => {
+    setRouteTiming(createIdleRouteTiming());
+    setRouteOffRouteTiming({
+      accumulatedSec: 0,
+      startedAtMs: null,
+    });
+  };
 
   const handleImportGraph = (rawGraph, sourceName = "graph.json") => {
     const imported = normalizeImportedGraph(rawGraph);
@@ -533,6 +1004,15 @@ export default function Dashboard() {
 
     setPoints(imported.points);
     setLimitZones(importedZones);
+    if (imported.surfaceZones) {
+      const nextSurfaceZones = imported.surfaceZones;
+      setSurfaceZones(nextSurfaceZones);
+      setActiveSurfaceZoneId(nextSurfaceZones[0]?.id || "");
+      setActiveSurfaceProfileKey(
+        nextSurfaceZones[0]?.surfaceKey || DEFAULT_SURFACE_PROFILE_KEY
+      );
+      setNextSurfaceZoneNumber(deriveNextSurfaceZoneNumber(nextSurfaceZones));
+    }
     setActiveLimitZoneId(
       importedZones.some((zone) => zone.id === imported.activeLimitZoneId)
         ? imported.activeLimitZoneId
@@ -545,12 +1025,8 @@ export default function Dashboard() {
     setRouteSeed([]);
     setOptimizedRoute([]);
     setEnergyWarning("");
-    setRouteEnergyStats((prev) => ({
-      ...prev,
-      routeEnergy: 0,
-      estimatedTimeSec: 0,
-      averageSlipRisk: 0,
-    }));
+    setRouteEnergyStats(createEmptyRouteEnergyStats());
+    resetRouteTiming();
 
     if (typeof imported.routeTaskKey === "string") {
       const hasTask = TASK_OPTIONS.some((task) => task.key === imported.routeTaskKey);
@@ -685,6 +1161,63 @@ export default function Dashboard() {
   }, []);
 
   useEffect(() => {
+    if (routeTiming.status !== "running") return;
+
+    const finished = Boolean(telemetry.navigation?.finished);
+    if (!finished && !routeTiming.seenUnfinished) {
+      setRouteTiming((prev) =>
+        prev.status === "running" ? { ...prev, seenUnfinished: true } : prev
+      );
+      return;
+    }
+
+    if (finished && routeTiming.seenUnfinished && routeTiming.startedAtMs !== null) {
+      const actualTimeSec = (Date.now() - routeTiming.startedAtMs) / 1000;
+      setRouteTiming({
+        status: "finished",
+        startedAtMs: routeTiming.startedAtMs,
+        actualTimeSec,
+        seenUnfinished: true,
+      });
+    }
+  }, [
+    routeTiming.seenUnfinished,
+    routeTiming.startedAtMs,
+    routeTiming.status,
+    telemetry.navigation?.finished,
+  ]);
+
+  useEffect(() => {
+    const now = Date.now();
+    setRouteOffRouteTiming((prev) => {
+      if (routeTiming.status !== "running") {
+        return prev.startedAtMs !== null
+          ? {
+              accumulatedSec: prev.accumulatedSec + (now - prev.startedAtMs) / 1000,
+              startedAtMs: null,
+            }
+          : prev;
+      }
+
+      if (routeOffRouteActive && prev.startedAtMs === null) {
+        return {
+          ...prev,
+          startedAtMs: now,
+        };
+      }
+
+      if (!routeOffRouteActive && prev.startedAtMs !== null) {
+        return {
+          accumulatedSec: prev.accumulatedSec + (now - prev.startedAtMs) / 1000,
+          startedAtMs: null,
+        };
+      }
+
+      return prev;
+    });
+  }, [routeOffRouteActive, routeTiming.status, telemetry.navigation?.status]);
+
+  useEffect(() => {
     let cancelled = false;
     let timer = 0;
 
@@ -735,15 +1268,34 @@ export default function Dashboard() {
   }, [zoneSyncPayloadText]);
 
   useEffect(() => {
+    sendRouteChannelPayload(routeWsRef, JSON.parse(surfaceSyncPayloadText));
+  }, [surfaceSyncPayloadText]);
+
+  useEffect(() => {
+    writeStoredNumber(CRUISE_SPEED_STORAGE_KEY, cruiseSpeedMps);
+  }, [cruiseSpeedMps]);
+
+  useEffect(() => {
+    if (!motionProfileTouchedRef.current) {
+      motionProfileTouchedRef.current = true;
+      return;
+    }
+
+    sendRouteChannelPayload(routeWsRef, {
+      type: "motion_profile",
+      motion: {
+        cruiseSpeedMps,
+        payloadKg,
+        batteryRange: batteryRangeMeters,
+      },
+    });
+  }, [batteryRangeMeters, cruiseSpeedMps, payloadKg]);
+
+  useEffect(() => {
     if (!routeSeed.length) {
       setOptimizedRoute([]);
       setEnergyWarning("");
-      setRouteEnergyStats((prev) => ({
-        ...prev,
-        routeEnergy: 0,
-        estimatedTimeSec: 0,
-        averageSlipRisk: 0,
-      }));
+      setRouteEnergyStats(createEmptyRouteEnergyStats());
       return;
     }
 
@@ -760,23 +1312,13 @@ export default function Dashboard() {
     if (!nextRoute.ok) {
       setOptimizedRoute([]);
       setEnergyWarning(getEnergyWarningText(nextRoute));
-      setRouteEnergyStats((prev) => ({
-        ...prev,
-        routeEnergy: 0,
-        estimatedTimeSec: 0,
-        averageSlipRisk: 0,
-      }));
+      setRouteEnergyStats(createEmptyRouteEnergyStats());
       setStatus(nextRoute.error || "Маршрут недостижим при текущих ограничениях.");
       return;
     }
     setEnergyWarning("");
     setOptimizedRoute(nextRoute.route);
-    setRouteEnergyStats({
-      routeEnergy: nextRoute.routeEnergy,
-      estimatedTimeSec: nextRoute.estimatedTimeSec,
-      limitingMaxSpeedMps: nextRoute.limitingMaxSpeedMps,
-      averageSlipRisk: nextRoute.averageSlipRisk,
-    });
+    setRouteEnergyStats(buildRouteEnergyStats(nextRoute));
   }, [
     batteryRangeMeters,
     chargePointsRoutingText,
@@ -791,12 +1333,7 @@ export default function Dashboard() {
     lastAutoRouteZoneSyncRef.current = autoRouteSyncToken;
     if (routeSeed.length < 2) {
       setEnergyWarning("");
-      setRouteEnergyStats((prev) => ({
-        ...prev,
-        routeEnergy: 0,
-        estimatedTimeSec: 0,
-        averageSlipRisk: 0,
-      }));
+      setRouteEnergyStats(createEmptyRouteEnergyStats());
       return;
     }
 
@@ -818,22 +1355,12 @@ export default function Dashboard() {
     });
     if (!rebuilt.ok) {
       setEnergyWarning(getEnergyWarningText(rebuilt));
-      setRouteEnergyStats((prev) => ({
-        ...prev,
-        routeEnergy: 0,
-        estimatedTimeSec: 0,
-        averageSlipRisk: 0,
-      }));
+      setRouteEnergyStats(createEmptyRouteEnergyStats());
       setStatus(rebuilt.error || "Невозможно безопасно перестроить маршрут.");
       return;
     }
     setEnergyWarning("");
-    setRouteEnergyStats({
-      routeEnergy: rebuilt.routeEnergy,
-      estimatedTimeSec: rebuilt.estimatedTimeSec,
-      limitingMaxSpeedMps: rebuilt.limitingMaxSpeedMps,
-      averageSlipRisk: rebuilt.averageSlipRisk,
-    });
+    setRouteEnergyStats(buildRouteEnergyStats(rebuilt));
     const routeForController = sanitizeRouteForController(rebuilt.route);
     if (routeForController.length < 2) {
       setStatus("Маршрут стал слишком коротким после перестройки под зоны.");
@@ -857,6 +1384,7 @@ export default function Dashboard() {
 
     sendRouteChannelPayload(routeWsRef, payload, {
       onSent: () => {
+        startRouteTiming();
         const chargingSuffix = rebuilt.stationStopCount
           ? `, зарядок: ${rebuilt.stationStopCount}`
           : "";
@@ -893,12 +1421,8 @@ export default function Dashboard() {
       setRouteSeed([]);
       setOptimizedRoute([]);
       setEnergyWarning("");
-      setRouteEnergyStats((prev) => ({
-        ...prev,
-        routeEnergy: 0,
-        estimatedTimeSec: 0,
-        averageSlipRisk: 0,
-      }));
+      setRouteEnergyStats(createEmptyRouteEnergyStats());
+      resetRouteTiming();
     }
   };
 
@@ -967,6 +1491,101 @@ export default function Dashboard() {
     if (activeLimitZoneId === zoneId) setActiveLimitZoneId(nextZones[0].id);
     clearRouteState({ dropSolvedRoute: false });
     setStatus("Ограничивающая зона удалена.");
+  };
+
+  const createSurfaceZone = () => {
+    const zone = createSurfaceZoneDraft(nextSurfaceZoneNumber, activeSurfaceProfileKey);
+    setSurfaceZones((prev) => [...prev, zone]);
+    setActiveSurfaceZoneId(zone.id);
+    setNextSurfaceZoneNumber((prev) => prev + 1);
+    setActivePointKind("surface");
+    setStatus(`Создана зона покрытия: ${zone.name}.`);
+  };
+
+  const selectSurfaceZone = (zoneId) => {
+    const target = surfaceZones.find((zone) => zone.id === zoneId);
+    if (!target) return;
+    setActiveSurfaceZoneId(zoneId);
+    setActiveSurfaceProfileKey(target.surfaceKey);
+    setActivePointKind("surface");
+  };
+
+  const updateActiveSurfaceProfile = (surfaceKey) => {
+    const nextKey = surfaceProfileKeys.has(surfaceKey)
+      ? surfaceKey
+      : DEFAULT_SURFACE_PROFILE_KEY;
+    setActiveSurfaceProfileKey(nextKey);
+    if (!activeSurfaceZoneId) return;
+    setSurfaceZones((prev) =>
+      prev.map((zone) =>
+        zone.id === activeSurfaceZoneId ? { ...zone, surfaceKey: nextKey } : zone
+      )
+    );
+    clearRouteState({ dropSolvedRoute: false });
+  };
+
+  const toggleSurfaceZoneClosed = (zoneId) => {
+    const target = surfaceZones.find((zone) => zone.id === zoneId);
+    if (!target) return;
+
+    if (!target.closed && target.points.length < 3) {
+      setStatus("Чтобы замкнуть покрытие, нужно минимум три точки.");
+      return;
+    }
+
+    setSurfaceZones((prev) =>
+      prev.map((zone) =>
+        zone.id === zoneId ? { ...zone, closed: !zone.closed } : zone
+      )
+    );
+    setActiveSurfaceZoneId(zoneId);
+    setActivePointKind("surface");
+    clearRouteState({ dropSolvedRoute: false });
+    setStatus(
+      target.closed
+        ? `${target.name} открыта для редактирования.`
+        : `${target.name} замкнута и будет учитываться в расчёте.`
+    );
+  };
+
+  const clearSurfaceZone = (zoneId) => {
+    setSurfaceZones((prev) =>
+      prev.map((zone) =>
+        zone.id === zoneId ? { ...zone, points: [], closed: false } : zone
+      )
+    );
+    setActiveSurfaceZoneId(zoneId);
+    setActivePointKind("surface");
+    clearRouteState({ dropSolvedRoute: false });
+    setStatus("Точки выбранного покрытия очищены.");
+  };
+
+  const removeSurfaceZone = (zoneId) => {
+    const nextZones = surfaceZones.filter((zone) => zone.id !== zoneId);
+    if (!nextZones.length) {
+      const fallback = createSurfaceZoneDraft(1, activeSurfaceProfileKey);
+      setSurfaceZones([fallback]);
+      setActiveSurfaceZoneId(fallback.id);
+      setNextSurfaceZoneNumber(2);
+    } else {
+      setSurfaceZones(nextZones);
+      if (activeSurfaceZoneId === zoneId) {
+        setActiveSurfaceZoneId(nextZones[0].id);
+        setActiveSurfaceProfileKey(nextZones[0].surfaceKey);
+      }
+      setNextSurfaceZoneNumber(deriveNextSurfaceZoneNumber(nextZones));
+    }
+    clearRouteState({ dropSolvedRoute: false });
+    setStatus("Зона покрытия удалена.");
+  };
+
+  const clearAllSurfaceZones = () => {
+    const fallback = createSurfaceZoneDraft(1, activeSurfaceProfileKey);
+    setSurfaceZones([fallback]);
+    setActiveSurfaceZoneId(fallback.id);
+    setNextSurfaceZoneNumber(2);
+    clearRouteState({ dropSolvedRoute: false });
+    setStatus("Все зоны покрытий очищены.");
   };
 
   const updateAlgorithmParam = (field, rawValue) => {
@@ -1072,6 +1691,28 @@ export default function Dashboard() {
       return;
     }
 
+    if (activePointKind === "surface") {
+      if (!activeSurfaceZone) {
+        setStatus("Сначала создайте зону покрытия.");
+        return;
+      }
+      if (activeSurfaceZone.closed) {
+        setStatus("Покрытие уже замкнуто. Откройте его, чтобы добавить точки.");
+        return;
+      }
+
+      setSurfaceZones((prev) =>
+        prev.map((zone) =>
+          zone.id === activeSurfaceZone.id
+            ? { ...zone, surfaceKey: activeSurfaceProfileKey, points: [...zone.points, point] }
+            : zone
+        )
+      );
+      clearRouteState({ dropSolvedRoute: false });
+      setStatus(`Добавлена точка в ${activeSurfaceZone.name}.`);
+      return;
+    }
+
     setPoints((prev) => [
       ...prev,
       {
@@ -1142,12 +1783,7 @@ export default function Dashboard() {
 
   const invalidateEnergyDependentRoute = () => {
     clearRouteState({ dropSolvedRoute: false });
-    setRouteEnergyStats((prev) => ({
-      ...prev,
-      routeEnergy: 0,
-      estimatedTimeSec: 0,
-      averageSlipRisk: 0,
-    }));
+    setRouteEnergyStats(createEmptyRouteEnergyStats());
     setEnergyWarning("");
   };
 
@@ -1260,12 +1896,7 @@ export default function Dashboard() {
       if (!routed.ok) {
         setRouteSeed(solvedRoute);
         setOptimizedRoute([]);
-        setRouteEnergyStats((prev) => ({
-          ...prev,
-          routeEnergy: 0,
-          estimatedTimeSec: 0,
-          averageSlipRisk: 0,
-        }));
+        setRouteEnergyStats(createEmptyRouteEnergyStats());
         setEnergyWarning(getEnergyWarningText(routed));
         setStatus(routed.error || "Не удалось построить достижимый маршрут.");
         return;
@@ -1276,12 +1907,7 @@ export default function Dashboard() {
       );
       setRouteSeed(solvedRoute);
       setOptimizedRoute(routed.route);
-      setRouteEnergyStats({
-        routeEnergy: routed.routeEnergy,
-        estimatedTimeSec: routed.estimatedTimeSec,
-        limitingMaxSpeedMps: routed.limitingMaxSpeedMps,
-        averageSlipRisk: routed.averageSlipRisk,
-      });
+      setRouteEnergyStats(buildRouteEnergyStats(routed));
       setEnergyWarning("");
       const chargingSuffix = routed.stationStopCount
         ? ` Добавлено заездов на зарядку: ${routed.stationStopCount}.`
@@ -1297,12 +1923,7 @@ export default function Dashboard() {
     } catch (error) {
       setRouteSeed([]);
       setOptimizedRoute([]);
-      setRouteEnergyStats((prev) => ({
-        ...prev,
-        routeEnergy: 0,
-        estimatedTimeSec: 0,
-        averageSlipRisk: 0,
-      }));
+      setRouteEnergyStats(createEmptyRouteEnergyStats());
       setEnergyWarning("");
       setStatus(
         error instanceof Error ? error.message : "Не удалось построить маршрут."
@@ -1344,6 +1965,7 @@ export default function Dashboard() {
       }
       controllerRouteSource = rebuiltForController.route;
       chargingStops = rebuiltForController.stationStopCount;
+      setRouteEnergyStats(buildRouteEnergyStats(rebuiltForController));
     }
     const routeForController = sanitizeRouteForController(controllerRouteSource);
     if (routeForController.length < 2) {
@@ -1368,6 +1990,7 @@ export default function Dashboard() {
 
     const sendPayload = (socket) => {
       socket.send(JSON.stringify(payload));
+      startRouteTiming();
       const chargingSuffix = chargingStops ? `, зарядок: ${chargingStops}` : "";
       setEnergyWarning("");
       setStatus(`Маршрут отправлен (${routeForController.length} точек${chargingSuffix}).`);
@@ -1439,13 +2062,24 @@ export default function Dashboard() {
       commandId: Date.now(),
       clearMap: true,
       mode: mappingSurveyMode,
+      field: {
+        minX: -HALF_WIDTH,
+        maxX: HALF_WIDTH,
+        minY: -HALF_HEIGHT,
+        maxY: HALF_HEIGHT,
+      },
+      motion: {
+        cruiseSpeedMps: 0.8,
+        payloadKg,
+        batteryRange: batteryRangeMeters,
+      },
     };
     const modeLabel = getMappingSurveyModeLabel(mappingSurveyMode);
 
     sendRouteChannelPayload(routeWsRef, payload, {
       onSent: () => {
         setStatus(
-          `Запущено обследование карты: сначала периметр, затем "${modeLabel}".`
+          `Запущено обследование карты: скорость 0.8 м/с, сначала периметр, затем "${modeLabel}".`
         );
       },
       onError: () => {
@@ -1454,9 +2088,34 @@ export default function Dashboard() {
     });
   };
 
-  const exportMapImage = () => {
-    if (!telemetry.obstacleMap?.cells?.length) {
+  const requestMapExport = () => {
+    const hasLidarMap = Boolean(telemetry.obstacleMap?.cells?.length);
+    const cameraObstacleCells = Array.isArray(telemetry.cameraMap?.cells)
+      ? telemetry.cameraMap.cells.length
+      : 0;
+    const cameraFreeCells = Array.isArray(telemetry.cameraMap?.freeCells)
+      ? telemetry.cameraMap.freeCells.length
+      : 0;
+    const hasCameraMap = Boolean(cameraObstacleCells + cameraFreeCells);
+    if (!hasLidarMap && !hasCameraMap) {
       setStatus("Пока нет накопленной карты препятствий для экспорта.");
+      return;
+    }
+    setMapExportPromptOpen(true);
+  };
+
+  const exportMapImage = async (variant = "lidar") => {
+    const normalizedVariant = variant === "camera" ? "camera" : "lidar";
+    const selectedMap =
+      normalizedVariant === "camera" ? telemetry.cameraMap : telemetry.obstacleMap;
+    const selectedCells = Array.isArray(selectedMap?.cells) ? selectedMap.cells : [];
+    const selectedFreeCells = Array.isArray(selectedMap?.freeCells) ? selectedMap.freeCells : [];
+    if (!selectedCells.length && !selectedFreeCells.length) {
+      setStatus(
+        normalizedVariant === "camera"
+          ? "Камерная карта пока пустая."
+          : "Лидарная карта пока пустая."
+      );
       return;
     }
 
@@ -1470,42 +2129,53 @@ export default function Dashboard() {
       return;
     }
 
-    drawPlannerBackground(ctx, [], { annotate: false });
+    if (normalizedVariant === "camera") {
+      await drawCameraMapExport(ctx, exportCanvas, selectedMap, telemetry.perception?.camera);
+    } else {
+      drawPlannerBackground(ctx, [], { annotate: false });
 
-    const rawCellSize = Number(telemetry.obstacleMap.cellSize);
-    const cellSize = Number.isFinite(rawCellSize) && rawCellSize > 0 ? rawCellSize : 0.06;
-    const cellCanvasSize = Math.max(3, cellSize * SCALE * 0.92);
+      const rawCellSize = Number(selectedMap?.cellSize);
+      const cellSize =
+        Number.isFinite(rawCellSize) && rawCellSize > 0 ? rawCellSize : 0.06;
+      const cellCanvasSize = Math.max(3, cellSize * SCALE * 0.92);
 
-    telemetry.obstacleMap.cells.forEach((cell) => {
-      const confidenceRaw = Number(cell?.confidence);
-      const confidence = Number.isFinite(confidenceRaw) ? Math.max(0, confidenceRaw) : 0;
-      const intensity = Math.max(0.16, Math.min(1, confidence / 6));
-      const point = worldToCanvas(cell.x, cell.y);
+      selectedCells.forEach((cell) => {
+        const confidenceRaw = Number(cell?.confidence);
+        const confidence = Number.isFinite(confidenceRaw) ? Math.max(0, confidenceRaw) : 0;
+        const intensity = Math.max(0.16, Math.min(1, confidence / 6));
+        const point = worldToCanvas(cell.x, cell.y);
 
-      ctx.fillStyle = `rgba(14, 165, 233, ${0.12 + intensity * 0.3})`;
-      ctx.strokeStyle = `rgba(2, 132, 199, ${0.18 + intensity * 0.38})`;
-      ctx.lineWidth = 1;
-      ctx.fillRect(
-        point.x - cellCanvasSize / 2,
-        point.y - cellCanvasSize / 2,
-        cellCanvasSize,
-        cellCanvasSize
-      );
-      ctx.strokeRect(
-        point.x - cellCanvasSize / 2,
-        point.y - cellCanvasSize / 2,
-        cellCanvasSize,
-        cellCanvasSize
-      );
-    });
+        ctx.fillStyle = `rgba(14, 165, 233, ${0.12 + intensity * 0.3})`;
+        ctx.strokeStyle = `rgba(2, 132, 199, ${0.18 + intensity * 0.38})`;
+        ctx.lineWidth = 1;
+        ctx.fillRect(
+          point.x - cellCanvasSize / 2,
+          point.y - cellCanvasSize / 2,
+          cellCanvasSize,
+          cellCanvasSize
+        );
+        ctx.strokeRect(
+          point.x - cellCanvasSize / 2,
+          point.y - cellCanvasSize / 2,
+          cellCanvasSize,
+          cellCanvasSize
+        );
+      });
+    }
 
     const link = document.createElement("a");
     const timestamp = new Date().toISOString().replace(/[:.]/g, "-");
-    const fileName = telemetry.obstacleMap?.imageFile || `obstacle-map-${timestamp}.png`;
+    const filePrefix = normalizedVariant === "camera" ? "camera-map" : "lidar-map";
+    const fileName = `${filePrefix}-${timestamp}.png`;
     link.href = exportCanvas.toDataURL("image/png");
-    link.download = fileName.endsWith(".png") ? fileName : `${fileName}.png`;
+    link.download = fileName;
     link.click();
-    setStatus(`Карта сохранена в PNG: ${link.download}`);
+    setMapExportPromptOpen(false);
+    setStatus(
+      normalizedVariant === "camera"
+        ? `Камерная карта сохранена в PNG: ${link.download}`
+        : `Лидарная карта сохранена в PNG: ${link.download}`
+    );
   };
 
   return (
@@ -1552,6 +2222,19 @@ export default function Dashboard() {
         onPayloadChange={handlePayloadChange}
         onPayloadBlur={handlePayloadBlur}
         routeEnergyStats={routeEnergyStats}
+        routeInfluenceRows={routeInfluenceRows}
+        routeTiming={routeTimingDisplay}
+        surfaceZones={surfaceZones}
+        activeSurfaceZoneId={activeSurfaceZoneId}
+        activeSurfaceZone={activeSurfaceZone}
+        activeSurfaceProfileKey={activeSurfaceProfileKey}
+        onActiveSurfaceProfileChange={updateActiveSurfaceProfile}
+        onCreateSurfaceZone={createSurfaceZone}
+        onSelectSurfaceZone={selectSurfaceZone}
+        onToggleSurfaceZoneClosed={toggleSurfaceZoneClosed}
+        onClearSurfaceZone={clearSurfaceZone}
+        onRemoveSurfaceZone={removeSurfaceZone}
+        onClearAllSurfaceZones={clearAllSurfaceZones}
       />
 
       <PlannerCanvas
@@ -1581,15 +2264,18 @@ export default function Dashboard() {
         polygonCount={plannerModel.polygons.length}
         adjustedVisitCount={plannerModel.adjustedVisits.length}
         routeBlocked={plannerModel.routeBlocked}
-        telemetry={telemetry}
+        telemetry={telemetryForSidebar}
         telemetryWsUp={telemetryWsUp}
         routeWsUp={routeWsUp}
         solverApiUp={solverApiUp}
         mappingSurveyMode={mappingSurveyMode}
         mappingSurveyModes={MAPPING_SURVEY_MODES}
         onMappingSurveyModeChange={setMappingSurveyMode}
+        mapExportPromptOpen={mapExportPromptOpen}
         onStartMappingSurvey={startMappingSurvey}
-        onExportMapImage={exportMapImage}
+        onRequestMapExport={requestMapExport}
+        onExportMapVariant={exportMapImage}
+        onCancelMapExport={() => setMapExportPromptOpen(false)}
         onCreateZone={createZone}
         onSelectZone={selectZone}
         onToggleZoneClosed={toggleZoneClosed}

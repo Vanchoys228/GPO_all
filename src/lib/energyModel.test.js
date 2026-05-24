@@ -62,4 +62,32 @@ describe("energyModel", () => {
     expect(rough.totalEnergy).toBeGreaterThan(neutral.totalEnergy);
     expect(rough.limitingMaxSpeedMps).toBeLessThanOrEqual(neutral.limitingMaxSpeedMps);
   });
+
+  it("estimates controller travel time from requested speed and waypoint turns", () => {
+    const straight = [
+      { x: 0, y: 0 },
+      { x: 8, y: 0 },
+    ];
+    const withTurn = [
+      { x: 0, y: 0 },
+      { x: 8, y: 0 },
+      { x: 8, y: 8 },
+    ];
+
+    const slow = estimateRouteEnergy(straight, {
+      surfaceZones: [],
+      speedMps: 0.2,
+    });
+    const fast = estimateRouteEnergy(straight, {
+      surfaceZones: [],
+      speedMps: 0.6,
+    });
+    const turning = estimateRouteEnergy(withTurn, {
+      surfaceZones: [],
+      speedMps: 0.6,
+    });
+
+    expect(fast.estimatedTimeSec).toBeLessThan(slow.estimatedTimeSec);
+    expect(turning.estimatedTimeSec).toBeGreaterThan(fast.estimatedTimeSec * 1.8);
+  });
 });

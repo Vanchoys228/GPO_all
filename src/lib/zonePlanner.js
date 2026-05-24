@@ -44,12 +44,22 @@ export const POINT_KIND_META = {
     border: "border-blue-200",
     text: "text-blue-700",
   },
+  surface: {
+    key: "surface",
+    label: "Зона покрытия",
+    shortLabel: "S",
+    color: "#0f766e",
+    bg: "bg-teal-50",
+    border: "border-teal-200",
+    text: "text-teal-700",
+  },
 };
 
 export const POINT_KIND_OPTIONS = [
   POINT_KIND_META.visit,
   POINT_KIND_META.charge,
   POINT_KIND_META.limit,
+  POINT_KIND_META.surface,
 ];
 
 export const DEFAULT_SURFACE_ZONES = SURFACE_ZONE_PRESETS;
@@ -604,8 +614,9 @@ export const drawDiamond = (ctx, x, y, radius) => {
 
 const drawSurfaceZones = (ctx, surfaceZones = DEFAULT_SURFACE_ZONES) => {
   for (const zone of surfaceZones || []) {
-    if (!Array.isArray(zone?.points) || zone.points.length < 3) continue;
+    if (!Array.isArray(zone?.points) || zone.points.length < 1) continue;
     const profile = getSurfaceProfileByKey(zone.surfaceKey);
+    const closed = zone.closed !== false && zone.points.length >= 3;
 
     ctx.beginPath();
     zone.points.forEach((point, index) => {
@@ -613,12 +624,60 @@ const drawSurfaceZones = (ctx, surfaceZones = DEFAULT_SURFACE_ZONES) => {
       if (index === 0) ctx.moveTo(canvasPoint.x, canvasPoint.y);
       else ctx.lineTo(canvasPoint.x, canvasPoint.y);
     });
-    ctx.closePath();
-    ctx.fillStyle = profile.fill;
-    ctx.fill();
+    if (closed) {
+      ctx.closePath();
+      ctx.fillStyle = profile.fill;
+      ctx.fill();
+      ctx.save();
+      ctx.clip();
+      ctx.globalAlpha = 0.38;
+      ctx.strokeStyle = profile.stroke;
+      ctx.lineWidth = 1;
+      const bounds = zone.points.reduce(
+        (acc, point) => {
+          const canvasPoint = worldToCanvas(point.x, point.y);
+          return {
+            minX: Math.min(acc.minX, canvasPoint.x),
+            minY: Math.min(acc.minY, canvasPoint.y),
+            maxX: Math.max(acc.maxX, canvasPoint.x),
+            maxY: Math.max(acc.maxY, canvasPoint.y),
+          };
+        },
+        { minX: CANVAS_WIDTH, minY: CANVAS_HEIGHT, maxX: 0, maxY: 0 }
+      );
+      for (let x = bounds.minX - 60; x <= bounds.maxX + 60; x += 14) {
+        ctx.beginPath();
+        ctx.moveTo(x, bounds.maxY + 24);
+        ctx.lineTo(x + 80, bounds.minY - 24);
+        ctx.stroke();
+      }
+      ctx.restore();
+    }
+    ctx.beginPath();
+    zone.points.forEach((point, index) => {
+      const canvasPoint = worldToCanvas(point.x, point.y);
+      if (index === 0) ctx.moveTo(canvasPoint.x, canvasPoint.y);
+      else ctx.lineTo(canvasPoint.x, canvasPoint.y);
+    });
+    if (closed) ctx.closePath();
+    if (!closed) ctx.setLineDash([8, 6]);
     ctx.strokeStyle = profile.stroke;
-    ctx.lineWidth = 1.2;
+    ctx.lineWidth = closed ? 1.2 : 1.8;
     ctx.stroke();
+    ctx.setLineDash([]);
+
+    zone.points.forEach((point, index) => {
+      const canvasPoint = worldToCanvas(point.x, point.y);
+      ctx.fillStyle = profile.stroke;
+      ctx.beginPath();
+      ctx.arc(canvasPoint.x, canvasPoint.y, 4.5, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.fillStyle = "rgba(255, 255, 255, 0.92)";
+      ctx.font = "700 8px 'Segoe UI', sans-serif";
+      ctx.textAlign = "center";
+      ctx.textBaseline = "middle";
+      ctx.fillText(String(index + 1), canvasPoint.x, canvasPoint.y);
+    });
 
     const center = zone.points.reduce(
       (acc, point) => ({
@@ -634,7 +693,11 @@ const drawSurfaceZones = (ctx, surfaceZones = DEFAULT_SURFACE_ZONES) => {
     ctx.font = "600 10px 'Segoe UI', sans-serif";
     ctx.textAlign = "center";
     ctx.textBaseline = "middle";
-    ctx.fillText(profile.label, centerCanvas.x, centerCanvas.y);
+    ctx.fillText(
+      closed ? profile.label : `${profile.label} (черновик)`,
+      centerCanvas.x,
+      centerCanvas.y
+    );
   }
 };
 

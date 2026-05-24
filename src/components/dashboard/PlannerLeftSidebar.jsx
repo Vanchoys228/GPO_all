@@ -20,9 +20,20 @@ const neutralButtonCls =
   "rounded-xl border border-slate-300 bg-slate-800 px-3 py-2 text-sm font-semibold text-white shadow-sm transition hover:bg-slate-900";
 
 const formatSeconds = (seconds) => {
-  if (!Number.isFinite(seconds) || seconds <= 0) return "0 c";
-  if (seconds < 60) return `${seconds.toFixed(1)} c`;
-  return `${(seconds / 60).toFixed(1)} мин`;
+  if (!Number.isFinite(seconds) || seconds <= 0) return "0 сек";
+
+  const totalSeconds = Math.max(1, Math.round(seconds));
+  const hours = Math.floor(totalSeconds / 3600);
+  const minutes = Math.floor((totalSeconds % 3600) / 60);
+  const remainingSeconds = totalSeconds % 60;
+
+  if (hours > 0) {
+    return `${hours} ч ${minutes} мин${remainingSeconds ? ` ${remainingSeconds} сек` : ""}`;
+  }
+  if (minutes > 0) {
+    return `${minutes} мин${remainingSeconds ? ` ${remainingSeconds} сек` : ""}`;
+  }
+  return `${remainingSeconds} сек`;
 };
 
 const parseLooseInput = (rawValue, fallback) => {
@@ -76,8 +87,31 @@ export default function PlannerLeftSidebar({
   onPayloadChange,
   onPayloadBlur,
   routeEnergyStats,
+  routeInfluenceRows,
+  routeTiming,
+  surfaceZones,
+  activeSurfaceZoneId,
+  activeSurfaceZone,
+  activeSurfaceProfileKey,
+  onActiveSurfaceProfileChange,
+  onCreateSurfaceZone,
+  onSelectSurfaceZone,
+  onToggleSurfaceZoneClosed,
+  onClearSurfaceZone,
+  onRemoveSurfaceZone,
+  onClearAllSurfaceZones,
 }) {
   const fileInputRef = useRef(null);
+  const actualRouteTimeText =
+    routeTiming?.status === "running"
+      ? `идет ${formatSeconds(routeTiming.actualTimeSec)}`
+      : routeTiming?.status === "finished"
+        ? formatSeconds(routeTiming.actualTimeSec)
+        : "пока нет";
+  const surfaceZoneList = Array.isArray(surfaceZones) ? surfaceZones : [];
+  const closedSurfaceCount = surfaceZoneList.filter(
+    (zone) => zone?.closed !== false && Array.isArray(zone?.points) && zone.points.length >= 3
+  ).length;
 
   const handleImportClick = () => {
     fileInputRef.current?.click();
@@ -91,7 +125,7 @@ export default function PlannerLeftSidebar({
       await onImportFile?.(file);
     } catch (error) {
       console.error("Graph import failed", error);
-        window.alert("Не удалось импортировать граф: проверьте JSON-файл.");
+        window.alert("Не удалось импортировать граф: проверьте JSON, Excel или CSV-файл.");
     } finally {
       event.target.value = "";
     }
@@ -290,10 +324,32 @@ export default function PlannerLeftSidebar({
 
         <div className="mt-3 rounded-xl border border-stone-200 bg-stone-50 px-3 py-2 text-xs text-stone-700 space-y-1">
           <div>Энергия маршрута: <span className="font-semibold">{routeEnergyStats.routeEnergy.toFixed(1)}</span></div>
-          <div>Время прохода: <span className="font-semibold">{formatSeconds(routeEnergyStats.estimatedTimeSec)}</span></div>
+          <div>Длина маршрута: <span className="font-semibold">{(routeEnergyStats.distanceMeters || 0).toFixed(1)} м</span></div>
+          <div>Плановое время: <span className="font-semibold">{formatSeconds(routeEnergyStats.estimatedTimeSec)}</span></div>
+          <div>Фактическое время: <span className="font-semibold">{actualRouteTimeText}</span></div>
           <div>Лимит по покрытию: <span className="font-semibold">{routeEnergyStats.limitingMaxSpeedMps.toFixed(2)} м/с</span></div>
           <div>Риск проскальзывания: <span className="font-semibold">{(routeEnergyStats.averageSlipRisk * 100).toFixed(1)}%</span></div>
         </div>
+
+        {Array.isArray(routeInfluenceRows) && routeInfluenceRows.length > 0 && (
+          <div className="mt-3 overflow-hidden rounded-xl border border-stone-200 bg-white text-xs">
+            <div className="grid grid-cols-[1.15fr_0.85fr_1fr] bg-stone-100 px-3 py-2 font-semibold text-stone-700">
+              <div>Критерий</div>
+              <div>Значение</div>
+              <div>Влияние</div>
+            </div>
+            {routeInfluenceRows.map((row) => (
+              <div
+                key={row.key}
+                className="grid grid-cols-[1.15fr_0.85fr_1fr] border-t border-stone-100 px-3 py-2 text-stone-700"
+              >
+                <div className="font-medium text-stone-800">{row.label}</div>
+                <div>{row.value}</div>
+                <div>{row.impact}</div>
+              </div>
+            ))}
+          </div>
+        )}
 
         <div className="mt-3 rounded-xl border border-sky-200 bg-sky-50 px-3 py-2 text-xs text-sky-800">
           Карта покрытий влияет на расход, допустимую скорость и риски в поворотах.
@@ -308,6 +364,101 @@ export default function PlannerLeftSidebar({
 
       <div className={cardCls}>
         <h3 className="text-sm font-semibold mb-3">Покрытия карты</h3>
+        <div className="mb-3 rounded-xl border border-teal-200 bg-teal-50 px-3 py-2 text-xs text-teal-900">
+          <div className="font-semibold">Редактируемые зоны: {closedSurfaceCount}</div>
+          <div className="mt-1 text-teal-800">
+            Выберите тип покрытия, включите режим «Зона покрытия» и кликайте по карте точками контура.
+          </div>
+        </div>
+
+        <label>
+          <div className="text-xs text-stone-600 mb-1">Тип активного покрытия</div>
+          <select
+            className={inputCls}
+            value={activeSurfaceProfileKey}
+            onChange={(event) => onActiveSurfaceProfileChange?.(event.target.value)}
+          >
+            {SURFACE_PROFILE_OPTIONS.map((profile) => (
+              <option key={profile.key} value={profile.key}>
+                {profile.label}
+              </option>
+            ))}
+          </select>
+        </label>
+
+        <div className="mt-3 grid grid-cols-2 gap-2 text-xs">
+          <button onClick={onCreateSurfaceZone} className={subtleButtonCls}>
+            Новая зона
+          </button>
+          <button
+            onClick={() => activeSurfaceZone && onToggleSurfaceZoneClosed?.(activeSurfaceZone.id)}
+            className={subtleButtonCls}
+            disabled={!activeSurfaceZone}
+          >
+            {activeSurfaceZone?.closed ? "Открыть" : "Замкнуть"}
+          </button>
+          <button
+            onClick={() => activeSurfaceZone && onClearSurfaceZone?.(activeSurfaceZone.id)}
+            className={subtleButtonCls}
+            disabled={!activeSurfaceZone}
+          >
+            Очистить зону
+          </button>
+          <button onClick={onClearAllSurfaceZones} className={subtleButtonCls}>
+            Очистить все
+          </button>
+        </div>
+
+        <div className="mt-3 max-h-44 space-y-2 overflow-auto pr-1 text-xs">
+          {surfaceZoneList.map((zone) => {
+            const profile =
+              SURFACE_PROFILE_OPTIONS.find((item) => item.key === zone.surfaceKey) ||
+              SURFACE_PROFILE_OPTIONS[0];
+            const active = zone.id === activeSurfaceZoneId;
+            return (
+              <div
+                key={zone.id}
+                className={`rounded-xl border px-3 py-2 ${
+                  active ? "border-teal-300 bg-teal-50" : "border-stone-200 bg-stone-50"
+                }`}
+              >
+                <button
+                  type="button"
+                  onClick={() => onSelectSurfaceZone?.(zone.id)}
+                  className="flex w-full items-center justify-between gap-2 rounded-xl border border-stone-200 bg-white px-3 py-2 text-left transition hover:border-teal-200 hover:bg-teal-50"
+                >
+                  <span className="flex items-center gap-2">
+                    <span
+                      className="inline-block h-3 w-3 rounded-full border border-stone-400"
+                      style={{ background: profile.fill }}
+                    />
+                    <span className="font-semibold text-stone-800">{zone.name}</span>
+                  </span>
+                  <span className="text-stone-500">
+                    {zone.points?.length || 0} т.
+                  </span>
+                </button>
+                <div className="mt-2 flex items-center justify-between gap-2 rounded-lg bg-white/70 px-2 py-1 text-stone-600">
+                  <span>{profile.label}</span>
+                  <span className={zone.closed ? "font-semibold text-emerald-700" : "font-semibold text-amber-700"}>
+                    {zone.closed ? "замкнута" : "черновик"}
+                  </span>
+                </div>
+                {active && (
+                  <button
+                    type="button"
+                    onClick={() => onRemoveSurfaceZone?.(zone.id)}
+                    className="mt-2 rounded-lg border border-rose-200 bg-rose-50 px-2.5 py-1.5 text-[11px] font-semibold text-rose-700 hover:bg-rose-100"
+                  >
+                    Удалить покрытие
+                  </button>
+                )}
+              </div>
+            );
+          })}
+        </div>
+
+        <div className="mt-4 border-t border-stone-200 pt-3" />
         <div className="space-y-2 text-xs">
           {SURFACE_PROFILE_OPTIONS.map((profile) => (
             (() => {
@@ -406,7 +557,7 @@ export default function PlannerLeftSidebar({
       <div className={cardCls}>
         <h3 className="text-sm font-semibold mb-3">Импорт графа</h3>
         <p className="mb-3 text-xs text-stone-600">
-          Загрузите JSON с точками, зарядками и ограничивающими зонами.
+          Загрузите JSON, Excel или CSV с точками, зарядками и ограничивающими зонами.
         </p>
         <button
           onClick={handleImportClick}

@@ -25,10 +25,14 @@ const ROUTE_JSON_PATH = path.join(WEB_STATE_DIR, "route.json");
 const ROUTE_CSV_PATH = path.join(WEB_STATE_DIR, "route.csv");
 const LIMIT_ZONES_JSON_PATH = path.join(WEB_STATE_DIR, "limit_zones.json");
 const LIMIT_ZONES_TXT_PATH = path.join(WEB_STATE_DIR, "limit_zones.txt");
+const SURFACE_ZONES_JSON_PATH = path.join(WEB_STATE_DIR, "surface_zones.json");
+const SURFACE_ZONES_TXT_PATH = path.join(WEB_STATE_DIR, "surface_zones.txt");
 const ROBOT_STATE_PATH = path.join(WEB_STATE_DIR, "robot_state.json");
 const OBSTACLE_MAP_PATH = path.join(WEB_STATE_DIR, "obstacle_map.json");
+const CAMERA_MAP_PATH = path.join(WEB_STATE_DIR, "camera_map.json");
 const MOTION_PROFILE_PATH = path.join(WEB_STATE_DIR, "motion_profile.txt");
 const RUNTIME_COMMAND_PATH = path.join(WEB_STATE_DIR, "runtime_command.txt");
+const CAMERA_FRAME_PATH = path.join(WEB_STATE_DIR, "camera_frame.bmp");
 const ROUTE_CSV_HEADER = coordinateContract.routeCsv.header.join(",");
 const TELEMETRY_MESSAGE_TYPE = coordinateContract.telemetry.messageType;
 const TELEMETRY_POSE_KEY = coordinateContract.telemetry.poseKey;
@@ -70,6 +74,7 @@ const DEFAULT_MOTION_PROFILE = {
   payloadKg: 0,
   batteryRange: 100,
 };
+const SURFACE_KEYS = new Set(["neutral", "rough", "slippery"]);
 
 const clamp = (value, min, max) => Math.max(min, Math.min(value, max));
 
@@ -84,6 +89,11 @@ const normalizeNumber = (value, fallback) => {
 const toDegrees = (radians) => (radians * 180) / Math.PI;
 
 let ensureWebStateDirPromise = null;
+let cachedCameraFrame = {
+  path: CAMERA_FRAME_PATH,
+  mtimeMs: -1,
+  dataUrl: null,
+};
 
 const ensureWebStateDir = () => {
   if (!ensureWebStateDirPromise) {
@@ -229,6 +239,29 @@ const sanitizeMappingSurveyMode = (rawMode) => {
   return "snake";
 };
 
+const validateSurfaceZones = (zones) => {
+  if (!Array.isArray(zones)) {
+    throw new Error("Surface zones payload must be an array.");
+  }
+
+  return zones.map((zone, index) => {
+    const id =
+      typeof zone?.id === "string" && zone.id.trim()
+        ? zone.id.trim()
+        : `surface-zone-${index + 1}`;
+    const name =
+      typeof zone?.name === "string" && zone.name.trim()
+        ? zone.name.trim()
+        : `Surface ${index + 1}`;
+    const surfaceKey = SURFACE_KEYS.has(zone?.surfaceKey) ? zone.surfaceKey : "neutral";
+    const points = validatePoints(zone?.points || []);
+    if (points.length < 3) {
+      throw new Error("Every surface zone must contain at least three points.");
+    }
+    return { id, name, surfaceKey, points };
+  });
+};
+
 const safeJsonParse = (text) => {
   try {
     return JSON.parse(text);
@@ -239,30 +272,46 @@ const safeJsonParse = (text) => {
 
 const normalizeObstacleMap = (rawMap, fallback = null) => {
   const fallbackMap = fallback && typeof fallback === "object" ? fallback : {};
+  const normalizeCells = (rawCells, limit) =>
+    rawCells
+      .map((cell) => ({
+        x: Number(cell?.x),
+        y: Number(cell?.y),
+        confidence: Number(cell?.confidence),
+      }))
+      .filter((cell) => Number.isFinite(cell.x) && Number.isFinite(cell.y))
+      .map((cell) => ({
+        x: cell.x,
+        y: cell.y,
+        confidence: Number.isFinite(cell.confidence) ? Math.max(0, cell.confidence) : 0,
+      }))
+      .slice(-limit);
   const rawCells = Array.isArray(rawMap?.cells)
     ? rawMap.cells
     : Array.isArray(fallbackMap?.cells)
       ? fallbackMap.cells
       : [];
-  const cells = rawCells
-    .map((cell) => ({
-      x: Number(cell?.x),
-      y: Number(cell?.y),
-      confidence: Number(cell?.confidence),
-    }))
-    .filter((cell) => Number.isFinite(cell.x) && Number.isFinite(cell.y))
-    .map((cell) => ({
-      x: cell.x,
-      y: cell.y,
-      confidence: Number.isFinite(cell.confidence) ? Math.max(0, cell.confidence) : 0,
-    }))
-    .slice(-4096);
+  const rawFreeCells = Array.isArray(rawMap?.freeCells)
+    ? rawMap.freeCells
+    : Array.isArray(fallbackMap?.freeCells)
+      ? fallbackMap.freeCells
+      : [];
+  const cells = normalizeCells(rawCells, 4096);
+  const freeCells = normalizeCells(rawFreeCells, 4096);
   const cellSize = Number(rawMap?.cellSize ?? fallbackMap?.cellSize);
-  const cellCount = Number(rawMap?.totalCells ?? fallbackMap?.cellCount ?? cells.length);
+  const cellCount = Number(rawMap?.totalCells ?? rawMap?.cellCount ?? fallbackMap?.cellCount ?? cells.length);
+  const obstacleCellCount = Number(rawMap?.obstacleCellCount ?? fallbackMap?.obstacleCellCount ?? cells.length);
+  const freeCellCount = Number(rawMap?.freeCellCount ?? fallbackMap?.freeCellCount ?? freeCells.length);
 
   return {
     cellSize: Number.isFinite(cellSize) && cellSize > 0 ? cellSize : 0.06,
     cellCount: Number.isFinite(cellCount) && cellCount >= 0 ? cellCount : cells.length,
+    obstacleCellCount: Number.isFinite(obstacleCellCount) && obstacleCellCount >= 0
+      ? obstacleCellCount
+      : cells.length,
+    freeCellCount: Number.isFinite(freeCellCount) && freeCellCount >= 0
+      ? freeCellCount
+      : freeCells.length,
     mapFile:
       typeof fallbackMap?.mapFile === "string" && fallbackMap.mapFile.trim()
         ? fallbackMap.mapFile
@@ -280,7 +329,86 @@ const normalizeObstacleMap = (rawMap, fallback = null) => {
         ? fallbackMap.imageFile
         : "obstacle_map.png",
     cells,
+    freeCells,
   };
+};
+
+const resolveCameraFrameMimeType = (frameFile, rawMimeType) => {
+  if (typeof rawMimeType === "string" && rawMimeType.startsWith("image/")) {
+    return rawMimeType;
+  }
+  const ext = path.extname(frameFile || "").toLowerCase();
+  if (ext === ".bmp") return "image/bmp";
+  if (ext === ".png") return "image/png";
+  return "image/jpeg";
+};
+
+const normalizeCameraTelemetry = (rawCamera) => {
+  if (!rawCamera || typeof rawCamera !== "object") return null;
+
+  const width = Number(rawCamera.width);
+  const height = Number(rawCamera.height);
+  const fov = Number(rawCamera.fov);
+  const frameSequence = Number(rawCamera.frameSequence);
+  const capturedAt = Number(rawCamera.capturedAt);
+  const obstacleScore = Number(rawCamera.obstacleScore);
+  const obstacleOffset = Number(rawCamera.obstacleOffset);
+  const obstacleAngle = Number(rawCamera.obstacleAngle);
+  const obstacleRange = Number(rawCamera.obstacleRange);
+  const detectionCount = Number(rawCamera.detectionCount);
+  const frameFile =
+    typeof rawCamera.frameFile === "string" && rawCamera.frameFile.trim()
+      ? path.basename(rawCamera.frameFile)
+      : "camera_frame.bmp";
+  const mimeType = resolveCameraFrameMimeType(frameFile, rawCamera.mimeType);
+
+  return {
+    enabled: Boolean(rawCamera.enabled),
+    width: Number.isFinite(width) ? width : 0,
+    height: Number.isFinite(height) ? height : 0,
+    fov: Number.isFinite(fov) ? fov : 0,
+    frameFile,
+    mimeType,
+    mode:
+      typeof rawCamera.mode === "string" && rawCamera.mode.trim()
+        ? rawCamera.mode
+        : "webots_camera",
+    frameSequence: Number.isFinite(frameSequence) ? frameSequence : 0,
+    capturedAt: Number.isFinite(capturedAt) ? capturedAt : 0,
+    obstacleVisible: Boolean(rawCamera.obstacleVisible),
+    obstacleScore: Number.isFinite(obstacleScore) ? obstacleScore : 0,
+    obstacleOffset: Number.isFinite(obstacleOffset) ? obstacleOffset : 0,
+    obstacleAngle: Number.isFinite(obstacleAngle) ? obstacleAngle : 0,
+    obstacleRange: Number.isFinite(obstacleRange) ? obstacleRange : 0,
+    detectionCount: Number.isFinite(detectionCount) ? detectionCount : 0,
+  };
+};
+
+const readCameraFrameDataUrl = async (camera) => {
+  if (!camera?.enabled) return null;
+
+  const frameFile = path.basename(camera.frameFile || "camera_frame.bmp");
+  const framePath = path.join(WEB_STATE_DIR, frameFile);
+  const mimeType = resolveCameraFrameMimeType(frameFile, camera.mimeType);
+  try {
+    const stat = await fsp.stat(framePath);
+    if (cachedCameraFrame.path === framePath && cachedCameraFrame.mtimeMs === stat.mtimeMs) {
+      return cachedCameraFrame.dataUrl
+        ? { frameDataUrl: cachedCameraFrame.dataUrl, frameMtimeMs: stat.mtimeMs }
+        : null;
+    }
+
+    const bytes = await fsp.readFile(framePath);
+    const dataUrl = `data:${mimeType};base64,${bytes.toString("base64")}`;
+    cachedCameraFrame = {
+      path: framePath,
+      mtimeMs: stat.mtimeMs,
+      dataUrl,
+    };
+    return { frameDataUrl: dataUrl, frameMtimeMs: stat.mtimeMs };
+  } catch {
+    return null;
+  }
 };
 
 const sanitizeMotionProfile = (motion) => {
@@ -323,6 +451,20 @@ const normalizeCommandId = (rawCommandId) => {
   return Date.now();
 };
 
+const writeMotionProfileArtifact = async (motion) => {
+  await ensureWebStateDir();
+
+  const motionProfile = sanitizeMotionProfile(motion);
+  const motionLines = [
+    `cruise_speed_mps ${motionProfile.cruiseSpeedMps}`,
+    `payload_kg ${motionProfile.payloadKg}`,
+    `battery_range ${motionProfile.batteryRange}`,
+  ];
+
+  await fsp.writeFile(MOTION_PROFILE_PATH, `${motionLines.join("\n")}\n`);
+  return motionProfile;
+};
+
 const writeRouteArtifacts = async (payload) => {
   await ensureWebStateDir();
 
@@ -357,16 +499,10 @@ const writeRouteArtifacts = async (payload) => {
     );
     csvLines.push(`${point.x},${point.y},${headingDeg}`);
   }
-  const motionLines = [
-    `cruise_speed_mps ${motionProfile.cruiseSpeedMps}`,
-    `payload_kg ${motionProfile.payloadKg}`,
-    `battery_range ${motionProfile.batteryRange}`,
-  ];
-
   await Promise.all([
     fsp.writeFile(ROUTE_JSON_PATH, JSON.stringify(routeJson, null, 2)),
     fsp.writeFile(ROUTE_CSV_PATH, `${csvLines.join("\n")}\n`),
-    fsp.writeFile(MOTION_PROFILE_PATH, `${motionLines.join("\n")}\n`),
+    writeMotionProfileArtifact(motionProfile),
   ]);
 };
 
@@ -395,6 +531,31 @@ const writeLimitZoneArtifacts = async (payload) => {
   ]);
 };
 
+const writeSurfaceZoneArtifacts = async (payload) => {
+  await ensureWebStateDir();
+
+  const zones = validateSurfaceZones(payload?.zones || []);
+  const zonesJson = {
+    type: "surface_zones",
+    coordinateContractVersion: coordinateContract.version,
+    createdAt: new Date().toISOString(),
+    zones,
+  };
+
+  const textLines = [`surface_zone_count ${zones.length}`];
+  for (const zone of zones) {
+    textLines.push(`surface_zone ${zone.points.length} ${zone.surfaceKey} ${zone.id}`);
+    for (const point of zone.points) {
+      textLines.push(`${point.x} ${point.y}`);
+    }
+  }
+
+  await Promise.all([
+    fsp.writeFile(SURFACE_ZONES_JSON_PATH, JSON.stringify(zonesJson, null, 2)),
+    fsp.writeFile(SURFACE_ZONES_TXT_PATH, `${textLines.join("\n")}\n`),
+  ]);
+};
+
 const writeRuntimeCommandArtifact = async (payload) => {
   await ensureWebStateDir();
   const commandId = normalizeCommandId(payload?.commandId);
@@ -402,13 +563,27 @@ const writeRuntimeCommandArtifact = async (payload) => {
   if (payload?.type === "start_mapping_survey") {
     const clearMap = payload?.clearMap === undefined ? true : Boolean(payload.clearMap);
     const mode = sanitizeMappingSurveyMode(payload?.mode);
+    const field = payload?.field || {};
+    const motionProfile = sanitizeMotionProfile(payload?.motion);
+    const minX = normalizeNumber(field.minX, -22);
+    const maxX = normalizeNumber(field.maxX, 22);
+    const minY = normalizeNumber(field.minY, -17);
+    const maxY = normalizeNumber(field.maxY, 17);
     const lines = [
       `id ${commandId}`,
       "type start_mapping_survey",
       `clear_map ${clearMap ? 1 : 0}`,
       `mode ${mode}`,
+      `survey_speed_mps ${motionProfile.cruiseSpeedMps}`,
+      `field_min_x ${Math.min(minX, maxX)}`,
+      `field_max_x ${Math.max(minX, maxX)}`,
+      `field_min_y ${Math.min(minY, maxY)}`,
+      `field_max_y ${Math.max(minY, maxY)}`,
     ];
-    await fsp.writeFile(RUNTIME_COMMAND_PATH, `${lines.join("\n")}\n`);
+    await Promise.all([
+      fsp.writeFile(RUNTIME_COMMAND_PATH, `${lines.join("\n")}\n`),
+      writeMotionProfileArtifact(motionProfile),
+    ]);
     return;
   }
 
@@ -425,7 +600,7 @@ const writeRuntimeCommandArtifact = async (payload) => {
   await fsp.writeFile(RUNTIME_COMMAND_PATH, `${lines.join("\n")}\n`);
 };
 
-const normalizeFileTelemetry = (raw, rawMap = null) => {
+const normalizeFileTelemetry = (raw, rawMap = null, rawCameraMap = null) => {
   const pose = raw?.[TELEMETRY_POSE_KEY] || null;
   const x = Number(pose?.x ?? raw?.robot?.x ?? raw?.x);
   const y = Number(pose?.y ?? raw?.robot?.y ?? raw?.robot?.z ?? raw?.y);
@@ -452,6 +627,8 @@ const normalizeFileTelemetry = (raw, rawMap = null) => {
         }))
     : [];
   const obstacleMap = normalizeObstacleMap(rawMap, raw?.obstacleMap || null);
+  const cameraMap = normalizeObstacleMap(rawCameraMap, raw?.cameraMap || null);
+  const camera = normalizeCameraTelemetry(raw?.perception?.camera ?? raw?.camera);
 
   return {
     type: TELEMETRY_MESSAGE_TYPE,
@@ -469,9 +646,12 @@ const normalizeFileTelemetry = (raw, rawMap = null) => {
     navigation: raw?.navigation || null,
     perception: {
       lidar: raw?.perception?.lidar || null,
+      camera,
       obstacleTrace,
     },
+    camera,
     obstacleMap,
+    cameraMap,
     obstacleTrace,
     simulationTime: Number(raw?.simulationTime) || 0,
   };
@@ -757,17 +937,31 @@ const pollFileTelemetry = async () => {
     const mtime = stat.mtimeMs;
     if (!Number.isFinite(mtime) || mtime === lastFileTelemetryMtime) return;
 
-    const [text, obstacleMapText] = await Promise.all([
+    const [text, obstacleMapText, cameraMapText] = await Promise.all([
       fsp.readFile(ROBOT_STATE_PATH, "utf8"),
       fsp.readFile(OBSTACLE_MAP_PATH, "utf8").catch((error) => {
+        if (error?.code === "ENOENT") return null;
+        throw error;
+      }),
+      fsp.readFile(CAMERA_MAP_PATH, "utf8").catch((error) => {
         if (error?.code === "ENOENT") return null;
         throw error;
       }),
     ]);
     const parsed = safeJsonParse(text);
     const parsedObstacleMap = obstacleMapText ? safeJsonParse(obstacleMapText) : null;
-    const normalized = normalizeFileTelemetry(parsed, parsedObstacleMap);
+    const parsedCameraMap = cameraMapText ? safeJsonParse(cameraMapText) : null;
+    const normalized = normalizeFileTelemetry(parsed, parsedObstacleMap, parsedCameraMap);
     if (!normalized) return;
+
+    const cameraFrame = await readCameraFrameDataUrl(normalized.perception?.camera);
+    if (cameraFrame && normalized.perception?.camera) {
+      normalized.perception.camera = {
+        ...normalized.perception.camera,
+        ...cameraFrame,
+      };
+      normalized.camera = normalized.perception.camera;
+    }
 
     lastFileTelemetryMtime = mtime;
     lastRealTelemetryAt = Date.now();
@@ -814,6 +1008,18 @@ routeWss.on("connection", (ws, req) => {
         await writeLimitZoneArtifacts(parsed);
       } catch (error) {
         console.error("[route] failed to write limit zone artifacts:", error.message);
+      }
+    } else if (parsed?.type === "surface_zones") {
+      try {
+        await writeSurfaceZoneArtifacts(parsed);
+      } catch (error) {
+        console.error("[route] failed to write surface zone artifacts:", error.message);
+      }
+    } else if (parsed?.type === "motion_profile") {
+      try {
+        await writeMotionProfileArtifact(parsed.motion);
+      } catch (error) {
+        console.error("[route] failed to write motion profile artifact:", error.message);
       }
     } else if (parsed?.type === "spawn_random_obstacle" || parsed?.type === "start_mapping_survey") {
       try {

@@ -19,6 +19,7 @@ const INITIAL_DRAW_STATE = {
   optimizedRoute: [],
   obstacleTrace: [],
   obstacleMap: INITIAL_TELEMETRY.obstacleMap,
+  cameraMap: INITIAL_TELEMETRY.cameraMap,
   routeBlocked: false,
   hoveredPointIndex: null,
 };
@@ -53,6 +54,7 @@ export default function PlannerCanvas({
       optimizedRoute,
       obstacleTrace: telemetry.obstacleTrace || [],
       obstacleMap: telemetry.obstacleMap || INITIAL_TELEMETRY.obstacleMap,
+      cameraMap: telemetry.cameraMap || INITIAL_TELEMETRY.cameraMap,
       routeBlocked: plannerModel.routeBlocked,
       hoveredPointIndex,
     };
@@ -66,6 +68,7 @@ export default function PlannerCanvas({
     plannerModel.visitEntries,
     plannerModel.zoneEntries,
     telemetry.obstacleMap,
+    telemetry.cameraMap,
     telemetry.obstacleTrace,
   ]);
 
@@ -125,11 +128,63 @@ export default function PlannerCanvas({
         });
       }
 
+      const cameraFreeCells = Array.isArray(state.cameraMap?.freeCells)
+        ? state.cameraMap.freeCells
+        : [];
+      const cameraObstacleCells = Array.isArray(state.cameraMap?.cells)
+        ? state.cameraMap.cells
+        : [];
+      if (cameraFreeCells.length || cameraObstacleCells.length) {
+        const rawCellSize = Number(state.cameraMap.cellSize);
+        const cellSize = Number.isFinite(rawCellSize) && rawCellSize > 0 ? rawCellSize : 0.1;
+        const cellCanvasSize = Math.max(4, cellSize * SCALE * 0.9);
+
+        cameraFreeCells.forEach((cell) => {
+          const confidenceRaw = Number(cell?.confidence);
+          const confidence = Number.isFinite(confidenceRaw) ? Math.max(0, confidenceRaw) : 0;
+          const intensity = Math.max(0.12, Math.min(1, confidence / 10));
+          const point = worldToCanvas(cell.x, cell.y);
+
+          ctx.fillStyle = `rgba(45, 212, 191, ${0.06 + intensity * 0.16})`;
+          ctx.strokeStyle = `rgba(20, 184, 166, ${0.10 + intensity * 0.22})`;
+          ctx.lineWidth = 1;
+          ctx.fillRect(
+            point.x - cellCanvasSize / 2,
+            point.y - cellCanvasSize / 2,
+            cellCanvasSize,
+            cellCanvasSize
+          );
+          ctx.strokeRect(
+            point.x - cellCanvasSize / 2,
+            point.y - cellCanvasSize / 2,
+            cellCanvasSize,
+            cellCanvasSize
+          );
+        });
+
+        cameraObstacleCells.forEach((cell) => {
+          const confidenceRaw = Number(cell?.confidence);
+          const confidence = Number.isFinite(confidenceRaw) ? Math.max(0, confidenceRaw) : 0;
+          const intensity = Math.max(0.18, Math.min(1, confidence / 8));
+          const point = worldToCanvas(cell.x, cell.y);
+
+          ctx.fillStyle = `rgba(168, 85, 247, ${0.10 + intensity * 0.24})`;
+          ctx.strokeStyle = `rgba(126, 34, 206, ${0.22 + intensity * 0.42})`;
+          ctx.lineWidth = 1.2;
+          ctx.beginPath();
+          ctx.arc(point.x, point.y, cellCanvasSize * 0.55, 0, Math.PI * 2);
+          ctx.fill();
+          ctx.stroke();
+        });
+      }
+
       state.zoneEntries.forEach((zone) => {
         if (zone.points.length > 1) {
           ctx.setLineDash([10, 8]);
           ctx.strokeStyle = zone.color.stroke;
           ctx.lineWidth = 3;
+          ctx.shadowColor = "rgba(15, 23, 42, 0.18)";
+          ctx.shadowBlur = 7;
           ctx.beginPath();
 
           zone.points.forEach((entry, index) => {
@@ -146,6 +201,8 @@ export default function PlannerCanvas({
           }
 
           ctx.stroke();
+          ctx.shadowColor = "transparent";
+          ctx.shadowBlur = 0;
           ctx.setLineDash([]);
         }
 
