@@ -1,6 +1,7 @@
 ﻿import { useEffect, useRef, useState } from "react";
 import {
   ALGORITHM_OPTIONS,
+  TASK_OPTIONS,
   getAlgorithmFields,
   getAlgorithmLabel,
   getDefaultAlgorithmParams,
@@ -11,10 +12,13 @@ import {
 import { useMemo } from "react";
 import {
   DEFAULT_POINT_TASK,
+  HALF_HEIGHT,
+  HALF_WIDTH,
   buildObstacleAwareRoute,
   canvasToWorld,
   DEFAULT_SURFACE_ZONES,
   isInsideMap,
+  pointInAnyPolygon,
   routeCrossesAnyLimitPolygon,
   sanitizeRouteForController,
   worldToCanvas,
@@ -41,6 +45,8 @@ import { DEFAULT_ENERGY_OPTIONS } from "../lib/energyModel";
 import PlannerCanvas from "../components/dashboard/PlannerCanvas";
 import PlannerLeftSidebar from "../components/dashboard/PlannerLeftSidebar";
 import PlannerRightSidebar from "../components/dashboard/PlannerRightSidebar";
+
+import * as XLSX from "xlsx";   
 
 const ENERGY_SHORTAGE_FALLBACK =
   "Запаса хода не хватает: добавьте станции зарядки или увеличьте запас.";
@@ -177,6 +183,229 @@ const parseLooseNumber = (rawValue) => {
 const formatNumber = (value, digits) =>
   Number(value.toFixed(digits)).toString();
 
+const randomBetween = (min, max) => min + Math.random() * (max - min);
+
+const isFinitePoint = (point) =>
+  Number.isFinite(point?.x) && Number.isFinite(point?.y);
+
+const normalizeImportedZoneMeta = (zone, index) => ({
+  id:
+    typeof zone?.id === "string" && zone.id.trim()
+      ? zone.id.trim()
+      : `zone-${index + 1}`,
+  name:
+    typeof zone?.name === "string" && zone.name.trim()
+      ? zone.name.trim()
+      : `Зона ${index + 1}`,
+  closed: Boolean(zone?.closed),
+});
+
+const deriveNextZoneNumber = (zones) => {
+  const maxNumber = zones.reduce((best, zone) => {
+    const idMatch = String(zone?.id ?? "").match(/zone-(\d+)/i);
+    const nameMatch = String(zone?.name ?? "").match(/(\d+)/);
+    const candidates = [idMatch?.[1], nameMatch?.[1]]
+      .map((value) => Number(value))
+      .filter(Number.isFinite);
+
+    return candidates.length ? Math.max(best, ...candidates) : best;
+  }, 1);
+
+  return Math.max(2, maxNumber + 1);
+};
+
+const normalizeImportedGraph = (rawGraph) => {
+  if (!rawGraph || typeof rawGraph !== "object") {
+    throw new Error("Граф должен быть объектом JSON.");
+  }
+
+  if (Array.isArray(rawGraph.points)) {
+    const zonesSource =
+      Array.isArray(rawGraph.limitZones) && rawGraph.limitZones.length
+        ? rawGraph.limitZones
+        : [INITIAL_ZONE];
+    const limitZones = zonesSource.map((zone, index) =>
+      normalizeImportedZoneMeta(zone, index)
+    );
+    const zoneIds = new Set(limitZones.map((zone) => zone.id));
+    const points = rawGraph.points
+      .filter((point) => isFinitePoint(point))
+      .filter((point) => isInsideMap(point))
+      .map((point) => {
+        if (point.kind === "limit") {
+          return {
+            x: point.x,
+            y: point.y,
+            kind: "limit",
+            zoneId: zoneIds.has(point.zoneId) ? point.zoneId : limitZones[0].id,
+            task: null,
+          };
+        }
+
+        if (point.kind === "charge") {
+          return {
+            x: point.x,
+            y: point.y,
+            kind: "charge",
+            zoneId: null,
+            task: null,
+          };
+        }
+
+        return {
+          x: point.x,
+          y: point.y,
+          kind: "visit",
+          zoneId: null,
+          task: point.task || DEFAULT_POINT_TASK,
+        };
+      });
+
+    return {
+      points,
+      limitZones,
+      routeTaskKey: rawGraph.routeTaskKey,
+      algorithmKey: rawGraph.algorithmKey,
+      activeLimitZoneId: rawGraph.activeLimitZoneId,
+    };
+  }
+
+  const limitZones = Array.isArray(rawGraph.zoneEntries)
+    ? rawGraph.zoneEntries.map((zone, index) => normalizeImportedZoneMeta(zone, index))
+    : [INITIAL_ZONE];
+  const points = [];
+
+  for (const visitEntry of Array.isArray(rawGraph.visitEntries) ? rawGraph.visitEntries : []) {
+    const point = visitEntry?.point;
+    if (!isFinitePoint(point) || !isInsideMap(point)) continue;
+    points.push({
+      x: point.x,
+      y: point.y,
+      kind: "visit",
+      zoneId: null,
+      task: visitEntry?.task || point?.task || DEFAULT_POINT_TASK,
+    });
+  }
+
+  for (const chargeEntry of Array.isArray(rawGraph.chargeEntries) ? rawGraph.chargeEntries : []) {
+    const point = chargeEntry?.point;
+    if (!isFinitePoint(point) || !isInsideMap(point)) continue;
+    points.push({
+      x: point.x,
+      y: point.y,
+      kind: "charge",
+      zoneId: null,
+      task: null,
+    });
+  }
+
+  limitZones.forEach((zone) => {
+    const sourceZone = Array.isArray(rawGraph.zoneEntries)
+      ? rawGraph.zoneEntries.find((entry) => String(entry?.id) === zone.id)
+      : null;
+    const sourcePoints = Array.isArray(sourceZone?.points) ? sourceZone.points.slice() : [];
+    sourcePoints
+      .sort((left, right) => (Number(left?.order) || 0) - (Number(right?.order) || 0))
+      .forEach((entry) => {
+        const point = entry?.point;
+        if (!isFinitePoint(point) || !isInsideMap(point)) return;
+        points.push({
+          x: point.x,
+          y: point.y,
+          kind: "limit",
+          zoneId: zone.id,
+          task: null,
+        });
+      });
+  });
+
+  return {
+    points,
+    limitZones,
+    routeTaskKey: rawGraph.routeTaskKey,
+    algorithmKey: rawGraph.algorithmKey,
+    activeLimitZoneId: rawGraph.activeLimitZoneId,
+  };
+};
+
+const pickRandomObstacleCenter = ({
+  telemetry,
+  optimizedRoute,
+  points,
+  polygons,
+  obstacle,
+}) => {
+  const allPoints = Array.isArray(points) ? points : [];
+  const route = Array.isArray(optimizedRoute) ? optimizedRoute : [];
+  const obstacleSizeX = Number(obstacle?.sizeX) || 0.8;
+  const obstacleSizeY = Number(obstacle?.sizeY) || 0.8;
+  const obstacleRadius = Math.hypot(obstacleSizeX, obstacleSizeY) * 0.5;
+  const protectedPointRadius = obstacleRadius + 0.55;
+  const routeBiasAttempts = 28;
+  const totalAttempts = 120;
+
+  const isSafe = (candidate) => {
+    if (!isInsideMap(candidate)) return false;
+    if (pointInAnyPolygon(candidate, polygons)) return false;
+
+    const robotDistance = Math.hypot(candidate.x - telemetry.x, candidate.y - telemetry.y);
+    if (robotDistance < 1.1) return false;
+
+    for (const point of allPoints) {
+      if (Math.hypot(candidate.x - point.x, candidate.y - point.y) < protectedPointRadius) {
+        return false;
+      }
+    }
+
+    for (const point of route) {
+      if (Math.hypot(candidate.x - point.x, candidate.y - point.y) < protectedPointRadius) {
+        return false;
+      }
+    }
+
+    return true;
+  };
+
+  for (let attempt = 0; attempt < totalAttempts; attempt += 1) {
+    let candidate = null;
+    const useRouteBias = route.length > 1 && attempt < routeBiasAttempts;
+
+    if (useRouteBias) {
+      const segmentIndex = Math.floor(Math.random() * (route.length - 1));
+      const a = route[segmentIndex];
+      const b = route[segmentIndex + 1];
+      const t = Math.random();
+      const ax = a.x + (b.x - a.x) * t;
+      const ay = a.y + (b.y - a.y) * t;
+      const dx = b.x - a.x;
+      const dy = b.y - a.y;
+      const segmentLength = Math.hypot(dx, dy);
+
+      if (segmentLength > 1e-6) {
+        const normalX = -dy / segmentLength;
+        const normalY = dx / segmentLength;
+        const sign = Math.random() < 0.5 ? -1 : 1;
+        const lateralOffset = randomBetween(0.22, 0.85);
+        candidate = {
+          x: ax + normalX * lateralOffset * sign,
+          y: ay + normalY * lateralOffset * sign,
+        };
+      }
+    }
+
+    if (!candidate) {
+      candidate = {
+        x: randomBetween(-HALF_WIDTH + 1.2, HALF_WIDTH - 1.2),
+        y: randomBetween(-HALF_HEIGHT + 1.2, HALF_HEIGHT - 1.2),
+      };
+    }
+
+    if (isSafe(candidate)) return candidate;
+  }
+
+  return null;
+};
+
 export default function Dashboard() {
   const canvasRef = useRef(null);
   const routeWsRef = useRef(null);
@@ -282,57 +511,154 @@ export default function Dashboard() {
   );
   const autoRouteSyncToken = `${zoneSyncPayloadText}|${chargePointsRoutingText}|${batteryRangeMeters}|${cruiseSpeedMps}|${payloadKg}`;
 
-  
-  const handleImportGraph = (importedData) => {
-  const newPoints = [];
+  const handleImportGraph = (rawGraph, sourceName = "graph.json") => {
+    const imported = normalizeImportedGraph(rawGraph);
+    const importedZones =
+      imported.limitZones.length > 0 ? imported.limitZones : [INITIAL_ZONE];
 
-  (importedData.visitEntries || []).forEach(entry => {
-    newPoints.push({
-      kind: 'visit',
-      x: entry.point.x,
-      y: entry.point.y,
-      task: entry.task || DEFAULT_POINT_TASK,
-      index: entry.index,
-    });
-  });
+    setPoints(imported.points);
+    setLimitZones(importedZones);
+    setActiveLimitZoneId(
+      importedZones.some((zone) => zone.id === imported.activeLimitZoneId)
+        ? imported.activeLimitZoneId
+        : importedZones[0].id
+    );
+    setNextZoneNumber(deriveNextZoneNumber(importedZones));
+    setActivePointKind("visit");
+    setExpandedPoint(null);
+    setHoveredPointIndex(null);
+    setRouteSeed([]);
+    setOptimizedRoute([]);
+    setEnergyWarning("");
+    setRouteEnergyStats((prev) => ({
+      ...prev,
+      routeEnergy: 0,
+      estimatedTimeSec: 0,
+      averageSlipRisk: 0,
+    }));
 
-  (importedData.chargeEntries || []).forEach(entry => {
-    newPoints.push({
-      kind: 'charge',
-      x: entry.point.x,
-      y: entry.point.y,
-      index: entry.index,
-    });
-  });
-  const newLimitZones = [];
-  (importedData.zoneEntries || []).forEach(zone => {
-    const zoneId = zone.id;
-    newLimitZones.push({
-      id: zoneId,
-      name: zone.name,
-      closed: zone.closed,
-    });
-    (zone.points || []).forEach(pointEntry => {
+    if (typeof imported.routeTaskKey === "string") {
+      const hasTask = TASK_OPTIONS.some((task) => task.key === imported.routeTaskKey);
+      if (hasTask) setRouteTaskKey(imported.routeTaskKey);
+    }
+
+    if (typeof imported.algorithmKey === "string") {
+      const hasAlgorithm = ALGORITHM_OPTIONS.some(
+        (algorithm) => algorithm.key === imported.algorithmKey
+      );
+      if (hasAlgorithm) setAlgorithmKey(imported.algorithmKey);
+    }
+
+    const visitCount = imported.points.filter((point) => point.kind === "visit").length;
+    const chargeCount = imported.points.filter((point) => point.kind === "charge").length;
+    const zonePointCount = imported.points.filter((point) => point.kind === "limit").length;
+    setStatus(
+      `Граф импортирован из ${sourceName}: точек посещения ${visitCount}, зарядок ${chargeCount}, точек зон ${zonePointCount}.`
+    );
+  };
+
+  // ---------- Вспомогательные функции для работы с точками ----------
+  const addPoint = (kind, x, y, task = null) => {
+    setPoints(prev => [
+      ...prev,
+      {
+        kind,
+        x,
+        y,
+        zoneId: kind === 'limit' ? activeLimitZoneId : null,
+        task: kind === 'visit' ? task : null,
+      }
+    ]);
+    if (kind === 'visit') clearRouteState();
+    else clearRouteState({ dropSolvedRoute: false });
+  };
+
+  const clearPoints = (kind = null) => {
+    if (kind === 'limit') resetZones();
+    setPoints(prev => (kind ? prev.filter(p => p.kind !== kind) : []));
+    if (kind === 'visit') clearRouteState();
+    else if (kind === 'limit' || kind === 'charge') clearRouteState({ dropSolvedRoute: false });
+    else clearRouteState();
+    setStatus(
+      kind === 'visit'
+        ? "Маршрутные точки очищены."
+        : kind === 'charge'
+          ? "Станции зарядки очищены."
+        : kind === 'limit'
+          ? "Ограничивающие зоны очищены."
+          : "Все точки очищены."
+    );
+  };
+  // ----------------------------------------------------------------
+
+  const importFromJSON = (data) => {
+    const newPoints = [];
+    (data.visitEntries || []).forEach(entry => {
       newPoints.push({
-        kind: 'limit',
-        zoneId: zoneId,
-        x: pointEntry.point.x,
-        y: pointEntry.point.y,
-        order: pointEntry.order,
+        kind: 'visit',
+        x: entry.point.x,
+        y: entry.point.y,
+        task: entry.task || DEFAULT_POINT_TASK,
       });
     });
-  });
+    (data.chargeEntries || []).forEach(entry => {
+      newPoints.push({
+        kind: 'charge',
+        x: entry.point.x,
+        y: entry.point.y,
+      });
+    });
+    setPoints(newPoints);
+    setOptimizedRoute([]);
+    setStatus(`Импортировано ${newPoints.length} точек из JSON`);
+  };
 
-  setPoints(newPoints);
-  setLimitZones(newLimitZones);
+  const handleImportFile = async (file) => {
+    const ext = file.name.split('.').pop().toLowerCase();
+    try {
+      if (ext === 'json') {
+        const text = await file.text();
+        const data = JSON.parse(text);
+        importFromJSON(data);
+        return;
+      }
 
-  setOptimizedRoute([]);
-  setHoveredPointIndex(null);
-  
-  console.log('Граф успешно импортирован');
-};
-  
-  
+      if (['xlsx', 'xls', 'csv'].includes(ext)) {
+        const data = await file.arrayBuffer();
+        const workbook = XLSX.read(data);
+        const sheet = workbook.Sheets[workbook.SheetNames[0]];
+        const rows = XLSX.utils.sheet_to_json(sheet, { header: 1, defval: "" });
+
+        if (!rows || rows.length < 2) throw new Error('Файл пуст');
+
+        const header = rows[0].map(cell => String(cell).trim().toLowerCase());
+        let xCol = header.findIndex(c => c === 'x');
+        let yCol = header.findIndex(c => c === 'y');
+        if (xCol === -1) xCol = 0;
+        if (yCol === -1) yCol = 1;
+
+        const points = [];
+        for (let i = 1; i < rows.length; i++) {
+          const x = parseFloat(rows[i][xCol]);
+          const y = parseFloat(rows[i][yCol]);
+          if (!isNaN(x) && !isNaN(y)) points.push({ x, y });
+        }
+
+        if (points.length === 0) throw new Error('Нет валидных координат');
+
+        clearPoints('visit');
+        clearPoints('charge');
+        points.forEach(p => addPoint('visit', p.x, p.y, DEFAULT_POINT_TASK));
+
+        alert(`Импортировано ${points.length} точек. Постройте маршрут.`);
+      } else {
+        alert('Неподдерживаемый формат файла');
+      }
+    } catch (err) {
+      alert('Ошибка импорта: ' + err.message);
+    }
+  };
+
   useEffect(() => {
     let closed = false;
     let ws = null;
@@ -771,26 +1097,6 @@ export default function Dashboard() {
     );
   };
 
-  const clearPoints = (kind = null) => {
-    if (kind === "limit") resetZones();
-    setPoints((prev) => (kind ? prev.filter((point) => point.kind !== kind) : []));
-    if (kind === "visit") clearRouteState();
-    else if (kind === "limit" || kind === "charge") {
-      clearRouteState({ dropSolvedRoute: false });
-    } else {
-      clearRouteState();
-    }
-    setStatus(
-      kind === "visit"
-        ? "Маршрутные точки очищены."
-        : kind === "charge"
-          ? "Станции зарядки очищены."
-        : kind === "limit"
-          ? "Ограничивающие зоны очищены."
-          : "Все точки очищены."
-    );
-  };
-
   const deletePoint = (index) => {
     const targetPoint = points[index];
     setPoints((prev) => prev.filter((_, pointIndex) => pointIndex !== index));
@@ -1071,9 +1377,51 @@ export default function Dashboard() {
     sendPayload(ws);
   };
 
+  const addRandomObstacle = () => {
+    const obstacle = {
+      sizeX: Number(randomBetween(0.46, 1.15).toFixed(3)),
+      sizeY: Number(randomBetween(0.38, 0.95).toFixed(3)),
+      height: Number(randomBetween(0.32, 0.9).toFixed(3)),
+    };
+    const center = pickRandomObstacleCenter({
+      telemetry,
+      optimizedRoute,
+      points,
+      polygons: plannerModel.polygons,
+      obstacle,
+    });
+
+    if (!center) {
+      setStatus("Не удалось подобрать безопасное место для случайного препятствия.");
+      return;
+    }
+
+    const payload = {
+      type: "spawn_random_obstacle",
+      commandId: Date.now(),
+      obstacle: {
+        x: Number(center.x.toFixed(4)),
+        y: Number(center.y.toFixed(4)),
+        ...obstacle,
+      },
+    };
+
+    sendRouteChannelPayload(routeWsRef, payload, {
+      onSent: () => {
+        setStatus(
+          `Случайное препятствие добавлено: (${payload.obstacle.x.toFixed(2)}, ${payload.obstacle.y.toFixed(2)}).`
+        );
+      },
+      onError: () => {
+        setStatus("Не удалось отправить команду добавления препятствия.");
+      },
+    });
+  };
+
   return (
     <div className="flex h-screen bg-stone-100 text-stone-900">
       <PlannerLeftSidebar
+        onImportFile={handleImportFile}
         activePointKind={activePointKind}
         onActivePointKindChange={setActivePointKind}
         onClearVisitPoints={() => clearPoints("visit")}
@@ -1092,6 +1440,7 @@ export default function Dashboard() {
         isOptimizing={isOptimizing}
         onOptimizeRoute={optimizeRoute}
         onSendRoute={sendRoute}
+        onAddRandomObstacle={addRandomObstacle}
         onClearAll={() => clearPoints()}
         hasRoute={optimizedRoute.length > 0}
         routeLength={plannerModel.routeLength}
@@ -1113,8 +1462,6 @@ export default function Dashboard() {
         onPayloadChange={handlePayloadChange}
         onPayloadBlur={handlePayloadBlur}
         routeEnergyStats={routeEnergyStats}
-        onImportGraph={handleImportGraph}
-      
       />
 
       <PlannerCanvas

@@ -39,6 +39,7 @@ const parseLooseInput = (rawValue, fallback) => {
 
 
 export default function PlannerLeftSidebar({
+  onImportFile,
   activePointKind,
   onActivePointKindChange,
   onClearVisitPoints,
@@ -87,22 +88,14 @@ const fileInputRef = useRef(null);
     fileInputRef.current?.click();
   };
 
-
-  const handleFileChange = (event) => {
+  const handleFileChange = async (event) => {
     const file = event.target.files?.[0];
     if (!file) return;
-    const reader = new FileReader();
-    reader.onload = (e) => {
-      try {
-        const graphData = JSON.parse(e.target.result);
-        onImportGraph?.(graphData);
-      } catch (err) {
-        console.error("Ошибка парсинга JSON:", err);
-        alert("Не удалось загрузить файл: неверный формат JSON");
-      }
-      event.target.value = "";
-    };
-    reader.readAsText(file);
+  
+    if (onImportFile) {
+      await onImportFile(file);
+    }  
+    event.target.value = '';
   };
 
 
@@ -403,20 +396,18 @@ const fileInputRef = useRef(null);
           </p>
         )}
       </div>
-
-
-        <div className={cardCls}>
+      <div className={cardCls}>
         <h3 className="text-sm font-semibold mb-3">Импорт</h3>
         <button
           onClick={handleImportClick}
-          className="w-full rounded-xl border border-stone-300 bg-stone-100 px-3 py-2 text-sm font-semibold text-stone-800 shadow-sm transition hover:bg-stone-200"
+          className="mt-2 w-full h-11 rounded-xl border border-emerald-300 bg-emerald-50 text-emerald-800 font-semibold transition hover:bg-emerald-100"
         >
-          Загрузить граф (JSON)
+          Импорт графа (JSON/Excel/CSV)
         </button>
         <input
           ref={fileInputRef}
           type="file"
-          accept=".json"
+          accept=".json,.xlsx,.xls,.csv"
           onChange={handleFileChange}
           className="hidden"
         />
