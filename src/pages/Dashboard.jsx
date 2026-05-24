@@ -53,6 +53,8 @@ import {
 import PlannerCanvas from "../components/dashboard/PlannerCanvas";
 import PlannerLeftSidebar from "../components/dashboard/PlannerLeftSidebar";
 import PlannerRightSidebar from "../components/dashboard/PlannerRightSidebar";
+import SidebarCollapseRail from "../components/dashboard/SidebarCollapseRail";
+import { loadPlannerUiState, savePlannerUiState } from "../lib/plannerUiState";
 import * as XLSX from "xlsx";
 
 const ENERGY_SHORTAGE_FALLBACK =
@@ -854,6 +856,7 @@ export default function Dashboard() {
     accumulatedSec: 0,
     startedAtMs: null,
   });
+  const [plannerUiState, setPlannerUiState] = useState(loadPlannerUiState);
   const [limitZones, setLimitZones] = useState([INITIAL_ZONE]);
   const [activeLimitZoneId, setActiveLimitZoneId] = useState(INITIAL_ZONE.id);
   const [nextZoneNumber, setNextZoneNumber] = useState(2);
@@ -2104,6 +2107,14 @@ export default function Dashboard() {
     setMapExportPromptOpen(true);
   };
 
+  const setSidebarCollapsed = (key, collapsed) => {
+    setPlannerUiState((prev) => {
+      const next = { ...prev, [key]: collapsed };
+      savePlannerUiState(next);
+      return next;
+    });
+  };
+
   const exportMapImage = async (variant = "lidar") => {
     const normalizedVariant = variant === "camera" ? "camera" : "lidar";
     const selectedMap =
@@ -2179,63 +2190,71 @@ export default function Dashboard() {
   };
 
   return (
-    <div className="flex h-screen bg-stone-100 text-stone-900">
-      <PlannerLeftSidebar
-        onImportFile={handleImportFile}
-        activePointKind={activePointKind}
-        onActivePointKindChange={setActivePointKind}
-        onClearVisitPoints={() => clearPoints("visit")}
-        onClearChargePoints={() => clearPoints("charge")}
-        onClearLimitPoints={() => clearPoints("limit")}
-        routeTaskKey={routeTaskKey}
-        onRouteTaskChange={handleRouteTaskChange}
-        algorithmKey={algorithmKey}
-        onAlgorithmChange={handleAlgorithmChange}
-        status={status}
-        energyWarning={energyWarning}
-        routeBlocked={plannerModel.routeBlocked}
-        algorithmFields={algorithmFields}
-        selectedAlgorithmParams={selectedAlgorithmParams}
-        onAlgorithmParamChange={updateAlgorithmParam}
-        isOptimizing={isOptimizing}
-        onOptimizeRoute={optimizeRoute}
-        onSendRoute={sendRoute}
-        onAddRandomObstacle={addRandomObstacle}
-        onClearAll={() => clearPoints()}
-        hasRoute={optimizedRoute.length > 0}
-        routeLength={plannerModel.routeLength}
-        visitCount={plannerModel.visitEntries.length}
-        chargeCount={plannerModel.chargeEntries.length}
-        zoneCount={plannerModel.zoneEntries.length}
-        polygonCount={plannerModel.polygons.length}
-        adjustedVisitCount={plannerModel.adjustedVisits.length}
-        activeZoneName={plannerModel.activeZoneName}
-        batteryRangeInput={batteryRangeInput}
-        onBatteryRangeChange={handleBatteryRangeChange}
-        onBatteryRangeBlur={handleBatteryRangeBlur}
-        cruiseSpeedMps={cruiseSpeedMps}
-        cruiseSpeedInput={cruiseSpeedInput}
-        onCruiseSpeedChange={handleCruiseSpeedChange}
-        onCruiseSpeedBlur={handleCruiseSpeedBlur}
-        payloadKg={payloadKg}
-        payloadInput={payloadInput}
-        onPayloadChange={handlePayloadChange}
-        onPayloadBlur={handlePayloadBlur}
-        routeEnergyStats={routeEnergyStats}
-        routeInfluenceRows={routeInfluenceRows}
-        routeTiming={routeTimingDisplay}
-        surfaceZones={surfaceZones}
-        activeSurfaceZoneId={activeSurfaceZoneId}
-        activeSurfaceZone={activeSurfaceZone}
-        activeSurfaceProfileKey={activeSurfaceProfileKey}
-        onActiveSurfaceProfileChange={updateActiveSurfaceProfile}
-        onCreateSurfaceZone={createSurfaceZone}
-        onSelectSurfaceZone={selectSurfaceZone}
-        onToggleSurfaceZoneClosed={toggleSurfaceZoneClosed}
-        onClearSurfaceZone={clearSurfaceZone}
-        onRemoveSurfaceZone={removeSurfaceZone}
-        onClearAllSurfaceZones={clearAllSurfaceZones}
-      />
+    <div className="flex h-screen min-h-0 bg-stone-100 text-stone-900">
+      {plannerUiState.leftCollapsed ? (
+        <SidebarCollapseRail
+          side="left"
+          onExpand={() => setSidebarCollapsed("leftCollapsed", false)}
+        />
+      ) : (
+        <PlannerLeftSidebar
+          onCollapse={() => setSidebarCollapsed("leftCollapsed", true)}
+          onImportFile={handleImportFile}
+          activePointKind={activePointKind}
+          onActivePointKindChange={setActivePointKind}
+          onClearVisitPoints={() => clearPoints("visit")}
+          onClearChargePoints={() => clearPoints("charge")}
+          onClearLimitPoints={() => clearPoints("limit")}
+          routeTaskKey={routeTaskKey}
+          onRouteTaskChange={handleRouteTaskChange}
+          algorithmKey={algorithmKey}
+          onAlgorithmChange={handleAlgorithmChange}
+          status={status}
+          energyWarning={energyWarning}
+          routeBlocked={plannerModel.routeBlocked}
+          algorithmFields={algorithmFields}
+          selectedAlgorithmParams={selectedAlgorithmParams}
+          onAlgorithmParamChange={updateAlgorithmParam}
+          isOptimizing={isOptimizing}
+          onOptimizeRoute={optimizeRoute}
+          onSendRoute={sendRoute}
+          onAddRandomObstacle={addRandomObstacle}
+          onClearAll={() => clearPoints()}
+          hasRoute={optimizedRoute.length > 0}
+          routeLength={plannerModel.routeLength}
+          visitCount={plannerModel.visitEntries.length}
+          chargeCount={plannerModel.chargeEntries.length}
+          zoneCount={plannerModel.zoneEntries.length}
+          polygonCount={plannerModel.polygons.length}
+          adjustedVisitCount={plannerModel.adjustedVisits.length}
+          activeZoneName={plannerModel.activeZoneName}
+          batteryRangeInput={batteryRangeInput}
+          onBatteryRangeChange={handleBatteryRangeChange}
+          onBatteryRangeBlur={handleBatteryRangeBlur}
+          cruiseSpeedMps={cruiseSpeedMps}
+          cruiseSpeedInput={cruiseSpeedInput}
+          onCruiseSpeedChange={handleCruiseSpeedChange}
+          onCruiseSpeedBlur={handleCruiseSpeedBlur}
+          payloadKg={payloadKg}
+          payloadInput={payloadInput}
+          onPayloadChange={handlePayloadChange}
+          onPayloadBlur={handlePayloadBlur}
+          routeEnergyStats={routeEnergyStats}
+          routeInfluenceRows={routeInfluenceRows}
+          routeTiming={routeTimingDisplay}
+          surfaceZones={surfaceZones}
+          activeSurfaceZoneId={activeSurfaceZoneId}
+          activeSurfaceZone={activeSurfaceZone}
+          activeSurfaceProfileKey={activeSurfaceProfileKey}
+          onActiveSurfaceProfileChange={updateActiveSurfaceProfile}
+          onCreateSurfaceZone={createSurfaceZone}
+          onSelectSurfaceZone={selectSurfaceZone}
+          onToggleSurfaceZoneClosed={toggleSurfaceZoneClosed}
+          onClearSurfaceZone={clearSurfaceZone}
+          onRemoveSurfaceZone={removeSurfaceZone}
+          onClearAllSurfaceZones={clearAllSurfaceZones}
+        />
+      )}
 
       <PlannerCanvas
         canvasRef={canvasRef}
@@ -2250,42 +2269,50 @@ export default function Dashboard() {
         onCanvasMouseLeave={finishDragging}
       />
 
-      <PlannerRightSidebar
-        activeZone={plannerModel.activeZone}
-        activeZoneName={plannerModel.activeZoneName}
-        activeLimitZoneId={activeLimitZoneId}
-        zoneEntries={plannerModel.zoneEntries}
-        visitEntries={plannerModel.visitEntries}
-        chargeEntries={plannerModel.chargeEntries}
-        plannedVisitEntries={plannerModel.plannedVisitEntries}
-        expandedPoint={expandedPoint}
-        hoveredPointIndex={hoveredPointIndex}
-        visitsInsideLimitCount={plannerModel.visitsInsideLimit.length}
-        polygonCount={plannerModel.polygons.length}
-        adjustedVisitCount={plannerModel.adjustedVisits.length}
-        routeBlocked={plannerModel.routeBlocked}
-        telemetry={telemetryForSidebar}
-        telemetryWsUp={telemetryWsUp}
-        routeWsUp={routeWsUp}
-        solverApiUp={solverApiUp}
-        mappingSurveyMode={mappingSurveyMode}
-        mappingSurveyModes={MAPPING_SURVEY_MODES}
-        onMappingSurveyModeChange={setMappingSurveyMode}
-        mapExportPromptOpen={mapExportPromptOpen}
-        onStartMappingSurvey={startMappingSurvey}
-        onRequestMapExport={requestMapExport}
-        onExportMapVariant={exportMapImage}
-        onCancelMapExport={() => setMapExportPromptOpen(false)}
-        onCreateZone={createZone}
-        onSelectZone={selectZone}
-        onToggleZoneClosed={toggleZoneClosed}
-        onClearZone={clearZone}
-        onRemoveZone={removeZone}
-        onToggleExpandedPoint={setExpandedPoint}
-        onHoverPoint={setHoveredPointIndex}
-        onDeletePoint={deletePoint}
-        onUpdatePointTask={updatePointTask}
-      />
+      {plannerUiState.rightCollapsed ? (
+        <SidebarCollapseRail
+          side="right"
+          onExpand={() => setSidebarCollapsed("rightCollapsed", false)}
+        />
+      ) : (
+        <PlannerRightSidebar
+          onCollapse={() => setSidebarCollapsed("rightCollapsed", true)}
+          activeZone={plannerModel.activeZone}
+          activeZoneName={plannerModel.activeZoneName}
+          activeLimitZoneId={activeLimitZoneId}
+          zoneEntries={plannerModel.zoneEntries}
+          visitEntries={plannerModel.visitEntries}
+          chargeEntries={plannerModel.chargeEntries}
+          plannedVisitEntries={plannerModel.plannedVisitEntries}
+          expandedPoint={expandedPoint}
+          hoveredPointIndex={hoveredPointIndex}
+          visitsInsideLimitCount={plannerModel.visitsInsideLimit.length}
+          polygonCount={plannerModel.polygons.length}
+          adjustedVisitCount={plannerModel.adjustedVisits.length}
+          routeBlocked={plannerModel.routeBlocked}
+          telemetry={telemetryForSidebar}
+          telemetryWsUp={telemetryWsUp}
+          routeWsUp={routeWsUp}
+          solverApiUp={solverApiUp}
+          mappingSurveyMode={mappingSurveyMode}
+          mappingSurveyModes={MAPPING_SURVEY_MODES}
+          onMappingSurveyModeChange={setMappingSurveyMode}
+          mapExportPromptOpen={mapExportPromptOpen}
+          onStartMappingSurvey={startMappingSurvey}
+          onRequestMapExport={requestMapExport}
+          onExportMapVariant={exportMapImage}
+          onCancelMapExport={() => setMapExportPromptOpen(false)}
+          onCreateZone={createZone}
+          onSelectZone={selectZone}
+          onToggleZoneClosed={toggleZoneClosed}
+          onClearZone={clearZone}
+          onRemoveZone={removeZone}
+          onToggleExpandedPoint={setExpandedPoint}
+          onHoverPoint={setHoveredPointIndex}
+          onDeletePoint={deletePoint}
+          onUpdatePointTask={updatePointTask}
+        />
+      )}
     </div>
   );
 }
