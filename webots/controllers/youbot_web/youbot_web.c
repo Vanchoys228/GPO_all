@@ -472,8 +472,12 @@ static const char *CAMERA_MAP_PATH = "..\\..\\..\\web_state\\camera_map.json";
 static const char *CAMERA_MAP_TEMP_PATH = "..\\..\\..\\web_state\\camera_map.tmp";
 static const char *CAMERA_MAP_CSV_PATH = "..\\..\\..\\web_state\\camera_map.csv";
 static const char *CAMERA_MAP_CSV_TEMP_PATH = "..\\..\\..\\web_state\\camera_map_csv.tmp";
-static const char *CAMERA_FRAME_PATH = "..\\..\\..\\web_state\\camera_frame.bmp";
-static const char *CAMERA_FRAME_TEMP_PATH = "..\\..\\..\\web_state\\camera_frame.tmp.bmp";
+static const char *CAMERA_FRAME_BMP_PATH = "..\\..\\..\\web_state\\camera_frame.bmp";
+static const char *CAMERA_FRAME_BMP_TEMP_PATH = "..\\..\\..\\web_state\\camera_frame.tmp.bmp";
+static const char *CAMERA_FRAME_JPEG_PATH = "..\\..\\..\\web_state\\camera_frame.jpg";
+static const char *CAMERA_FRAME_JPEG_TEMP_PATH = "..\\..\\..\\web_state\\camera_frame.tmp.jpg";
+static const char *camera_frame_file = "camera_frame.bmp";
+static const char *camera_frame_mime = "image/bmp";
 
 static int point_near_zone(double x, double y, const LimitZone *zone, double clearance);
 static int point_near_zone_boundary(double x, double y, const LimitZone *zone, double tolerance);
@@ -1244,7 +1248,7 @@ static int write_virtual_camera_frame() {
   }
 
   draw_virtual_camera_overlay(pixels, effective_fov);
-  return write_bmp24(CAMERA_FRAME_TEMP_PATH, pixels, CAMERA_FRAME_WIDTH, CAMERA_FRAME_HEIGHT);
+  return write_bmp24(CAMERA_FRAME_BMP_TEMP_PATH, pixels, CAMERA_FRAME_WIDTH, CAMERA_FRAME_HEIGHT);
 }
 
 static void maybe_write_camera_frame() {
@@ -1253,7 +1257,9 @@ static void maybe_write_camera_frame() {
 
   if (camera_virtual_mode) {
     if (write_virtual_camera_frame() == 0) {
-      if (replace_file(CAMERA_FRAME_TEMP_PATH, CAMERA_FRAME_PATH) == 0) {
+      if (replace_file(CAMERA_FRAME_BMP_TEMP_PATH, CAMERA_FRAME_BMP_PATH) == 0) {
+        camera_frame_file = "camera_frame.bmp";
+        camera_frame_mime = "image/bmp";
         camera_frame_sequence += 1;
         camera_frame_time = wb_robot_get_time();
       }
@@ -1266,8 +1272,10 @@ static void maybe_write_camera_frame() {
     update_camera_obstacle_hint();
   }
 
-  if (wb_camera_save_image(front_camera, CAMERA_FRAME_TEMP_PATH, 70) == 0) {
-    if (replace_file(CAMERA_FRAME_TEMP_PATH, CAMERA_FRAME_PATH) == 0) {
+  if (wb_camera_save_image(front_camera, CAMERA_FRAME_JPEG_TEMP_PATH, 70) == 0) {
+    if (replace_file(CAMERA_FRAME_JPEG_TEMP_PATH, CAMERA_FRAME_JPEG_PATH) == 0) {
+      camera_frame_file = "camera_frame.jpg";
+      camera_frame_mime = "image/jpeg";
       camera_frame_sequence += 1;
       camera_frame_time = wb_robot_get_time();
     }
@@ -5778,8 +5786,8 @@ static void write_state_snapshot() {
   fprintf(file, "      \"height\": %d,\n", camera_height);
   fprintf(file, "      \"fov\": %.6f,\n", camera_fov);
   fprintf(file, "      \"mode\": \"%s\",\n", camera_virtual_mode ? "virtual_lidar" : "webots_camera");
-  fprintf(file, "      \"frameFile\": \"camera_frame.bmp\",\n");
-  fprintf(file, "      \"mimeType\": \"image/bmp\",\n");
+  fprintf(file, "      \"frameFile\": \"%s\",\n", camera_frame_file);
+  fprintf(file, "      \"mimeType\": \"%s\",\n", camera_frame_mime);
   fprintf(file, "      \"frameSequence\": %d,\n", camera_frame_sequence);
   fprintf(file, "      \"capturedAt\": %.6f,\n", camera_frame_time);
   fprintf(file, "      \"obstacleVisible\": %s,\n", camera_obstacle_visible ? "true" : "false");
@@ -5853,8 +5861,10 @@ int main(int argc, char **argv) {
   init_pose_tracking();
   reset_robot_pose();
   clear_persistent_map();
-  remove(CAMERA_FRAME_PATH);
-  remove(CAMERA_FRAME_TEMP_PATH);
+  remove(CAMERA_FRAME_BMP_PATH);
+  remove(CAMERA_FRAME_BMP_TEMP_PATH);
+  remove(CAMERA_FRAME_JPEG_PATH);
+  remove(CAMERA_FRAME_JPEG_TEMP_PATH);
   apply_motion_profile();
   motion_profile_last_modified = get_file_mtime(MOTION_PROFILE_PATH);
   if (motion_profile_last_modified >= 0) {
