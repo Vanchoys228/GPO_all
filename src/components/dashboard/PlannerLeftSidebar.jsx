@@ -35,6 +35,7 @@ const parseLooseInput = (rawValue, fallback) => {
 };
 
 export default function PlannerLeftSidebar({
+  onImportFile,
   activePointKind,
   onActivePointKindChange,
   onClearVisitPoints,
@@ -54,7 +55,6 @@ export default function PlannerLeftSidebar({
   onOptimizeRoute,
   onSendRoute,
   onAddRandomObstacle,
-  onImportGraph,
   onClearAll,
   hasRoute,
   routeLength,
@@ -83,24 +83,18 @@ export default function PlannerLeftSidebar({
     fileInputRef.current?.click();
   };
 
-  const handleFileChange = (event) => {
+  const handleFileChange = async (event) => {
     const file = event.target.files?.[0];
     if (!file) return;
 
-    const reader = new FileReader();
-    reader.onload = (loadEvent) => {
-      try {
-        const rawText = String(loadEvent.target?.result ?? "");
-        const parsed = JSON.parse(rawText);
-        onImportGraph?.(parsed, file.name);
-      } catch (error) {
-        console.error("Graph import failed", error);
+    try {
+      await onImportFile?.(file);
+    } catch (error) {
+      console.error("Graph import failed", error);
         window.alert("Не удалось импортировать граф: проверьте JSON-файл.");
-      } finally {
-        event.target.value = "";
-      }
-    };
-    reader.readAsText(file);
+    } finally {
+      event.target.value = "";
+    }
   };
 
   return (
@@ -423,7 +417,7 @@ export default function PlannerLeftSidebar({
         <input
           ref={fileInputRef}
           type="file"
-          accept=".json,application/json"
+          accept=".json,.xlsx,.xls,.csv,application/json"
           onChange={handleFileChange}
           className="hidden"
         />

@@ -49,6 +49,7 @@ import { DEFAULT_ENERGY_OPTIONS } from "../lib/energyModel";
 import PlannerCanvas from "../components/dashboard/PlannerCanvas";
 import PlannerLeftSidebar from "../components/dashboard/PlannerLeftSidebar";
 import PlannerRightSidebar from "../components/dashboard/PlannerRightSidebar";
+import * as XLSX from "xlsx";
 
 const ENERGY_SHORTAGE_FALLBACK =
   "Запаса хода не хватает: добавьте станции зарядки или увеличьте запас.";
@@ -568,6 +569,88 @@ export default function Dashboard() {
     const zonePointCount = imported.points.filter((point) => point.kind === "limit").length;
     setStatus(
       `Граф импортирован из ${sourceName}: точек посещения ${visitCount}, зарядок ${chargeCount}, точек зон ${zonePointCount}.`
+    );
+  };
+
+  const handleImportFile = async (file) => {
+    const extension = file.name.split(".").pop()?.toLowerCase() || "";
+
+    if (extension === "json") {
+      const rawText = await file.text();
+      handleImportGraph(JSON.parse(rawText), file.name);
+      return;
+    }
+
+    if (!["xlsx", "xls", "csv"].includes(extension)) {
+      throw new Error("Поддерживаются JSON, Excel и CSV.");
+    }
+
+    const workbook = XLSX.read(await file.arrayBuffer(), {
+      type: "array",
+      raw: false,
+    });
+    const firstSheetName = workbook.SheetNames[0];
+    const sheet = firstSheetName ? workbook.Sheets[firstSheetName] : null;
+    if (!sheet) throw new Error("В файле не найден лист с точками.");
+
+    const rows = XLSX.utils.sheet_to_json(sheet, { header: 1, defval: "" });
+    if (!rows.length) throw new Error("Файл пуст.");
+
+    const parseNumber = (value) => {
+      const normalized = String(value ?? "").trim().replace(",", ".");
+      if (!normalized) return null;
+      const parsed = Number(normalized);
+      return Number.isFinite(parsed) ? parsed : null;
+    };
+    const normalizeHeader = (value) => String(value ?? "").trim().toLowerCase();
+    const firstRow = rows[0] || [];
+    const firstRowHasCoordinates =
+      parseNumber(firstRow[0]) !== null && parseNumber(firstRow[1]) !== null;
+    const headers = firstRowHasCoordinates ? [] : firstRow.map(normalizeHeader);
+    const dataRows = firstRowHasCoordinates ? rows : rows.slice(1);
+    const findColumn = (aliases, fallback) => {
+      const index = headers.findIndex((header) => aliases.includes(header));
+      return index >= 0 ? index : fallback;
+    };
+
+    const xCol = findColumn(["x", "х", "xcoord", "x coordinate", "координата x"], 0);
+    const yCol = findColumn(["y", "у", "ycoord", "y coordinate", "координата y"], 1);
+    const kindCol = findColumn(["kind", "type", "тип", "роль"], -1);
+    const taskCol = findColumn(["task", "operation", "операция", "задача"], -1);
+
+    const points = dataRows
+      .map((row) => {
+        const x = parseNumber(row?.[xCol]);
+        const y = parseNumber(row?.[yCol]);
+        if (x === null || y === null) return null;
+
+        const kindText = kindCol >= 0 ? normalizeHeader(row?.[kindCol]) : "";
+        const kind =
+          kindText.includes("charge") || kindText.includes("зар")
+            ? "charge"
+            : kindText.includes("limit") || kindText.includes("zone") || kindText.includes("зон")
+              ? "limit"
+              : "visit";
+        return {
+          x,
+          y,
+          kind,
+          zoneId: kind === "limit" ? INITIAL_ZONE.id : null,
+          task: kind === "visit" && taskCol >= 0 ? String(row?.[taskCol] || DEFAULT_POINT_TASK) : null,
+        };
+      })
+      .filter(Boolean);
+
+    if (!points.length) {
+      throw new Error("В файле не найдено валидных координат.");
+    }
+
+    handleImportGraph(
+      {
+        points,
+        limitZones: points.some((point) => point.kind === "limit") ? [INITIAL_ZONE] : [],
+      },
+      file.name
     );
   };
 
@@ -1428,6 +1511,7 @@ export default function Dashboard() {
   return (
     <div className="flex h-screen bg-stone-100 text-stone-900">
       <PlannerLeftSidebar
+        onImportFile={handleImportFile}
         activePointKind={activePointKind}
         onActivePointKindChange={setActivePointKind}
         onClearVisitPoints={() => clearPoints("visit")}
@@ -1447,7 +1531,6 @@ export default function Dashboard() {
         onOptimizeRoute={optimizeRoute}
         onSendRoute={sendRoute}
         onAddRandomObstacle={addRandomObstacle}
-        onImportGraph={handleImportGraph}
         onClearAll={() => clearPoints()}
         hasRoute={optimizedRoute.length > 0}
         routeLength={plannerModel.routeLength}
