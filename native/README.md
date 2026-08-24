@@ -8,6 +8,7 @@
 - `src` — реализации `GA + Tabu`, `Simulated Annealing`, `Scatter Search`, `Cuckoo Search`
 - `apps/gpo_route_solver.cpp` — CLI solver, который вызывает `ws-bridge.cjs`
 - `build_msvc.bat` — сборка под MSVC
+- `CMakeLists.txt` — переносимая сборка для Linux и Docker
 
 ## Сборка
 
@@ -22,6 +23,18 @@ cd native
 
 ```text
 native\build\gpo_route_solver.exe
+```
+
+В Linux или Docker:
+
+```bash
+npm run native:build:linux
+```
+
+После сборки появится:
+
+```text
+native/build/gpo_route_solver
 ```
 
 ## Как это используется

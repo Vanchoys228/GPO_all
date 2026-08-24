@@ -1,4 +1,5 @@
 import {
+  DEFAULT_SURFACE_ZONES,
   dist,
   getZoneColor,
   pointInAnyPolygon,
@@ -87,6 +88,7 @@ export const buildPlannerModel = ({
   limitZones,
   optimizedRoute,
   activeLimitZoneId,
+  surfaceZones = DEFAULT_SURFACE_ZONES,
 }) => {
   const visitEntries = [];
   const chargeEntries = [];
@@ -155,6 +157,7 @@ export const buildPlannerModel = ({
       (sum, point, index, route) => (index ? sum + dist(route[index - 1], point) : 0),
       0
     ),
+    surfaceZones,
     activeZone,
     activeZoneName: activeZone?.name || "Зона",
   };

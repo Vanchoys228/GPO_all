@@ -1,0 +1,20 @@
+services:
+  bridge:
+    build:
+      context: .
+      dockerfile: docker/bridge.Dockerfile
+    environment:
+      BRIDGE_BIND_HOST: 0.0.0.0
+      TELEMETRY_PORT: 9001
+      ROUTE_PORT: 9002
+      SOLVER_PORT: 9003
+      WEB_STATE_DIR: /state
+      SOLVER_PATH: /app/native/build/gpo_route_solver
+      MOCK_TELEMETRY: ${MOCK_TELEMETRY:-0}
+    ports:
+      - "9001:9001"
+      - "9002:9002"
+      - "9003:9003"
+    volumes:
+      - ./web_state:/state
+    restart: unless-stopped

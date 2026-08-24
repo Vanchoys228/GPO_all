@@ -3,6 +3,7 @@ import {
   CANVAS_HEIGHT,
   CANVAS_WIDTH,
   POINT_KIND_META,
+  SCALE,
   drawDiamond,
   drawPlannerBackground,
   worldToCanvas,
@@ -14,8 +15,11 @@ const INITIAL_DRAW_STATE = {
   chargeEntries: [],
   plannedVisitEntryMap: new Map(),
   zoneEntries: [],
+  surfaceZones: [],
   optimizedRoute: [],
   obstacleTrace: [],
+  obstacleMap: INITIAL_TELEMETRY.obstacleMap,
+  cameraMap: INITIAL_TELEMETRY.cameraMap,
   routeBlocked: false,
   hoveredPointIndex: null,
 };
@@ -46,8 +50,11 @@ export default function PlannerCanvas({
       chargeEntries: plannerModel.chargeEntries,
       plannedVisitEntryMap: plannerModel.plannedVisitEntryMap,
       zoneEntries: plannerModel.zoneEntries,
+      surfaceZones: plannerModel.surfaceZones,
       optimizedRoute,
       obstacleTrace: telemetry.obstacleTrace || [],
+      obstacleMap: telemetry.obstacleMap || INITIAL_TELEMETRY.obstacleMap,
+      cameraMap: telemetry.cameraMap || INITIAL_TELEMETRY.cameraMap,
       routeBlocked: plannerModel.routeBlocked,
       hoveredPointIndex,
     };
@@ -57,8 +64,11 @@ export default function PlannerCanvas({
     plannerModel.chargeEntries,
     plannerModel.plannedVisitEntryMap,
     plannerModel.routeBlocked,
+    plannerModel.surfaceZones,
     plannerModel.visitEntries,
     plannerModel.zoneEntries,
+    telemetry.obstacleMap,
+    telemetry.cameraMap,
     telemetry.obstacleTrace,
   ]);
 
@@ -87,13 +97,94 @@ export default function PlannerCanvas({
       current.z += (target.z - current.z) * alpha;
       current.yaw += normalizeAngle(target.yaw - current.yaw) * alpha;
 
-      drawPlannerBackground(ctx);
+      drawPlannerBackground(ctx, state.surfaceZones);
+
+      if (state.obstacleMap?.cells?.length) {
+        const rawCellSize = Number(state.obstacleMap.cellSize);
+        const cellSize = Number.isFinite(rawCellSize) && rawCellSize > 0 ? rawCellSize : 0.06;
+        const cellCanvasSize = Math.max(3, cellSize * SCALE * 0.92);
+
+        state.obstacleMap.cells.forEach((cell) => {
+          const confidenceRaw = Number(cell?.confidence);
+          const confidence = Number.isFinite(confidenceRaw) ? Math.max(0, confidenceRaw) : 0;
+          const intensity = Math.max(0.16, Math.min(1, confidence / 6));
+          const point = worldToCanvas(cell.x, cell.y);
+
+          ctx.fillStyle = `rgba(14, 165, 233, ${0.12 + intensity * 0.3})`;
+          ctx.strokeStyle = `rgba(2, 132, 199, ${0.18 + intensity * 0.38})`;
+          ctx.lineWidth = 1;
+          ctx.fillRect(
+            point.x - cellCanvasSize / 2,
+            point.y - cellCanvasSize / 2,
+            cellCanvasSize,
+            cellCanvasSize
+          );
+          ctx.strokeRect(
+            point.x - cellCanvasSize / 2,
+            point.y - cellCanvasSize / 2,
+            cellCanvasSize,
+            cellCanvasSize
+          );
+        });
+      }
+
+      const cameraFreeCells = Array.isArray(state.cameraMap?.freeCells)
+        ? state.cameraMap.freeCells
+        : [];
+      const cameraObstacleCells = Array.isArray(state.cameraMap?.cells)
+        ? state.cameraMap.cells
+        : [];
+      if (cameraFreeCells.length || cameraObstacleCells.length) {
+        const rawCellSize = Number(state.cameraMap.cellSize);
+        const cellSize = Number.isFinite(rawCellSize) && rawCellSize > 0 ? rawCellSize : 0.1;
+        const cellCanvasSize = Math.max(4, cellSize * SCALE * 0.9);
+
+        cameraFreeCells.forEach((cell) => {
+          const confidenceRaw = Number(cell?.confidence);
+          const confidence = Number.isFinite(confidenceRaw) ? Math.max(0, confidenceRaw) : 0;
+          const intensity = Math.max(0.12, Math.min(1, confidence / 10));
+          const point = worldToCanvas(cell.x, cell.y);
+
+          ctx.fillStyle = `rgba(45, 212, 191, ${0.06 + intensity * 0.16})`;
+          ctx.strokeStyle = `rgba(20, 184, 166, ${0.10 + intensity * 0.22})`;
+          ctx.lineWidth = 1;
+          ctx.fillRect(
+            point.x - cellCanvasSize / 2,
+            point.y - cellCanvasSize / 2,
+            cellCanvasSize,
+            cellCanvasSize
+          );
+          ctx.strokeRect(
+            point.x - cellCanvasSize / 2,
+            point.y - cellCanvasSize / 2,
+            cellCanvasSize,
+            cellCanvasSize
+          );
+        });
+
+        cameraObstacleCells.forEach((cell) => {
+          const confidenceRaw = Number(cell?.confidence);
+          const confidence = Number.isFinite(confidenceRaw) ? Math.max(0, confidenceRaw) : 0;
+          const intensity = Math.max(0.18, Math.min(1, confidence / 8));
+          const point = worldToCanvas(cell.x, cell.y);
+
+          ctx.fillStyle = `rgba(168, 85, 247, ${0.10 + intensity * 0.24})`;
+          ctx.strokeStyle = `rgba(126, 34, 206, ${0.22 + intensity * 0.42})`;
+          ctx.lineWidth = 1.2;
+          ctx.beginPath();
+          ctx.arc(point.x, point.y, cellCanvasSize * 0.55, 0, Math.PI * 2);
+          ctx.fill();
+          ctx.stroke();
+        });
+      }
 
       state.zoneEntries.forEach((zone) => {
         if (zone.points.length > 1) {
           ctx.setLineDash([10, 8]);
           ctx.strokeStyle = zone.color.stroke;
           ctx.lineWidth = 3;
+          ctx.shadowColor = "rgba(15, 23, 42, 0.18)";
+          ctx.shadowBlur = 7;
           ctx.beginPath();
 
           zone.points.forEach((entry, index) => {
@@ -110,6 +201,8 @@ export default function PlannerCanvas({
           }
 
           ctx.stroke();
+          ctx.shadowColor = "transparent";
+          ctx.shadowBlur = 0;
           ctx.setLineDash([]);
         }
 
@@ -143,14 +236,21 @@ export default function PlannerCanvas({
       });
 
       if (state.obstacleTrace.length) {
-        ctx.fillStyle = "rgba(71, 85, 105, 0.6)";
-        ctx.strokeStyle = "rgba(226, 232, 240, 0.9)";
-        ctx.lineWidth = 1.5;
-
         state.obstacleTrace.forEach((point) => {
+          const confidenceRaw = Number(point?.confidence);
+          const confidence = Number.isFinite(confidenceRaw)
+            ? Math.max(0, Math.min(1, confidenceRaw))
+            : 1;
           const hit = worldToCanvas(point.x, point.y);
+          const radius = 1.4 + confidence * 1.5;
+          const fillAlpha = 0.2 + confidence * 0.46;
+          const strokeAlpha = 0.08 + confidence * 0.24;
+
+          ctx.fillStyle = `rgba(15, 118, 110, ${fillAlpha})`;
+          ctx.strokeStyle = `rgba(15, 23, 42, ${strokeAlpha})`;
+          ctx.lineWidth = 1.1;
           ctx.beginPath();
-          ctx.arc(hit.x, hit.y, 4.5, 0, Math.PI * 2);
+          ctx.arc(hit.x, hit.y, radius, 0, Math.PI * 2);
           ctx.fill();
           ctx.stroke();
         });

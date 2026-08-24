@@ -8,6 +8,7 @@
     "bridge": "node ws-bridge.cjs",
     "telemetry:mock": "node telemetry-server.cjs",
     "native:build": "native\\build_msvc.bat",
+    "native:build:linux": "cmake -S native -B native/build -DCMAKE_BUILD_TYPE=Release && cmake --build native/build --config Release --parallel",
     "webots:build": "webots\\controllers\\youbot_web\\build_youbot_web.bat",
     "build": "vite build",
     "lint": "eslint .",
@@ -17,9 +18,13 @@
   },
   "dependencies": {
     "dotenv": "^17.3.1",
+    "papaparse": "^5.5.3",
     "react": "^19.2.0",
     "react-dom": "^19.2.0",
-    "ws": "^8.18.3"
+    "react-router-dom": "^7.15.1",
+    "read-excel-file": "^9.0.10",
+    "ws": "^8.18.3",
+    "xlsx": "^0.18.5"
   },
   "devDependencies": {
     "@eslint/js": "^9.39.1",
