@@ -71,6 +71,40 @@ export const deriveNextSurfaceZoneNumber = (zones) => {
   return Math.max(1, maxNumber + 1);
 };
 
+export const setSurfaceZoneProfile = (zones, zoneId, surfaceKey) =>
+  zones.map((zone) =>
+    zone.id === zoneId ? { ...zone, surfaceKey } : zone
+  );
+
+export const setSurfaceZoneClosed = (zones, zoneId, closed) =>
+  zones.map((zone) => (zone.id === zoneId ? { ...zone, closed } : zone));
+
+export const removeSurfaceZoneState = ({
+  zones,
+  zoneId,
+  activeZoneId,
+  fallbackSurfaceKey,
+}) => {
+  const remaining = zones.filter((zone) => zone.id !== zoneId);
+  if (!remaining.length) {
+    const fallback = createSurfaceZoneDraft(1, fallbackSurfaceKey);
+    return {
+      zones: [fallback],
+      activeZoneId: fallback.id,
+      activeSurfaceKey: fallback.surfaceKey,
+      nextZoneNumber: 2,
+    };
+  }
+  const activeZone =
+    remaining.find((zone) => zone.id === activeZoneId) || remaining[0];
+  return {
+    zones: remaining,
+    activeZoneId: activeZone.id,
+    activeSurfaceKey: activeZone.surfaceKey,
+    nextZoneNumber: deriveNextSurfaceZoneNumber(remaining),
+  };
+};
+
 export const normalizeSurfaceZonesForImport = (surfaceZones) => {
   if (!Array.isArray(surfaceZones)) return null;
   const normalized = surfaceZones

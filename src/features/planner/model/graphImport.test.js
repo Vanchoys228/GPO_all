@@ -1,5 +1,9 @@
 import { describe, expect, it } from "vitest";
-import { deriveNextZoneNumber, normalizeImportedGraph } from "./graphImport";
+import {
+  buildImportedGraphStatus,
+  deriveNextZoneNumber,
+  normalizeImportedGraph,
+} from "./graphImport";
 
 describe("graph import model", () => {
   it("normalizes the current points format", () => {
@@ -27,5 +31,21 @@ describe("graph import model", () => {
 
   it("derives the next limit-zone number", () => {
     expect(deriveNextZoneNumber([{ id: "zone-8" }])).toBe(9);
+  });
+
+  it("summarizes imported point counts", () => {
+    expect(
+      buildImportedGraphStatus(
+        [
+          { kind: "visit" },
+          { kind: "charge" },
+          { kind: "limit" },
+          { kind: "limit" },
+        ],
+        "route.csv"
+      )
+    ).toBe(
+      "Граф импортирован из route.csv: точек посещения 1, зарядок 1, точек зон 2."
+    );
   });
 });

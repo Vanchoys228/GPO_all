@@ -4,6 +4,9 @@ import {
   createSurfaceZoneDraft,
   deriveNextSurfaceZoneNumber,
   normalizeSurfaceZonesForImport,
+  removeSurfaceZoneState,
+  setSurfaceZoneClosed,
+  setSurfaceZoneProfile,
 } from "./surfaceZones";
 
 describe("surface zone model", () => {
@@ -33,5 +36,31 @@ describe("surface zone model", () => {
         { id: "empty", points: [] },
       ])
     ).toHaveLength(1);
+  });
+
+  it("updates profile and closed state without mutating other zones", () => {
+    const zones = [
+      { id: "a", surfaceKey: "neutral", closed: false },
+      { id: "b", surfaceKey: "rough", closed: true },
+    ];
+    expect(setSurfaceZoneProfile(zones, "a", "rough")[0].surfaceKey).toBe("rough");
+    expect(setSurfaceZoneClosed(zones, "b", false)[1].closed).toBe(false);
+    expect(zones[0].surfaceKey).toBe("neutral");
+  });
+
+  it("creates a fallback after removing the final surface zone", () => {
+    expect(
+      removeSurfaceZoneState({
+        zones: [{ id: "surface-zone-3" }],
+        zoneId: "surface-zone-3",
+        activeZoneId: "surface-zone-3",
+        fallbackSurfaceKey: "rough",
+      })
+    ).toEqual({
+      zones: [createSurfaceZoneDraft(1, "rough")],
+      activeZoneId: "surface-zone-1",
+      activeSurfaceKey: "rough",
+      nextZoneNumber: 2,
+    });
   });
 });

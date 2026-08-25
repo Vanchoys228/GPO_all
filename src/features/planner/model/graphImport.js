@@ -29,6 +29,11 @@ export const deriveNextZoneNumber = (zones) => {
   return Math.max(2, maxNumber + 1);
 };
 
+export const buildImportedGraphStatus = (points, sourceName) => {
+  const count = (kind) => points.filter((point) => point.kind === kind).length;
+  return `Граф импортирован из ${sourceName}: точек посещения ${count("visit")}, зарядок ${count("charge")}, точек зон ${count("limit")}.`;
+};
+
 export const normalizeImportedGraph = (rawGraph) => {
   if (!rawGraph || typeof rawGraph !== "object") {
     throw new Error("Граф должен быть объектом JSON.");

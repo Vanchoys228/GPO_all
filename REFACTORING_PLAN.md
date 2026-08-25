@@ -21,13 +21,24 @@
 - Добавлен минимальный `compose.yaml` для режима с Webots на компьютере.
 - Frontend-подключения вынесены в `useTelemetrySocket`, `useRouteSocket` и
   `useSolverHealth`.
+- Декодирование planner-файлов JSON/Excel/CSV и нормализация табличных строк
+  вынесены из `Dashboard.jsx` в тестируемый `plannerFileImport` service.
+- Добавление, перемещение, удаление и очистка точек Canvas вынесены в
+  `usePlannerPointEditor`; чистые операции над коллекцией точек находятся в
+  тестируемом `features/planner/model/pointEditor`.
+- CRUD ограничивающих зон вынесен в `usePlannerLimitZoneEditor`, а чистые
+  создание, переключение closed-state и удаление зоны — в
+  `features/planner/model/limitZoneEditor`.
+- CRUD зон покрытий вынесен в `usePlannerSurfaceZoneEditor`; чистая модель
+  `surfaceZones` теперь также отвечает за profile/closed transitions и удаление
+  с созданием fallback-зоны.
 - Синхронизация зон, покрытий и параметров движения с bridge вынесена в
   `usePlannerBridgeSync`.
 - Учёт времени маршрута вынесен в `useRouteTiming`.
 - Импорт графа, модель покрытий, энергетика и случайные препятствия вынесены в
   тестируемые модули `src/features/planner/model`.
 - Отрисовка экспортируемой карты вынесена в отдельный service.
-- `Dashboard.jsx` уменьшен до 1479 строк вместо 2318 без изменения UI-контракта.
+- `Dashboard.jsx` уменьшен до 1112 строк вместо 2318 без изменения UI-контракта.
 - Декомпозиция `youbot_web.c` начата с независимых модулей
   `controller_drive`, `controller_io`, `controller_math`, `controller_motion_profile` и
   `controller_route`, `controller_runtime_command`, `controller_telemetry`,
@@ -135,7 +146,7 @@
 
 ## Проверено на текущем этапе
 
-- 54 JavaScript-теста проходят.
+- 67 JavaScript-тестов проходят.
 - ESLint и Vite production build проходят.
 - Автономные тесты `controller_avoidance`, `controller_camera`,
   `controller_camera_map`, `controller_drive`, `controller_io`, `controller_math`,
