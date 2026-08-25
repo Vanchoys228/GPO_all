@@ -13,25 +13,25 @@
         <mxCell id="4" value="src/main.jsx&#xa;src/App.jsx" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#ffffff;strokeColor=#93c5fd;" vertex="1" parent="3">
           <mxGeometry x="20" y="20" width="260" height="60" as="geometry" />
         </mxCell>
-        <mxCell id="5" value="src/pages/Dashboard.jsx&#xa;main orchestration" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#dbeafe;strokeColor=#3b82f6;" vertex="1" parent="3">
+        <mxCell id="5" value="src/pages/Dashboard.jsx&#xa;composition + UI state" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#dbeafe;strokeColor=#3b82f6;" vertex="1" parent="3">
           <mxGeometry x="20" y="100" width="260" height="70" as="geometry" />
         </mxCell>
-        <mxCell id="6" value="src/components/dashboard/*&#xa;PlannerCanvas&#xa;PlannerLeftSidebar&#xa;PlannerRightSidebar" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#ffffff;strokeColor=#93c5fd;" vertex="1" parent="3">
+        <mxCell id="6" value="components/dashboard&#xa;Canvas + sidebar composition&#xa;sections/*" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#ffffff;strokeColor=#93c5fd;" vertex="1" parent="3">
           <mxGeometry x="20" y="190" width="260" height="90" as="geometry" />
         </mxCell>
-        <mxCell id="7" value="src/lib/plannerModel.js&#xa;derived UI model" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#ffffff;strokeColor=#93c5fd;" vertex="1" parent="3">
+        <mxCell id="7" value="features/planner&#xa;hooks + model + services" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#ffffff;strokeColor=#93c5fd;" vertex="1" parent="3">
           <mxGeometry x="20" y="300" width="260" height="60" as="geometry" />
         </mxCell>
-        <mxCell id="8" value="src/lib/zonePlanner.js&#xa;geometry + rerouting" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#ffffff;strokeColor=#93c5fd;" vertex="1" parent="3">
+        <mxCell id="8" value="zonePlanner facade&#xa;coordinates + geometry&#xa;polygons + routing" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#ffffff;strokeColor=#93c5fd;" vertex="1" parent="3">
           <mxGeometry x="20" y="380" width="260" height="60" as="geometry" />
         </mxCell>
         <mxCell id="9" value="Runtime / Bridge" style="swimlane;rounded=1;horizontal=0;startSize=30;fillColor=#f8fafc;strokeColor=#94a3b8;fontStyle=1;" vertex="1" parent="1">
           <mxGeometry x="360" y="60" width="320" height="420" as="geometry" />
         </mxCell>
-        <mxCell id="10" value="ws-bridge.cjs&#xa;HTTP solver API&#xa;WS telemetry and route" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#ffffff;strokeColor=#94a3b8;" vertex="1" parent="9">
+        <mxCell id="10" value="ws-bridge.cjs composition&#xa;bridge/ servers + protocol&#xa;solver + telemetry + artifacts" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#ffffff;strokeColor=#94a3b8;" vertex="1" parent="9">
           <mxGeometry x="20" y="20" width="280" height="80" as="geometry" />
         </mxCell>
-        <mxCell id="11" value="bridge-config.cjs&#xa;runtime ports / host" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#ffffff;strokeColor=#94a3b8;" vertex="1" parent="9">
+        <mxCell id="11" value="bridge-config.cjs facade&#xa;bridge/config/runtime-config.cjs" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#ffffff;strokeColor=#94a3b8;" vertex="1" parent="9">
           <mxGeometry x="20" y="120" width="280" height="60" as="geometry" />
         </mxCell>
         <mxCell id="12" value="web_state/*&#xa;route.csv / route.json&#xa;limit_zones.* / robot_state.json" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#e2e8f0;strokeColor=#64748b;" vertex="1" parent="9">
@@ -55,7 +55,7 @@
         <mxCell id="18" value="webots/worlds/youbot_only.wbt&#xa;world + youBot + lidar" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#ffffff;strokeColor=#86efac;" vertex="1" parent="17">
           <mxGeometry x="20" y="20" width="260" height="60" as="geometry" />
         </mxCell>
-        <mxCell id="19" value="webots/controllers/youbot_web/youbot_web.c&#xa;route / zones / telemetry / lidar trace" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#ffffff;strokeColor=#86efac;" vertex="1" parent="17">
+        <mxCell id="19" value="youbot_web.c composition&#xa;controller_*.c modules&#xa;route + survey + sensors" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#ffffff;strokeColor=#86efac;" vertex="1" parent="17">
           <mxGeometry x="20" y="100" width="260" height="80" as="geometry" />
         </mxCell>
         <mxCell id="20" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;strokeColor=#2563eb;" edge="1" parent="1" source="4" target="5">
@@ -105,7 +105,7 @@
         <mxCell id="f1" value="User sets visit points and limit zones" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#dbeafe;strokeColor=#3b82f6;" vertex="1" parent="1f">
           <mxGeometry x="30" y="140" width="180" height="70" as="geometry" />
         </mxCell>
-        <mxCell id="f2" value="Dashboard + plannerModel" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#dbeafe;strokeColor=#3b82f6;" vertex="1" parent="1f">
+        <mxCell id="f2" value="Dashboard + planner hooks/model" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#dbeafe;strokeColor=#3b82f6;" vertex="1" parent="1f">
           <mxGeometry x="260" y="140" width="180" height="70" as="geometry" />
         </mxCell>
         <mxCell id="f3" value="routeAlgorithms -&gt; ws-bridge HTTP" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#e2e8f0;strokeColor=#64748b;" vertex="1" parent="1f">
@@ -114,7 +114,7 @@
         <mxCell id="f4" value="native solver" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#fef3c7;strokeColor=#d97706;" vertex="1" parent="1f">
           <mxGeometry x="730" y="140" width="150" height="70" as="geometry" />
         </mxCell>
-        <mxCell id="f5" value="zonePlanner builds obstacle-aware route" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#e0f2fe;strokeColor=#0284c7;" vertex="1" parent="1f">
+        <mxCell id="f5" value="zonePlanner routing builds safe route" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#e0f2fe;strokeColor=#0284c7;" vertex="1" parent="1f">
           <mxGeometry x="930" y="140" width="220" height="70" as="geometry" />
         </mxCell>
         <mxCell id="f6" value="ws-bridge writes web_state and forwards route" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#e2e8f0;strokeColor=#64748b;" vertex="1" parent="1f">

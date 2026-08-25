@@ -13,14 +13,15 @@ flowchart LR
     subgraph ui["Frontend"]
         app["App.jsx"]
         dash["Dashboard.jsx"]
-        left["PlannerLeftSidebar.jsx"]
+        hooks["features/planner/hooks"]
+        sections["dashboard/sections"]
         canvas["PlannerCanvas.jsx"]
-        right["PlannerRightSidebar.jsx"]
     end
 
     subgraph domain["Доменная логика"]
-        model["plannerModel.js"]
-        geo["zonePlanner.js"]
+        model["features/planner/model"]
+        services["features/planner/services"]
+        geo["zonePlanner facade + geometry/routing modules"]
         telemetry["dashboardTelemetry.js"]
         route["routeAlgorithms.js"]
         runtime["runtimeConfig.js"]
@@ -40,11 +41,12 @@ flowchart LR
 
     user --> dash
     app --> dash
-    dash --> left
+    dash --> hooks
+    dash --> sections
     dash --> canvas
-    dash --> right
 
-    dash --> model
+    hooks --> model
+    hooks --> services
     dash --> geo
     dash --> telemetry
     dash --> route
@@ -69,16 +71,20 @@ flowchart LR
   Точка входа приложения.
 
 - [Dashboard.jsx](./src/pages/Dashboard.jsx)
-  Главный экран и оркестрация сценария.
+  Точка композиции planner hooks, layout и локального UI-состояния.
 
 - [PlannerLeftSidebar.jsx](./src/components/dashboard/PlannerLeftSidebar.jsx)
-  Управление режимами точки, выбором задачи, алгоритма и запуском построения.
+  Композиция левых секций настройки и запуска маршрута.
 
 - [PlannerCanvas.jsx](./src/components/dashboard/PlannerCanvas.jsx)
   Отрисовка карты, зон, маршрута и робота.
 
 - [PlannerRightSidebar.jsx](./src/components/dashboard/PlannerRightSidebar.jsx)
-  Управление зонами, списком точек и отображение телеметрии.
+  Композиция секций зон, точек, ограничений и телеметрии.
+
+- [features/planner](./src/features/planner)
+  Hooks оркестрируют сценарии, model содержит чистые переходы и payload,
+  services изолируют canvas, файлы и route channel.
 
 ### Доменная логика
 
@@ -87,8 +93,8 @@ flowchart LR
   `plannedVisitEntries`, `polygons`, `routeBlocked`, `routeLength`.
 
 - [zonePlanner.js](./src/lib/zonePlanner.js)
-  Геометрия карты, полигоны, проекция точек, безопасные отступы и обход
-  препятствий.
+  Совместимый facade. Координаты, геометрия, полигоны, presentation и routing
+  разделены по `zonePlanner*`-модулям.
 
 - [routeAlgorithms.js](./src/lib/routeAlgorithms.js)
   Клиент native solver API.
@@ -102,8 +108,8 @@ flowchart LR
 ### Native / bridge
 
 - [ws-bridge.cjs](./ws-bridge.cjs)
-  HTTP API для solver, WebSocket-мост маршрута и телеметрии, запись route/state
-  артефактов.
+  Точка композиции bridge. Серверы, protocol validation, solver adapter,
+  telemetry и state store находятся в каталоге `bridge/`.
 
 - [bridge-config.cjs](./bridge-config.cjs)
   Общий runtime-конфиг bridge-слоя.
@@ -161,7 +167,8 @@ sequenceDiagram
 
 - Единый координатный контракт зафиксирован.
 - Bridge больше не блокирует event loop синхронным solver/fs.
-- `Dashboard` разрезан на отдельные UI-блоки и общую модель.
+- `Dashboard` разрезан на hooks, model, services и UI-секции.
+- `zonePlanner.js` оставлен совместимым facade над специализированными модулями.
 - Runtime host/ports вынесены в `env`.
 - Мертвые страницы и старые компоненты убраны.
 - Добавлены unit-тесты и smoke-test bridge.

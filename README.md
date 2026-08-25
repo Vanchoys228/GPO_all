@@ -36,28 +36,45 @@
 |   |-- components/dashboard/
 |   |   |-- PlannerCanvas.jsx
 |   |   |-- PlannerLeftSidebar.jsx
-|   |   `-- PlannerRightSidebar.jsx
+|   |   |-- PlannerRightSidebar.jsx
+|   |   `-- sections/
+|   |-- features/planner/
+|   |   |-- hooks/
+|   |   |-- model/
+|   |   `-- services/
 |   |-- lib/
 |   |   |-- dashboardTelemetry.js
 |   |   |-- plannerModel.js
 |   |   |-- routeAlgorithms.js
 |   |   |-- runtimeConfig.js
-|   |   `-- zonePlanner.js
+|   |   |-- zonePlanner.js
+|   |   |-- zonePlannerCoordinates.js
+|   |   |-- zonePlannerGeometry.js
+|   |   |-- zonePlannerPolygons.js
+|   |   `-- zonePlannerRouting.js
 |   |-- pages/
 |   |   `-- Dashboard.jsx
 |   |-- App.jsx
 |   `-- main.jsx
 |-- native/
 |   |-- apps/
-|   |-- build/
 |   |-- include/
 |   `-- src/
+|-- bridge/
+|   |-- artifacts/
+|   |-- config/
+|   |-- protocol/
+|   |-- servers/
+|   |-- solver/
+|   `-- telemetry/
 |-- shared/
 |   `-- coordinate-contract.json
 |-- webots/
 |   |-- controllers/youbot_web/
 |   `-- worlds/youbot_only.wbt
 |-- web_state/
+|   `-- .gitkeep
+|-- docs/
 |-- bridge-config.cjs
 |-- ws-bridge.cjs
 |-- telemetry-server.cjs
@@ -67,13 +84,10 @@
 
 ## Требования
 
-- Node.js `22.12+` рекомендуется.
+- Node.js `22.12+`.
 - npm `10+`.
 - Visual Studio Build Tools / MSVC для сборки native solver и контроллера Webots.
 - Установленный `Webots`, если нужен полный сценарий с роботом.
-
-Сейчас проект у тебя собирается и на `Node 22.11.0`, но `Vite` предупреждает,
-что лучше обновиться до `22.12+`.
 
 ## Настройка окружения
 
@@ -141,7 +155,7 @@ http://127.0.0.1:5173
 Открыть мир:
 
 ```text
-C:\Users\User\Desktop\GPO-main\webots\worlds\youbot_only.wbt
+<корень-проекта>\webots\worlds\youbot_only.wbt
 ```
 
 Нажать `Run`, после чего:
@@ -165,11 +179,12 @@ npm run test
 npm run test:bridge
 ```
 
-## Переходная Docker-сборка bridge
+## Текущая Docker-заготовка bridge
 
-Первый этап контейнеризации запускает в Docker только WebSocket bridge и Linux
-версию native solver. Webots с графическим окном продолжает работать на
-Windows и использует общий каталог `web_state`.
+Текущая конфигурация запускает в Docker WebSocket bridge и Linux-версию native
+solver. Полная контейнеризация и сквозная проверка ещё выполняются отдельным
+этапом. Webots с графическим окном пока работает на Windows и использует общий
+каталог `web_state`.
 
 ```bash
 docker compose up --build bridge
@@ -198,7 +213,8 @@ npm run test:bridge
 
 - `lint` для frontend и node-скриптов.
 - `build` production-сборки.
-- unit-тесты для нормализации телеметрии и модели планировщика.
+- unit- и компонентные тесты для planner model, hooks, services, геометрии,
+  телеметрии и sidebar-секций.
 - smoke-test bridge + solver HTTP API.
 
 ## Координатный контракт
@@ -222,7 +238,8 @@ npm run test:bridge
   отдельным изменением и повторяйте полный набор регрессионных проверок.
 - Dev-аудит после обновления зависимостей тоже должен быть чистым или близким к
   этому, но основной критерий безопасности здесь — production runtime.
-- Исторические страницы и старые UI-заглушки уже удалены, чтобы не путать поддержку.
+- Build artifacts (`dist`, `native/build`, Webots `.exe`) и runtime state не
+  хранятся в Git и создаются локально командами сборки.
 
 ## Следующие улучшения
 
