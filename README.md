@@ -177,6 +177,7 @@ npm run lint
 npm run build
 npm run test
 npm run test:bridge
+npm run test:webots
 ```
 
 ## Текущая Docker-заготовка bridge
@@ -216,6 +217,7 @@ npm run test:bridge
 - unit- и компонентные тесты для planner model, hooks, services, геометрии,
   телеметрии и sidebar-секций.
 - smoke-test bridge + solver HTTP API.
+- автономные C-тесты модулей Webots-контроллера через `npm run test:webots`.
 
 ## Координатный контракт
 

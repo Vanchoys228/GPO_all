@@ -18,6 +18,8 @@ const sendJson = (response, statusCode, payload) => {
   response.end(JSON.stringify(payload));
 };
 
+const MAX_CONCURRENT_SOLVER_RUNS = 2;
+
 const readJsonBody = (request) =>
   new Promise((resolve, reject) => {
     let body = "";
@@ -45,6 +47,7 @@ const createSolverHttpServer = ({
   port,
   solverPath,
 }) => {
+  let activeSolverRuns = 0;
   const server = http.createServer(async (request, response) => {
     if (request.method === "OPTIONS") {
       sendJson(response, 204, {});
@@ -70,13 +73,27 @@ const createSolverHttpServer = ({
         const taskKey = resolveTaskKey(body?.task);
         const seed = clampInt(normalizeNumber(body?.seed, 1337), 1, 2147483647);
 
-        const solved = await nativeSolver.run({
-          points,
-          algorithmKey,
-          params,
-          taskKey,
-          seed,
-        });
+        if (activeSolverRuns >= MAX_CONCURRENT_SOLVER_RUNS) {
+          sendJson(response, 503, {
+            ok: false,
+            error: "Solver is busy. Try again shortly.",
+          });
+          return;
+        }
+
+        activeSolverRuns += 1;
+        let solved;
+        try {
+          solved = await nativeSolver.run({
+            points,
+            algorithmKey,
+            params,
+            taskKey,
+            seed,
+          });
+        } finally {
+          activeSolverRuns -= 1;
+        }
 
         sendJson(response, 200, {
           ok: true,
@@ -88,7 +105,8 @@ const createSolverHttpServer = ({
           route: solved.route,
         });
       } catch (error) {
-        sendJson(response, 500, {
+        const statusCode = Number.isInteger(error?.statusCode) ? error.statusCode : 500;
+        sendJson(response, statusCode, {
           ok: false,
           error: error instanceof Error ? error.message : "Unexpected solver failure.",
         });

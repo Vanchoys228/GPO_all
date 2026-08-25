@@ -47,6 +47,7 @@ cl /nologo /std:c11 /O2 /I"%WEBOTS_HOME%\include\controller\c" ^
   "%CONTROLLER_DIR%controller_lifecycle.c" ^
   "%CONTROLLER_DIR%controller_math.c" ^
   "%CONTROLLER_DIR%controller_motion_profile.c" ^
+  "%CONTROLLER_DIR%controller_paths.c" ^
   "%CONTROLLER_DIR%controller_route.c" ^
   "%CONTROLLER_DIR%controller_runtime_command.c" ^
   "%CONTROLLER_DIR%controller_survey_geometry.c" ^

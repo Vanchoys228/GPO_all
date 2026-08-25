@@ -14,6 +14,7 @@
 #include "controller_lifecycle.h"
 #include "controller_math.h"
 #include "controller_motion_profile.h"
+#include "controller_paths.h"
 #include "controller_route.h"
 #include "controller_runtime_command.h"
 #include "controller_survey_geometry.h"
@@ -309,25 +310,26 @@ static ControllerMappingSurveyState mapping_survey_state = {
 static double route_avoidance_time_sec = 0.0;
 static int route_avoidance_steps = 0;
 
-static const char *ROUTE_PATH = "..\\..\\..\\web_state\\route.csv";
-static const char *ZONE_PATH = "..\\..\\..\\web_state\\limit_zones.txt";
-static const char *SURFACE_ZONE_PATH = "..\\..\\..\\web_state\\surface_zones.txt";
-static const char *STATE_PATH = "..\\..\\..\\web_state\\robot_state.json";
-static const char *STATE_TEMP_PATH = "..\\..\\..\\web_state\\robot_state.tmp";
-static const char *MOTION_PROFILE_PATH = "..\\..\\..\\web_state\\motion_profile.txt";
-static const char *RUNTIME_COMMAND_PATH = "..\\..\\..\\web_state\\runtime_command.txt";
-static const char *MAP_PATH = "..\\..\\..\\web_state\\obstacle_map.json";
-static const char *MAP_TEMP_PATH = "..\\..\\..\\web_state\\obstacle_map.tmp";
-static const char *MAP_CSV_PATH = "..\\..\\..\\web_state\\obstacle_map.csv";
-static const char *MAP_CSV_TEMP_PATH = "..\\..\\..\\web_state\\obstacle_map_csv.tmp";
-static const char *CAMERA_MAP_PATH = "..\\..\\..\\web_state\\camera_map.json";
-static const char *CAMERA_MAP_TEMP_PATH = "..\\..\\..\\web_state\\camera_map.tmp";
-static const char *CAMERA_MAP_CSV_PATH = "..\\..\\..\\web_state\\camera_map.csv";
-static const char *CAMERA_MAP_CSV_TEMP_PATH = "..\\..\\..\\web_state\\camera_map_csv.tmp";
-static const char *CAMERA_FRAME_BMP_PATH = "..\\..\\..\\web_state\\camera_frame.bmp";
-static const char *CAMERA_FRAME_BMP_TEMP_PATH = "..\\..\\..\\web_state\\camera_frame.tmp.bmp";
-static const char *CAMERA_FRAME_JPEG_PATH = "..\\..\\..\\web_state\\camera_frame.jpg";
-static const char *CAMERA_FRAME_JPEG_TEMP_PATH = "..\\..\\..\\web_state\\camera_frame.tmp.jpg";
+static ControllerPaths controller_paths;
+#define ROUTE_PATH controller_paths.route
+#define ZONE_PATH controller_paths.limit_zones
+#define SURFACE_ZONE_PATH controller_paths.surface_zones
+#define STATE_PATH controller_paths.robot_state
+#define STATE_TEMP_PATH controller_paths.robot_state_temp
+#define MOTION_PROFILE_PATH controller_paths.motion_profile
+#define RUNTIME_COMMAND_PATH controller_paths.runtime_command
+#define MAP_PATH controller_paths.obstacle_map
+#define MAP_TEMP_PATH controller_paths.obstacle_map_temp
+#define MAP_CSV_PATH controller_paths.obstacle_map_csv
+#define MAP_CSV_TEMP_PATH controller_paths.obstacle_map_csv_temp
+#define CAMERA_MAP_PATH controller_paths.camera_map
+#define CAMERA_MAP_TEMP_PATH controller_paths.camera_map_temp
+#define CAMERA_MAP_CSV_PATH controller_paths.camera_map_csv
+#define CAMERA_MAP_CSV_TEMP_PATH controller_paths.camera_map_csv_temp
+#define CAMERA_FRAME_BMP_PATH controller_paths.camera_frame_bmp
+#define CAMERA_FRAME_BMP_TEMP_PATH controller_paths.camera_frame_bmp_temp
+#define CAMERA_FRAME_JPEG_PATH controller_paths.camera_frame_jpeg
+#define CAMERA_FRAME_JPEG_TEMP_PATH controller_paths.camera_frame_jpeg_temp
 static const char *camera_frame_file = "camera_frame.bmp";
 static const char *camera_frame_mime = "image/bmp";
 
@@ -383,7 +385,7 @@ static int load_motion_profile() {
   return 1;
 }
 
-static void maybe_reload_motion_profile() {
+static void maybe_reload_motion_profile(void) {
   if ((step_counter % MOTION_RELOAD_INTERVAL) != 0) return;
 
   const double previous_cruise_speed = configured_cruise_speed_mps;
@@ -565,7 +567,7 @@ static ControllerCameraPixel read_webots_camera_pixel(void *context, int x, int 
   };
 }
 
-static void update_camera_obstacle_hint() {
+static void update_camera_obstacle_hint(void) {
   camera_obstacle_update_step = step_counter;
   camera_obstacle_visible = 0;
   camera_obstacle_score = 0.0;
@@ -776,7 +778,7 @@ static int write_virtual_camera_frame() {
   return write_bmp24(CAMERA_FRAME_BMP_TEMP_PATH, pixels, CAMERA_FRAME_WIDTH, CAMERA_FRAME_HEIGHT);
 }
 
-static void maybe_write_camera_frame() {
+static void maybe_write_camera_frame(void) {
   if (!camera_available) return;
   if ((step_counter % CAMERA_WRITE_INTERVAL) != 0) return;
 
@@ -807,7 +809,7 @@ static void maybe_write_camera_frame() {
   }
 }
 
-static void maybe_update_camera_perception() {
+static void maybe_update_camera_perception(void) {
   if (!camera_available || camera_virtual_mode || !front_camera) return;
   if ((step_counter % CAMERA_CAPTURE_INTERVAL) != 0) return;
   update_camera_obstacle_hint();
@@ -961,7 +963,7 @@ static int route_off_route_active_now() {
   return 0;
 }
 
-static void update_route_avoidance_metrics() {
+static void update_route_avoidance_metrics(void) {
   if (route_off_route_active_now()) {
     route_avoidance_steps += 1;
     route_avoidance_time_sec += (double)TIME_STEP / 1000.0;
@@ -1118,7 +1120,7 @@ static void append_obstacle_trace_point(double x, double y, double now_time) {
   obstacle_trace_count += 1;
 }
 
-static void capture_lidar_trace() {
+static void capture_lidar_trace(void) {
   lidar_last_hit_count = 0;
   lidar_front_hit_count = 0;
   lidar_front_min_range = LIDAR_MAX_TRACE_RANGE;
@@ -1365,7 +1367,7 @@ static void generate_survey_route(const char *path) {
   fclose(file);
 }
 
-static void maybe_write_map() {
+static void maybe_write_map(void) {
   if (!map_dirty) return;
   if ((step_counter % MAP_WRITE_INTERVAL) != 0) return;
 
@@ -1413,7 +1415,7 @@ static void maybe_write_map() {
   }
 }
 
-static void maybe_write_camera_map() {
+static void maybe_write_camera_map(void) {
   if (!camera_map_dirty) return;
   if ((step_counter % MAP_WRITE_INTERVAL) != 0) return;
 
@@ -3147,7 +3149,7 @@ static int load_runtime_command(RuntimeCommand *command) {
       command);
 }
 
-static void maybe_reload_runtime_command() {
+static void maybe_reload_runtime_command(void) {
   if ((step_counter % RUNTIME_COMMAND_RELOAD_INTERVAL) != 0) return;
 
   const long long mtime = get_file_mtime(RUNTIME_COMMAND_PATH);
@@ -3192,7 +3194,7 @@ static void maybe_reload_runtime_command() {
   set_status("runtime_obstacle_spawned");
 }
 
-static void maybe_reload_zones() {
+static void maybe_reload_zones(void) {
   if ((step_counter % ZONE_RELOAD_INTERVAL) != 0) return;
 
   ZoneData next_zones = {0};
@@ -3205,7 +3207,7 @@ static void maybe_reload_zones() {
   }
 }
 
-static void maybe_reload_surface_zones() {
+static void maybe_reload_surface_zones(void) {
   if ((step_counter % ZONE_RELOAD_INTERVAL) != 0) return;
 
   SurfaceZoneData next_zones = {0};
@@ -3233,7 +3235,7 @@ static int load_route(RouteData *route) {
   return 1;
 }
 
-static void maybe_reload_route() {
+static void maybe_reload_route(void) {
   if ((step_counter % ROUTE_RELOAD_INTERVAL) != 0) return;
 
   const long long mtime = get_file_mtime(ROUTE_PATH);
@@ -3489,7 +3491,7 @@ static int insert_mapping_survey_obstacle_scan_route(
   return 1;
 }
 
-static void run_navigation_step() {
+static void run_navigation_step(void) {
   double x = 0.0;
   double z = 0.0;
   double heading = 0.0;
@@ -4173,7 +4175,7 @@ static void run_navigation_step() {
   apply_kinematic_step(x, z, heading, linear_speed, angular_speed);
 }
 
-static void write_state_snapshot() {
+static void write_state_snapshot(void) {
   double x = 0.0;
   double y = 0.0;
   double heading = 0.0;
@@ -4292,6 +4294,11 @@ static const ControllerStepCallbacks controller_step_callbacks = {
 int main(int argc, char **argv) {
   (void)argc;
   (void)argv;
+
+  if (!controller_paths_init(&controller_paths, getenv("WEB_STATE_DIR"))) {
+    fprintf(stderr, "Failed to initialize Webots state paths.\n");
+    return 1;
+  }
 
   wb_robot_init();
   init_wheels();

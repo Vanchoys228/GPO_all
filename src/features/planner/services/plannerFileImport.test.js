@@ -1,10 +1,17 @@
 import { describe, expect, it } from "vitest";
+import packageLock from "../../../../package-lock.json";
+import * as XLSX from "xlsx";
 import {
   parsePlannerTableRows,
   readPlannerImportFile,
 } from "./plannerFileImport";
 
 describe("planner file import service", () => {
+  it("uses a SheetJS release with the known import vulnerabilities fixed", () => {
+    const installedVersion = packageLock.packages["node_modules/xlsx"]?.version;
+    expect(installedVersion).toBe("0.20.3");
+  });
+
   it("converts localized table columns into planner points", () => {
     expect(
       parsePlannerTableRows([
@@ -36,6 +43,25 @@ describe("planner file import service", () => {
       text: async () => JSON.stringify(graph),
     });
     expect(result).toEqual({ graph, sourceName: "route.json" });
+  });
+
+  it("reads coordinates from an XLSX workbook", async () => {
+    const workbook = XLSX.utils.book_new();
+    const sheet = XLSX.utils.aoa_to_sheet([
+      ["x", "y", "type"],
+      [1.5, 2.5, "visit"],
+    ]);
+    XLSX.utils.book_append_sheet(workbook, sheet, "Route");
+    const bytes = XLSX.write(workbook, { bookType: "xlsx", type: "array" });
+
+    const result = await readPlannerImportFile({
+      name: "route.xlsx",
+      arrayBuffer: async () => bytes,
+    });
+
+    expect(result.graph.points).toEqual([
+      { x: 1.5, y: 2.5, kind: "visit", zoneId: null, task: null },
+    ]);
   });
 
   it("rejects unsupported file extensions", async () => {

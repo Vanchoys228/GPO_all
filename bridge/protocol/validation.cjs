@@ -31,6 +31,13 @@ const DEFAULT_CUCKOO_PARAMS = {
 };
 
 const SURFACE_KEYS = new Set(["neutral", "rough", "slippery"]);
+const MAX_ROUTE_POINTS = 1000;
+
+const createValidationError = (message) => {
+  const error = new Error(message);
+  error.statusCode = 400;
+  return error;
+};
 
 const clamp = (value, min, max) => Math.max(min, Math.min(value, max));
 
@@ -129,14 +136,17 @@ const sanitizeNativeParams = (algorithmKey, rawParams) => {
 
 const validatePoints = (points) => {
   if (!Array.isArray(points)) {
-    throw new Error("Points payload must be an array.");
+    throw createValidationError("Points payload must be an array.");
+  }
+  if (points.length > MAX_ROUTE_POINTS) {
+    throw createValidationError(`A route may contain at most ${MAX_ROUTE_POINTS} points.`);
   }
 
   return points.map((point) => {
     const x = Number(point?.x);
     const y = Number(point?.y);
     if (!Number.isFinite(x) || !Number.isFinite(y)) {
-      throw new Error("Every route point must contain finite x and y.");
+      throw createValidationError("Every route point must contain finite x and y.");
     }
     return { x, y };
   });
@@ -194,6 +204,7 @@ const validateSurfaceZones = (zones) => {
 };
 
 module.exports = {
+  MAX_ROUTE_POINTS,
   clamp,
   clampInt,
   normalizeNumber,

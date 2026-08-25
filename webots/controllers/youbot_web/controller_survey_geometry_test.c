@@ -52,7 +52,7 @@ int main(void) {
     return 6;
   }
 
-  SurveyGrid grid = {0};
+  static SurveyGrid grid;
   grid.min_x = 0.0;
   grid.min_y = 0.0;
   grid.cell = 1.0;
@@ -82,7 +82,7 @@ int main(void) {
   controller_survey_rdp_keep(bent, 0, 2, 0.34, keep);
   if (!keep[1]) return 15;
 
-  SurveyGrid path_grid = {0};
+  static SurveyGrid path_grid;
   path_grid.min_x = 0.0;
   path_grid.min_y = 0.0;
   path_grid.cell = 1.0;
@@ -137,7 +137,7 @@ int main(void) {
     return 27;
   }
 
-  SurveyGrid boundary_grid = {0};
+  static SurveyGrid boundary_grid;
   boundary_grid.min_x = 0.0;
   boundary_grid.min_y = 0.0;
   boundary_grid.cell = 1.0;

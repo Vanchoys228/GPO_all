@@ -1,7 +1,15 @@
-import { existsSync, readFileSync, readdirSync } from "node:fs";
+import { existsSync, readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
 
 describe("architecture cleanup", () => {
+  it("publishes bridge ports on loopback only", () => {
+    const compose = readFileSync("compose.yaml", "utf8");
+
+    for (const port of [9001, 9002, 9003]) {
+      expect(compose).toContain(`127.0.0.1:${port}:${port}`);
+    }
+  });
+
   it("does not keep the unused collapsible section implementation", () => {
     expect(existsSync("src/components/dashboard/CollapsibleSection.jsx")).toBe(false);
 
@@ -11,12 +19,11 @@ describe("architecture cleanup", () => {
     expect(plannerUiState).not.toContain("sections");
   });
 
-  it("does not keep generated binaries or the unused legacy map asset", () => {
+  it("ignores generated binaries and does not keep the unused legacy map asset", () => {
     expect(existsSync("public/map.png")).toBe(false);
-    expect(existsSync("native/build/gpo_route_solver.exe")).toBe(false);
-
-    const controllerFiles = readdirSync("webots/controllers/youbot_web");
-    expect(controllerFiles.some((file) => file.endsWith(".exe"))).toBe(false);
+    const gitignore = readFileSync(".gitignore", "utf8");
+    expect(gitignore).toContain("native/build");
+    expect(gitignore).toContain("webots/controllers/youbot_web/*.exe");
   });
 
   it("does not keep temporary implementation plan artifacts", () => {

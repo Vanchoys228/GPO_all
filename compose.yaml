@@ -12,9 +12,9 @@ services:
       SOLVER_PATH: /app/native/build/gpo_route_solver
       MOCK_TELEMETRY: ${MOCK_TELEMETRY:-0}
     ports:
-      - "9001:9001"
-      - "9002:9002"
-      - "9003:9003"
+      - "127.0.0.1:9001:9001"
+      - "127.0.0.1:9002:9002"
+      - "127.0.0.1:9003:9003"
     volumes:
       - ./web_state:/state
     restart: unless-stopped
