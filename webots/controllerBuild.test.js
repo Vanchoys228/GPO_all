@@ -149,4 +149,11 @@ describe("Webots controller build configuration", () => {
     expect(source).toContain("controller_camera_render_waypoint_marker(");
     expect(source).not.toContain("target_x - 3, horizon - 21, target_x + 3, horizon - 15");
   });
+
+  it("delegates camera-observation decisions to Camera", () => {
+    const source = readFileSync(`${controllerDirectory}/youbot_web.c`, "utf8");
+
+    expect(source).toContain("controller_camera_observation_hint(");
+    expect(source).not.toContain("camera_obstacle_center_offset * fmax(effective_fov, 0.8) * 0.5");
+  });
 });

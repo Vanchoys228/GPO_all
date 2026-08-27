@@ -555,11 +555,13 @@ static void update_camera_obstacle_hint(void) {
   controller_camera_analyze(
       &analysis_config, read_webots_camera_pixel, (void *)&pixel_context, &observation);
 
-  camera_obstacle_score = observation.score;
-  if (observation.visible) {
+  const ControllerCameraObstacleHint hint =
+      controller_camera_observation_hint(&observation, effective_fov);
+  camera_obstacle_score = hint.score;
+  if (hint.visible) {
     camera_obstacle_visible = 1;
-    camera_obstacle_center_offset = observation.center_offset;
-    camera_obstacle_angle = camera_obstacle_center_offset * fmax(effective_fov, 0.8) * 0.5;
+    camera_obstacle_center_offset = hint.center_offset;
+    camera_obstacle_angle = hint.angle;
     camera_obstacle_range =
         estimate_camera_range_from_lidar(camera_obstacle_angle, observation.fallback_range_m);
     camera_detection_count = observation.hits;
@@ -567,8 +569,7 @@ static void update_camera_obstacle_hint(void) {
     merge_camera_observation_into_map(
         camera_obstacle_angle,
         camera_obstacle_range,
-        2 + (int)(camera_obstacle_score * 14.0) +
-            (observation.max_hit_x - observation.min_hit_x > 18 ? 2 : 0));
+        hint.confidence_boost);
   }
 }
 

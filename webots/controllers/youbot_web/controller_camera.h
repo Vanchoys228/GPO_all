@@ -34,6 +34,14 @@ typedef struct {
 } ControllerCameraObservation;
 
 typedef struct {
+  int visible;
+  double score;
+  double center_offset;
+  double angle;
+  int confidence_boost;
+} ControllerCameraObstacleHint;
+
+typedef struct {
   double x;
   double y;
   double heading;
@@ -62,6 +70,9 @@ void controller_camera_analyze(
     ControllerCameraPixelReader read_pixel,
     void *pixel_context,
     ControllerCameraObservation *observation);
+ControllerCameraObstacleHint controller_camera_observation_hint(
+    const ControllerCameraObservation *observation,
+    double effective_fov);
 int controller_camera_obstacle_point(
     const ControllerCameraMapGeometryConfig *config,
     const ControllerCameraPose *pose,

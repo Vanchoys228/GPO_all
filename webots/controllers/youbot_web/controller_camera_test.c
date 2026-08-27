@@ -134,5 +134,25 @@ int main(void) {
     return 23;
   }
 
+  const ControllerCameraObservation decision_observation = {
+      .visible = 1,
+      .score = 0.10,
+      .center_offset = -0.5,
+      .min_hit_x = 10,
+      .max_hit_x = 31,
+  };
+  const ControllerCameraObstacleHint hint =
+      controller_camera_observation_hint(&decision_observation, 1.2);
+  if (!hint.visible || !nearly_equal(hint.angle, -0.3) || hint.confidence_boost != 5) {
+    return 24;
+  }
+
+  const ControllerCameraObstacleHint empty_hint =
+      controller_camera_observation_hint(NULL, 1.2);
+  if (empty_hint.visible || !nearly_equal(empty_hint.score, 0.0) ||
+      empty_hint.confidence_boost != 0) {
+    return 25;
+  }
+
   return 0;
 }

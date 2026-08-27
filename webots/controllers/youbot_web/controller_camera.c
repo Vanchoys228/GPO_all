@@ -105,6 +105,24 @@ void controller_camera_analyze(
       clamp_value(0.48 + vertical_depth * 1.25 + bottom_depth * 0.55, 0.42, 2.25);
 }
 
+ControllerCameraObstacleHint controller_camera_observation_hint(
+    const ControllerCameraObservation *observation,
+    double effective_fov) {
+  ControllerCameraObstacleHint hint = {0};
+  if (!observation) return hint;
+
+  hint.score = observation->score;
+  if (!observation->visible) return hint;
+
+  hint.visible = 1;
+  hint.center_offset = observation->center_offset;
+  hint.angle = hint.center_offset * fmax(effective_fov, 0.8) * 0.5;
+  hint.confidence_boost =
+      2 + (int)(hint.score * 14.0) +
+      (observation->max_hit_x - observation->min_hit_x > 18 ? 2 : 0);
+  return hint;
+}
+
 static int camera_geometry_input_valid(
     const ControllerCameraMapGeometryConfig *config,
     const ControllerCameraPose *pose,
