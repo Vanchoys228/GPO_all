@@ -71,6 +71,5 @@ int controller_webots_simulation_format_runtime_obstacle(
     double max_x,
     double min_y,
     double max_y);
-void controller_webots_simulation_remove_nodes(char defs[][64], int *count);
 
 #endif
