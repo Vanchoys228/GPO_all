@@ -24,6 +24,7 @@
 #include "controller_mapping_obstacles.h"
 #include "controller_mapping_scan.h"
 #include "controller_mapping_scan_service.h"
+#include "controller_mapping_store.h"
 #include "controller_motion_profile.h"
 #include "controller_navigation_context.h"
 #include "controller_navigation_lidar.h"
@@ -255,14 +256,15 @@ static ControllerWebotsSimulationNodeRegistry surface_zone_registry = {0};
 static ControllerWebotsSimulationNodeRegistry runtime_obstacle_registry = {0};
 static ObstacleTracePoint obstacle_trace[MAX_OBSTACLE_TRACE_POINTS];
 static int obstacle_trace_count = 0;
-static MapCell persistent_map[MAX_MAP_POINTS];
-static int persistent_map_count = 0;
-static int map_dirty = 0;
-static MapCell camera_map[MAX_CAMERA_MAP_POINTS];
-static int camera_map_count = 0;
-static MapCell camera_free_map[MAX_CAMERA_FREE_MAP_POINTS];
-static int camera_free_map_count = 0;
-static int camera_map_dirty = 0;
+static ControllerMappingStore mapping_store;
+#define persistent_map mapping_store.persistent_map
+#define persistent_map_count mapping_store.persistent_count
+#define map_dirty mapping_store.persistent_dirty
+static MapCell *camera_map = NULL;
+#define camera_map_count mapping_store.camera_count
+#define camera_free_map mapping_store.camera_free_map
+#define camera_free_map_count mapping_store.camera_free_count
+#define camera_map_dirty mapping_store.camera_dirty
 static int lidar_available = 0;
 static int lidar_resolution = 0;
 static double lidar_fov = 0.0;
@@ -1097,12 +1099,16 @@ static void clear_camera_map() {
       CAMERA_MAP_CSV_TEMP_PATH);
 }
 
+static ControllerMappingStorePaths mapping_store_paths(void) {
+  return (ControllerMappingStorePaths){
+      MAP_PATH, MAP_TEMP_PATH, MAP_CSV_PATH, MAP_CSV_TEMP_PATH,
+      CAMERA_MAP_PATH, CAMERA_MAP_TEMP_PATH, CAMERA_MAP_CSV_PATH, CAMERA_MAP_CSV_TEMP_PATH};
+}
+
 static void clear_persistent_map() {
-  persistent_map_count = 0;
-  map_dirty = 0;
-  controller_obstacle_map_clear_files(
-      MAP_PATH, MAP_TEMP_PATH, MAP_CSV_PATH, MAP_CSV_TEMP_PATH);
-  clear_camera_map();
+  const ControllerMappingStorePaths paths = mapping_store_paths();
+  controller_mapping_store_clear(&mapping_store, &paths);
+  camera_map = mapping_store.camera_map;
 }
 
 static void generate_survey_route(const char *path) {
@@ -1126,37 +1132,13 @@ static void generate_survey_route(const char *path) {
 }
 
 static void maybe_write_map(void) {
-  if (!map_dirty) return;
   if ((step_counter % MAP_WRITE_INTERVAL) != 0) return;
-
-  if (controller_obstacle_map_write(
-          MAP_PATH,
-          MAP_TEMP_PATH,
-          MAP_CSV_PATH,
-          MAP_CSV_TEMP_PATH,
-          MAP_CELL_SIZE,
-          persistent_map,
-          persistent_map_count)) {
-    map_dirty = 0;
-  }
+  const ControllerMappingStorePaths paths = mapping_store_paths();
+  controller_mapping_store_write(&mapping_store, &paths, MAP_CELL_SIZE, CAMERA_MAP_CELL_SIZE);
 }
 
 static void maybe_write_camera_map(void) {
-  if (!camera_map_dirty) return;
-  if ((step_counter % MAP_WRITE_INTERVAL) != 0) return;
-
-  if (controller_camera_map_io_write(
-          CAMERA_MAP_PATH,
-          CAMERA_MAP_TEMP_PATH,
-          CAMERA_MAP_CSV_PATH,
-          CAMERA_MAP_CSV_TEMP_PATH,
-          CAMERA_MAP_CELL_SIZE,
-          camera_map,
-          camera_map_count,
-          camera_free_map,
-          camera_free_map_count)) {
-    camera_map_dirty = 0;
-  }
+  maybe_write_map();
 }
 
 
@@ -2830,6 +2812,8 @@ int main(int argc, char **argv) {
   init_sensors();
   init_pose_tracking();
   reset_robot_pose();
+  controller_mapping_store_init(&mapping_store);
+  camera_map = mapping_store.camera_map;
   clear_persistent_map();
   controller_webots_camera_adapter_remove_frames(
       CAMERA_FRAME_BMP_PATH,

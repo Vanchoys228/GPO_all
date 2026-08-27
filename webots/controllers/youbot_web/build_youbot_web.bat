@@ -60,6 +60,7 @@ cl /nologo /std:c11 /O2 /I"%WEBOTS_HOME%\include\controller\c" ^
   "%CONTROLLER_DIR%controller_mapping_obstacles.c" ^
   "%CONTROLLER_DIR%controller_mapping_scan.c" ^
   "%CONTROLLER_DIR%controller_mapping_scan_service.c" ^
+  "%CONTROLLER_DIR%controller_mapping_store.c" ^
   "%CONTROLLER_DIR%controller_motion_profile.c" ^
   "%CONTROLLER_DIR%controller_navigation_context.c" ^
   "%CONTROLLER_DIR%controller_navigation_lidar.c" ^

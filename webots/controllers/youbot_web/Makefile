@@ -90,6 +90,7 @@ C_SOURCES = \
   controller_mapping_obstacles.c \
   controller_mapping_scan.c \
   controller_mapping_scan_service.c \
+  controller_mapping_store.c \
   controller_motion_profile.c \
   controller_navigation_context.c \
   controller_navigation_lidar.c \
