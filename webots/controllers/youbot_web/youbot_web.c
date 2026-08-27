@@ -53,6 +53,7 @@
 #include "controller_types.h"
 #include "controller_webots_devices.h"
 #include "controller_webots_adapter.h"
+#include "controller_webots_camera_adapter.h"
 #include "controller_webots_pose.h"
 #include "controller_webots_simulation.h"
 #include "controller_webots_sensors.h"
@@ -278,8 +279,8 @@ static int camera_available = 0;
 static int camera_width = 0;
 static int camera_height = 0;
 static double camera_fov = 0.0;
-static int camera_frame_sequence = 0;
-static double camera_frame_time = 0.0;
+static ControllerWebotsCameraFrameMetadata camera_frame_metadata = {
+    "camera_frame.bmp", "image/bmp", 0, 0.0};
 static int camera_obstacle_visible = 0;
 static double camera_obstacle_score = 0.0;
 static double camera_obstacle_center_offset = 0.0;
@@ -365,8 +366,6 @@ static ControllerPaths controller_paths;
 #define CAMERA_FRAME_BMP_TEMP_PATH controller_paths.camera_frame_bmp_temp
 #define CAMERA_FRAME_JPEG_PATH controller_paths.camera_frame_jpeg
 #define CAMERA_FRAME_JPEG_TEMP_PATH controller_paths.camera_frame_jpeg_temp
-static const char *camera_frame_file = "camera_frame.bmp";
-static const char *camera_frame_mime = "image/bmp";
 
 static int load_route(RouteData *route);
 static void reset_navigation_mode(void);
@@ -676,12 +675,9 @@ static void maybe_write_camera_frame(void) {
 
   if (camera_virtual_mode) {
     if (write_virtual_camera_frame() == 0) {
-      if (replace_file(CAMERA_FRAME_BMP_TEMP_PATH, CAMERA_FRAME_BMP_PATH) == 0) {
-        camera_frame_file = "camera_frame.bmp";
-        camera_frame_mime = "image/bmp";
-        camera_frame_sequence += 1;
-        camera_frame_time = wb_robot_get_time();
-      }
+      controller_webots_camera_adapter_publish_frame(
+          CAMERA_FRAME_BMP_TEMP_PATH, CAMERA_FRAME_BMP_PATH, "camera_frame.bmp", "image/bmp",
+          wb_robot_get_time(), &camera_frame_metadata);
     }
     return;
   }
@@ -693,12 +689,9 @@ static void maybe_write_camera_frame(void) {
 
   if (controller_webots_sensors_save_camera_image(
           &webots_sensors, CAMERA_FRAME_JPEG_TEMP_PATH, 70) == 0) {
-    if (replace_file(CAMERA_FRAME_JPEG_TEMP_PATH, CAMERA_FRAME_JPEG_PATH) == 0) {
-      camera_frame_file = "camera_frame.jpg";
-      camera_frame_mime = "image/jpeg";
-      camera_frame_sequence += 1;
-      camera_frame_time = wb_robot_get_time();
-    }
+    controller_webots_camera_adapter_publish_frame(
+        CAMERA_FRAME_JPEG_TEMP_PATH, CAMERA_FRAME_JPEG_PATH, "camera_frame.jpg", "image/jpeg",
+        wb_robot_get_time(), &camera_frame_metadata);
   }
 }
 
@@ -2751,10 +2744,10 @@ static void write_state_snapshot(void) {
       camera_height,
       camera_fov,
       camera_virtual_mode ? "virtual_lidar" : "webots_camera",
-      camera_frame_file,
-      camera_frame_mime,
-      camera_frame_sequence,
-      camera_frame_time,
+      camera_frame_metadata.file_name,
+      camera_frame_metadata.mime_type,
+      camera_frame_metadata.sequence,
+      camera_frame_metadata.time,
       camera_obstacle_visible,
       camera_obstacle_score,
       camera_obstacle_center_offset,
@@ -2838,10 +2831,11 @@ int main(int argc, char **argv) {
   init_pose_tracking();
   reset_robot_pose();
   clear_persistent_map();
-  remove(CAMERA_FRAME_BMP_PATH);
-  remove(CAMERA_FRAME_BMP_TEMP_PATH);
-  remove(CAMERA_FRAME_JPEG_PATH);
-  remove(CAMERA_FRAME_JPEG_TEMP_PATH);
+  controller_webots_camera_adapter_remove_frames(
+      CAMERA_FRAME_BMP_PATH,
+      CAMERA_FRAME_BMP_TEMP_PATH,
+      CAMERA_FRAME_JPEG_PATH,
+      CAMERA_FRAME_JPEG_TEMP_PATH);
   apply_motion_profile();
   motion_profile_last_modified = get_file_mtime(MOTION_PROFILE_PATH);
   if (motion_profile_last_modified >= 0) {

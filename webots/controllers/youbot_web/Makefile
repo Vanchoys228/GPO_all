@@ -120,6 +120,7 @@ C_SOURCES = \
   controller_types.c \
   controller_webots_devices.c \
   controller_webots_adapter.c \
+  controller_webots_camera_adapter.c \
   controller_webots_pose.c \
   controller_webots_sensors.c \
   controller_webots_simulation.c \

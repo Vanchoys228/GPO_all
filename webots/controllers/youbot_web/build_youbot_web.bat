@@ -90,6 +90,7 @@ cl /nologo /std:c11 /O2 /I"%WEBOTS_HOME%\include\controller\c" ^
   "%CONTROLLER_DIR%controller_types.c" ^
   "%CONTROLLER_DIR%controller_webots_devices.c" ^
   "%CONTROLLER_DIR%controller_webots_adapter.c" ^
+  "%CONTROLLER_DIR%controller_webots_camera_adapter.c" ^
   "%CONTROLLER_DIR%controller_webots_pose.c" ^
   "%CONTROLLER_DIR%controller_webots_sensors.c" ^
   "%CONTROLLER_DIR%controller_webots_simulation.c" ^
