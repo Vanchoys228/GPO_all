@@ -110,4 +110,11 @@ describe("Webots controller build configuration", () => {
     expect(source).toContain("controller_webots_simulation_format_surface_zone(");
     expect(source).not.toContain("geometry IndexedFaceSet {");
   });
+
+  it("delegates runtime-obstacle presentation to the Simulation Adapter", () => {
+    const source = readFileSync(`${controllerDirectory}/youbot_web.c`, "utf8");
+
+    expect(source).toContain("controller_webots_simulation_format_runtime_obstacle(");
+    expect(source).not.toContain("name \"runtime_obstacle\"");
+  });
 });

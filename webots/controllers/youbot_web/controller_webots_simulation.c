@@ -76,6 +76,12 @@ static void append_text(char *buffer, size_t buffer_size, const char *text) {
   strncat(buffer, text, buffer_size - used - 1);
 }
 
+static double clamp_value(double value, double min_value, double max_value) {
+  if (value < min_value) return min_value;
+  if (value > max_value) return max_value;
+  return value;
+}
+
 int controller_webots_simulation_format_surface_zone(
     char *buffer,
     size_t buffer_size,
@@ -127,6 +133,50 @@ int controller_webots_simulation_format_surface_zone(
       blue,
       coord_buffer,
       index_buffer);
+  return written >= 0 && (size_t)written < buffer_size ? written : 0;
+}
+
+int controller_webots_simulation_format_runtime_obstacle(
+    char *buffer,
+    size_t buffer_size,
+    const RuntimeCommand *command,
+    double min_x,
+    double max_x,
+    double min_y,
+    double max_y) {
+  if (!buffer || buffer_size == 0 || !command || !command->has_spawn_obstacle) return 0;
+
+  const double x = clamp_value(command->x, min_x, max_x);
+  const double y = clamp_value(command->y, min_y, max_y);
+  const double size_x = clamp_value(command->size_x, 0.2, 3.5);
+  const double size_y = clamp_value(command->size_y, 0.2, 3.5);
+  const double height = clamp_value(command->height, 0.12, 2.8);
+  const long long compact_id = command->id >= 0 ? command->id : 0;
+  const int written = snprintf(
+      buffer,
+      buffer_size,
+      "DEF WEB_OBS_%lld Solid { "
+      "translation %.6f %.6f %.6f "
+      "name \"runtime_obstacle\" "
+      "children [ "
+      "Shape { "
+      "appearance PBRAppearance { baseColor 0.7608 0.2549 0.1451 roughness 0.95 metalness 0.0 } "
+      "geometry Box { size %.6f %.6f %.6f } "
+      "} "
+      "] "
+      "boundingObject Box { size %.6f %.6f %.6f } "
+      "locked TRUE "
+      "}",
+      compact_id,
+      x,
+      y,
+      height * 0.5,
+      size_x,
+      size_y,
+      height,
+      size_x,
+      size_y,
+      height);
   return written >= 0 && (size_t)written < buffer_size ? written : 0;
 }
 

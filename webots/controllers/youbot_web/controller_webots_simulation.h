@@ -22,6 +22,14 @@ int controller_webots_simulation_format_surface_zone(
     size_t buffer_size,
     const SurfaceZone *zone,
     int zone_index);
+int controller_webots_simulation_format_runtime_obstacle(
+    char *buffer,
+    size_t buffer_size,
+    const RuntimeCommand *command,
+    double min_x,
+    double max_x,
+    double min_y,
+    double max_y);
 void controller_webots_simulation_remove_nodes(char defs[][64], int *count);
 
 #endif

@@ -19,6 +19,14 @@ int controller_webots_simulation_format_surface_zone(
     size_t buffer_size,
     const SurfaceZone *zone,
     int zone_index);
+int controller_webots_simulation_format_runtime_obstacle(
+    char *buffer,
+    size_t buffer_size,
+    const RuntimeCommand *command,
+    double min_x,
+    double max_x,
+    double min_y,
+    double max_y);
 
 int main(void) {
   char node_string[1024] = {0};
@@ -61,5 +69,25 @@ int main(void) {
   assert(strstr(node_string, "baseColor 0.9300 0.5400 0.0800") != NULL);
   assert(strstr(node_string, "point [ 0.000000 0.000000 0.016000, 1.000000 0.000000 0.016000, 0.000000 1.000000 0.016000,  ]") != NULL);
   assert(strstr(node_string, "coordIndex [ 0 1 2 -1 ]") != NULL);
+
+  RuntimeCommand obstacle = {0};
+  obstacle.id = 37;
+  obstacle.has_spawn_obstacle = 1;
+  obstacle.x = 30.0;
+  obstacle.y = -30.0;
+  obstacle.size_x = 0.1;
+  obstacle.size_y = 5.0;
+  obstacle.height = 1.2;
+  memset(node_string, 0, sizeof(node_string));
+  const int obstacle_written = controller_webots_simulation_format_runtime_obstacle(
+      node_string, sizeof(node_string), &obstacle, -21.5, 21.5, -16.5, 16.5);
+
+  assert(obstacle_written > 0);
+  assert(strstr(node_string, "DEF WEB_OBS_37 Solid {") != NULL);
+  assert(strstr(node_string, "translation 21.500000 -16.500000 0.600000") != NULL);
+  assert(strstr(node_string, "name \"runtime_obstacle\"") != NULL);
+  assert(strstr(node_string, "baseColor 0.7608 0.2549 0.1451") != NULL);
+  assert(strstr(node_string, "geometry Box { size 0.200000 3.500000 1.200000 }") != NULL);
+  assert(strstr(node_string, "boundingObject Box { size 0.200000 3.500000 1.200000 }") != NULL);
   return 0;
 }

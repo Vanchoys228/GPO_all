@@ -2093,13 +2093,6 @@ static void remove_runtime_obstacle_nodes() {
 static void spawn_runtime_obstacle_from_command(const RuntimeCommand *command) {
   if (!command || !command->has_spawn_obstacle || !webots_pose.root_children_field) return;
 
-  const double x = clamp_value(command->x, -21.5, 21.5);
-  const double y = clamp_value(command->y, -16.5, 16.5);
-  const double size_x = clamp_value(command->size_x, 0.2, 3.5);
-  const double size_y = clamp_value(command->size_y, 0.2, 3.5);
-  const double height = clamp_value(command->height, 0.12, 2.8);
-  const double half_height = height * 0.5;
-
   if (runtime_obstacle_count >= MAX_RUNTIME_OBSTACLE_NODES) {
     remove_runtime_obstacle_at(0);
   }
@@ -2108,35 +2101,14 @@ static void spawn_runtime_obstacle_from_command(const RuntimeCommand *command) {
   char def_name[64];
   char node_string[1024];
   snprintf(def_name, sizeof(def_name), "WEB_OBS_%lld", compact_id);
+  if (!controller_webots_simulation_format_runtime_obstacle(
+          node_string, sizeof(node_string), command, -21.5, 21.5, -16.5, 16.5)) {
+    return;
+  }
   WbNodeRef existing = wb_supervisor_node_get_from_def(def_name);
   if (existing) {
     wb_supervisor_node_remove(existing);
   }
-  snprintf(
-      node_string,
-      sizeof(node_string),
-      "DEF %s Solid { "
-      "translation %.6f %.6f %.6f "
-      "name \"runtime_obstacle\" "
-      "children [ "
-      "Shape { "
-      "appearance PBRAppearance { baseColor 0.7608 0.2549 0.1451 roughness 0.95 metalness 0.0 } "
-      "geometry Box { size %.6f %.6f %.6f } "
-      "} "
-      "] "
-      "boundingObject Box { size %.6f %.6f %.6f } "
-      "locked TRUE "
-      "}",
-      def_name,
-      x,
-      y,
-      half_height,
-      size_x,
-      size_y,
-      height,
-      size_x,
-      size_y,
-      height);
 
   const int insert_at = wb_supervisor_field_get_count(webots_pose.root_children_field);
   wb_supervisor_field_import_mf_node_from_string(
