@@ -49,6 +49,43 @@ void controller_webots_simulation_registry_remove_all(
   }
 }
 
+void controller_webots_simulation_sync_limit_zones(
+    WbFieldRef root_children_field,
+    ControllerWebotsSimulationNodeRegistry *registry,
+    const ZoneData *zones,
+    int capacity,
+    double wall_thickness,
+    double wall_height) {
+  controller_webots_simulation_registry_remove_all(registry);
+  if (!root_children_field || !registry || !zones) return;
+
+  for (int zone_index = 0; zone_index < zones->count; ++zone_index) {
+    const LimitZone *zone = &zones->zones[zone_index];
+    for (int point_index = 0; point_index < zone->point_count; ++point_index) {
+      const int next = (point_index + 1) % zone->point_count;
+      char def_name[64];
+      char node_string[1024];
+      snprintf(def_name, sizeof(def_name), "WEB_LIMIT_%d_%d", zone_index, point_index);
+      if (!controller_webots_simulation_format_limit_wall(
+              node_string,
+              sizeof(node_string),
+              def_name,
+              zone->points[point_index].x,
+              zone->points[point_index].y,
+              zone->points[next].x,
+              zone->points[next].y,
+              wall_thickness,
+              wall_height)) {
+        continue;
+      }
+
+      const int insert_at = wb_supervisor_field_get_count(root_children_field);
+      wb_supervisor_field_import_mf_node_from_string(root_children_field, insert_at, node_string);
+      controller_webots_simulation_registry_track(registry, capacity, def_name);
+    }
+  }
+}
+
 int controller_webots_simulation_format_limit_wall(
     char *buffer,
     size_t buffer_size,

@@ -1981,38 +1981,13 @@ static void remove_zone_nodes() {
 }
 
 static void sync_zone_nodes() {
-  remove_zone_nodes();
-  if (!webots_pose.root_children_field) return;
-
-  for (int zone_index = 0; zone_index < zone_data.count; ++zone_index) {
-    const LimitZone *zone = &zone_data.zones[zone_index];
-    for (int point_index = 0; point_index < zone->point_count; ++point_index) {
-      const int next = (point_index + 1) % zone->point_count;
-      const double ax = zone->points[point_index].x;
-      const double ay = zone->points[point_index].y;
-      const double bx = zone->points[next].x;
-      const double by = zone->points[next].y;
-      char def_name[64];
-      char node_string[1024];
-      snprintf(def_name, sizeof(def_name), "WEB_LIMIT_%d_%d", zone_index, point_index);
-      if (!controller_webots_simulation_format_limit_wall(
-          node_string,
-          sizeof(node_string),
-          def_name,
-          ax,
-          ay,
-          bx,
-          by,
-          WALL_THICKNESS,
-          WALL_HEIGHT)) continue;
-
-      const int insert_at = wb_supervisor_field_get_count(webots_pose.root_children_field);
-      wb_supervisor_field_import_mf_node_from_string(
-          webots_pose.root_children_field, insert_at, node_string);
-      controller_webots_simulation_registry_track(
-          &zone_node_registry, MAX_ZONE_NODES, def_name);
-    }
-  }
+  controller_webots_simulation_sync_limit_zones(
+      webots_pose.root_children_field,
+      &zone_node_registry,
+      &zone_data,
+      MAX_ZONE_NODES,
+      WALL_THICKNESS,
+      WALL_HEIGHT);
 }
 
 static void remove_surface_zone_nodes() {
