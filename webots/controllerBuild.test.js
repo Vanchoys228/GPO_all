@@ -18,6 +18,19 @@ describe("Webots controller build configuration", () => {
     }
   });
 
+  it("keeps every reusable production source in the Windows build and standalone test runner", () => {
+    const productionSources = readdirSync(controllerDirectory)
+      .filter((file) => file.endsWith(".c") && !file.endsWith("_test.c"))
+      .filter((file) => file !== "youbot_web.c");
+    const windowsBuild = readFileSync(`${controllerDirectory}/build_youbot_web.bat`, "utf8");
+    const testRunner = readFileSync(`${controllerDirectory}/run_controller_tests.bat`, "utf8");
+
+    for (const source of productionSources) {
+      expect(windowsBuild, `${source} is missing from build_youbot_web.bat`).toContain(source);
+      expect(testRunner, `${source} is missing from run_controller_tests.bat`).toContain(source);
+    }
+  });
+
   it("uses strict void signatures for lifecycle callbacks", () => {
     const source = readFileSync(`${controllerDirectory}/youbot_web.c`, "utf8");
     const callbackNames = [
