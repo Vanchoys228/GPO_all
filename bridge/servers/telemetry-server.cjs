@@ -1,6 +1,37 @@
 const WebSocket = require("ws");
 const { createTelemetryService } = require("../services/telemetry-service.cjs");
 
+const safeJsonParse = (text) => {
+  try {
+    return { payload: JSON.parse(text) };
+  } catch {
+    return { error: "invalid_json" };
+  }
+};
+
+const validateTelemetryPayload = async (payload, coordinateContract) => {
+  if (!payload || typeof payload !== "object") return "invalid_telemetry_payload";
+
+  if ("contractVersion" in payload) {
+    const { unwrapTelemetryEvent, validateContractEnvelope } = await import("../../shared/contracts/index.js");
+    const validation = validateContractEnvelope(payload);
+    if (!validation.valid) return validation.error;
+    if (!unwrapTelemetryEvent(payload)) return "invalid_telemetry_event";
+  }
+
+  if ("coordinateContractVersion" in payload &&
+      payload.coordinateContractVersion !== coordinateContract.version) {
+    return "unsupported_coordinate_contract_version";
+  }
+
+  return null;
+};
+
+const sendServiceError = (ws, code) => {
+  if (ws.readyState !== WebSocket.OPEN) return;
+  ws.send(JSON.stringify({ type: "service.error", source: "telemetry-service", code }));
+};
+
 const createTelemetryServer = ({
   coordinateContract,
   enableMockTelemetry = false,
@@ -53,10 +84,21 @@ const createTelemetryServer = ({
     clients.add(ws);
     console.log("[telemetry] client connected");
     ws.on("message", async (data) => {
+      const text = typeof data === "string" ? data : data.toString();
+      const parsed = safeJsonParse(text);
+      if (parsed.error) {
+        sendServiceError(ws, parsed.error);
+        return;
+      }
+      const validationError = await validateTelemetryPayload(parsed.payload, coordinateContract);
+      if (validationError) {
+        sendServiceError(ws, validationError);
+        return;
+      }
+
       senders.add(ws);
       lastRealTelemetryAt = Date.now();
-      const text = typeof data === "string" ? data : data.toString();
-      const payload = JSON.parse(text);
+      const payload = parsed.payload;
       if (telemetryCount % 20 === 1) {
         console.log(`[telemetry] msg ${telemetryCount} size=${text.length}`);
       }
