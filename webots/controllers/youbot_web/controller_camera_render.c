@@ -125,6 +125,16 @@ void controller_camera_render_reticle(unsigned char *pixels, int width, int heig
       pixels, width, height, center_x, horizon - 10, center_x, horizon + 10, 80, 220, 230);
 }
 
+void controller_camera_render_waypoint_marker(
+    unsigned char *pixels, int width, int height, int target_x) {
+  if (!pixels || width <= 0 || height <= 0) return;
+  const int horizon = (int)(height * 0.42);
+  controller_camera_render_line(
+      pixels, width, height, target_x, horizon - 18, target_x, height - 8, 55, 222, 170);
+  controller_camera_render_rect(
+      pixels, width, height, target_x - 3, horizon - 21, target_x + 3, horizon - 15, 55, 222, 170);
+}
+
 void controller_camera_render_box(
     unsigned char *pixels, int width, int height,
     int center_x, int bottom_y, int box_width, int box_height, double danger) {

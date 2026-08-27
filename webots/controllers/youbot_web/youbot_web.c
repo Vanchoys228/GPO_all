@@ -573,7 +573,6 @@ static void update_camera_obstacle_hint(void) {
 }
 
 static void draw_virtual_camera_overlay(unsigned char *pixels, double effective_fov) {
-  const int horizon = (int)(CAMERA_FRAME_HEIGHT * 0.42);
   controller_camera_render_reticle(pixels, CAMERA_FRAME_WIDTH, CAMERA_FRAME_HEIGHT);
 
   if (route_data.count > 0 && current_waypoint_index < route_data.count &&
@@ -587,12 +586,8 @@ static void draw_virtual_camera_overlay(unsigned char *pixels, double effective_
     if (fabs(target_angle) < effective_fov * 0.5) {
       const double offset = clamp_value(target_angle / (effective_fov * 0.5), -1.0, 1.0);
       const int target_x = (int)((offset * 0.5 + 0.5) * (CAMERA_FRAME_WIDTH - 1));
-      controller_camera_render_line(pixels, CAMERA_FRAME_WIDTH, CAMERA_FRAME_HEIGHT,
-                                    target_x, horizon - 18, target_x, CAMERA_FRAME_HEIGHT - 8,
-                                    55, 222, 170);
-      controller_camera_render_rect(pixels, CAMERA_FRAME_WIDTH, CAMERA_FRAME_HEIGHT,
-                                    target_x - 3, horizon - 21, target_x + 3, horizon - 15,
-                                    55, 222, 170);
+      controller_camera_render_waypoint_marker(
+          pixels, CAMERA_FRAME_WIDTH, CAMERA_FRAME_HEIGHT, target_x);
     }
   }
 }

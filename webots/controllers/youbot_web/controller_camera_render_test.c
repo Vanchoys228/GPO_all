@@ -46,5 +46,10 @@ int main(void) {
   pixel = pixel_at(pixels, WIDTH / 2, (int)(HEIGHT * 0.42));
   if (pixel[0] != 80 || pixel[1] != 220 || pixel[2] != 230) return 7;
 
+  memset(pixels, 0, sizeof(pixels));
+  controller_camera_render_waypoint_marker(pixels, WIDTH, HEIGHT, WIDTH / 2);
+  pixel = pixel_at(pixels, WIDTH / 2, 1);
+  if (pixel[0] != 55 || pixel[1] != 222 || pixel[2] != 170) return 8;
+
   return 0;
 }
