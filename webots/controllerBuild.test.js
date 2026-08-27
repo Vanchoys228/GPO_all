@@ -115,8 +115,9 @@ describe("Webots controller build configuration", () => {
   it("delegates surface-zone presentation to the Simulation Adapter", () => {
     const source = readFileSync(`${controllerDirectory}/youbot_web.c`, "utf8");
 
-    expect(source).toContain("controller_webots_simulation_format_surface_zone(");
+    expect(source).toContain("controller_webots_simulation_sync_surface_zones(");
     expect(source).not.toContain("geometry IndexedFaceSet {");
+    expect(source).not.toContain("controller_webots_simulation_format_surface_zone(");
   });
 
   it("delegates runtime-obstacle presentation to the Simulation Adapter", () => {

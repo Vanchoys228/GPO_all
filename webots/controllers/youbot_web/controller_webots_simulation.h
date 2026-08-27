@@ -33,6 +33,11 @@ void controller_webots_simulation_sync_limit_zones(
     int capacity,
     double wall_thickness,
     double wall_height);
+void controller_webots_simulation_sync_surface_zones(
+    WbFieldRef root_children_field,
+    ControllerWebotsSimulationNodeRegistry *registry,
+    const SurfaceZoneData *zones,
+    int capacity);
 
 int controller_webots_simulation_format_limit_wall(
     char *buffer,

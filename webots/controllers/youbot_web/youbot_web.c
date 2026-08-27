@@ -1995,28 +1995,11 @@ static void remove_surface_zone_nodes() {
 }
 
 static void sync_surface_zone_nodes() {
-  remove_surface_zone_nodes();
-  if (!webots_pose.root_children_field) return;
-
-  for (int zone_index = 0; zone_index < surface_zone_data.count; ++zone_index) {
-    const SurfaceZone *zone = &surface_zone_data.zones[zone_index];
-    if (zone->point_count < 3) continue;
-
-    char def_name[64];
-    char node_string[4096];
-    snprintf(def_name, sizeof(def_name), "WEB_SURFACE_%d", zone_index);
-    if (!controller_webots_simulation_format_surface_zone(
-        node_string,
-        sizeof(node_string),
-        zone,
-        zone_index)) continue;
-
-    const int insert_at = wb_supervisor_field_get_count(webots_pose.root_children_field);
-    wb_supervisor_field_import_mf_node_from_string(
-        webots_pose.root_children_field, insert_at, node_string);
-    controller_webots_simulation_registry_track(
-        &surface_zone_registry, MAX_SURFACE_ZONE_NODES, def_name);
-  }
+  controller_webots_simulation_sync_surface_zones(
+      webots_pose.root_children_field,
+      &surface_zone_registry,
+      &surface_zone_data,
+      MAX_SURFACE_ZONE_NODES);
 }
 
 static void remove_runtime_obstacle_at(int index) {

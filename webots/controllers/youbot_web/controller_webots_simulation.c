@@ -218,6 +218,30 @@ int controller_webots_simulation_format_surface_zone(
   return written >= 0 && (size_t)written < buffer_size ? written : 0;
 }
 
+void controller_webots_simulation_sync_surface_zones(
+    WbFieldRef root_children_field,
+    ControllerWebotsSimulationNodeRegistry *registry,
+    const SurfaceZoneData *zones,
+    int capacity) {
+  controller_webots_simulation_registry_remove_all(registry);
+  if (!root_children_field || !registry || !zones) return;
+
+  for (int zone_index = 0; zone_index < zones->count; ++zone_index) {
+    const SurfaceZone *zone = &zones->zones[zone_index];
+    char def_name[64];
+    char node_string[4096];
+    snprintf(def_name, sizeof(def_name), "WEB_SURFACE_%d", zone_index);
+    if (!controller_webots_simulation_format_surface_zone(
+            node_string, sizeof(node_string), zone, zone_index)) {
+      continue;
+    }
+
+    const int insert_at = wb_supervisor_field_get_count(root_children_field);
+    wb_supervisor_field_import_mf_node_from_string(root_children_field, insert_at, node_string);
+    controller_webots_simulation_registry_track(registry, capacity, def_name);
+  }
+}
+
 int controller_webots_simulation_format_runtime_obstacle(
     char *buffer,
     size_t buffer_size,
