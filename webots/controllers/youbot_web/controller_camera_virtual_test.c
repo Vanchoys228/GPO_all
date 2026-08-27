@@ -31,5 +31,14 @@ int main(void) {
 
   controller_camera_virtual_sort_by_range_desc(clusters, summary.cluster_count);
   if (!nearly_equal(clusters[0].range, 1.0) || !nearly_equal(clusters[1].range, 0.6)) return 4;
+
+  const ControllerCameraVirtualCluster render_cluster = {0.0, 1.0, 4};
+  ControllerCameraVirtualBox box;
+  if (!controller_camera_virtual_box(&render_cluster, &config, 100, 100, &box)) return 5;
+  if (box.screen_x != 49 || box.bottom_y < 85 || box.bottom_y > 88 ||
+      box.width < 37 || box.width > 39 || box.height < 60 || box.height > 62 ||
+      !(box.danger > 0.39 && box.danger < 0.40)) {
+    return 6;
+  }
   return 0;
 }

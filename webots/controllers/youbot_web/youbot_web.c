@@ -604,20 +604,19 @@ static int write_virtual_camera_frame() {
   camera_obstacle_score = 0.0;
   camera_obstacle_center_offset = 0.0;
 
-  const int horizon = (int)(CAMERA_FRAME_HEIGHT * 0.42);
   const double effective_fov = camera_fov > EPS ? camera_fov : 1.05;
+  const ControllerCameraVirtualConfig virtual_config = {
+      lidar_fov,
+      effective_fov,
+      LIDAR_MIN_TRACE_RANGE,
+      LIDAR_MAX_TRACE_RANGE,
+      LIDAR_TRACK_CAUTION_RANGE,
+      LIDAR_AVOID_STOP_RANGE,
+      0.42,
+  };
   if (lidar_available && controller_webots_sensors_has_lidar(&webots_sensors) &&
       lidar_resolution > 1 && lidar_fov > EPS) {
     const float *ranges = controller_webots_sensors_lidar_ranges(&webots_sensors);
-    const ControllerCameraVirtualConfig virtual_config = {
-        lidar_fov,
-        effective_fov,
-        LIDAR_MIN_TRACE_RANGE,
-        LIDAR_MAX_TRACE_RANGE,
-        LIDAR_TRACK_CAUTION_RANGE,
-        LIDAR_AVOID_STOP_RANGE,
-        0.42,
-    };
     controller_camera_virtual_collect(
         ranges, lidar_resolution, &virtual_config, clusters, CAMERA_MAX_VIRTUAL_CLUSTERS,
         &cluster_summary);
@@ -641,19 +640,14 @@ static int write_virtual_camera_frame() {
 
   for (int i = 0; i < cluster_summary.cluster_count; ++i) {
     const double range = clamp_value(clusters[i].range, 0.12, LIDAR_MAX_TRACE_RANGE);
-    const double screen_offset = clamp_value(clusters[i].angle / (effective_fov * 0.5), -1.0, 1.0);
-    const int screen_x = (int)((screen_offset * 0.5 + 0.5) * (CAMERA_FRAME_WIDTH - 1));
-    const double depth01 = clamp_value((range - 0.15) / fmax(LIDAR_MAX_TRACE_RANGE - 0.15, 0.1), 0.0, 1.0);
-    const int bottom = horizon + (int)((CAMERA_FRAME_HEIGHT - horizon - 4) * (1.0 - depth01 * 0.82));
-    const int height = (int)clamp_value(82.0 / (range + 0.34), 16, 112);
-    const int width = (int)clamp_value(clusters[i].beams * 2.8 + 36.0 / (range + 0.32), 14, 96);
-    const double danger = clamp_value((LIDAR_TRACK_CAUTION_RANGE - range) /
-                                          fmax(LIDAR_TRACK_CAUTION_RANGE - LIDAR_AVOID_STOP_RANGE, 0.05),
-                                      0.0,
-                                      1.0);
+    ControllerCameraVirtualBox box;
+    if (!controller_camera_virtual_box(
+            &clusters[i], &virtual_config, CAMERA_FRAME_WIDTH, CAMERA_FRAME_HEIGHT, &box)) {
+      continue;
+    }
     controller_camera_render_box(
         pixels, CAMERA_FRAME_WIDTH, CAMERA_FRAME_HEIGHT,
-        screen_x, bottom, width, height, danger);
+        box.screen_x, box.bottom_y, box.width, box.height, box.danger);
     merge_camera_observation_into_map(
         clusters[i].angle,
         range,

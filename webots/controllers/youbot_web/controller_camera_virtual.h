@@ -25,6 +25,14 @@ typedef struct {
   int cluster_count;
 } ControllerCameraVirtualSummary;
 
+typedef struct {
+  int screen_x;
+  int bottom_y;
+  int width;
+  int height;
+  double danger;
+} ControllerCameraVirtualBox;
+
 void controller_camera_virtual_collect(
     const float *ranges,
     int resolution,
@@ -35,5 +43,11 @@ void controller_camera_virtual_collect(
 void controller_camera_virtual_sort_by_range_desc(
     ControllerCameraVirtualCluster *clusters,
     int count);
+int controller_camera_virtual_box(
+    const ControllerCameraVirtualCluster *cluster,
+    const ControllerCameraVirtualConfig *config,
+    int frame_width,
+    int frame_height,
+    ControllerCameraVirtualBox *box);
 
 #endif

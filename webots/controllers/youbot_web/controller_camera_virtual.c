@@ -83,3 +83,26 @@ void controller_camera_virtual_sort_by_range_desc(
     }
   }
 }
+
+int controller_camera_virtual_box(
+    const ControllerCameraVirtualCluster *cluster,
+    const ControllerCameraVirtualConfig *config,
+    int frame_width,
+    int frame_height,
+    ControllerCameraVirtualBox *box) {
+  if (!cluster || !config || !box || frame_width <= 0 || frame_height <= 0 ||
+      config->effective_fov <= 0.0) return 0;
+  const double range = clamp_value(cluster->range, 0.12, config->max_range);
+  const double offset = clamp_value(cluster->angle / (config->effective_fov * 0.5), -1.0, 1.0);
+  const int horizon = (int)(frame_height * 0.42);
+  const double depth = clamp_value(
+      (range - 0.15) / fmax(config->max_range - 0.15, 0.1), 0.0, 1.0);
+  box->screen_x = (int)((offset * 0.5 + 0.5) * (frame_width - 1));
+  box->bottom_y = horizon + (int)((frame_height - horizon - 4) * (1.0 - depth * 0.82));
+  box->height = (int)clamp_value(82.0 / (range + 0.34), 16, 112);
+  box->width = (int)clamp_value(cluster->beams * 2.8 + 36.0 / (range + 0.32), 14, 96);
+  box->danger = clamp_value(
+      (config->caution_range - range) / fmax(config->caution_range - config->stop_range, 0.05),
+      0.0, 1.0);
+  return 1;
+}
