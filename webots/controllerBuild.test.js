@@ -128,4 +128,11 @@ describe("Webots controller build configuration", () => {
     expect(source).not.toContain("controller_webots_simulation_format_runtime_obstacle(");
     expect(source).not.toContain("wb_supervisor_node_get_from_def");
   });
+
+  it("delegates camera-to-LiDAR range matching to Camera Fusion", () => {
+    const source = readFileSync(`${controllerDirectory}/youbot_web.c`, "utf8");
+
+    expect(source).toContain("controller_camera_fusion_estimate_range(");
+    expect(source).not.toContain("double best_angle_error = CAMERA_RANGE_SEARCH_WINDOW_RAD");
+  });
 });

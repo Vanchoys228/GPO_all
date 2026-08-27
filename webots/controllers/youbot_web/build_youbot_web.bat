@@ -47,6 +47,7 @@ cl /nologo /std:c11 /O2 /I"%WEBOTS_HOME%\include\controller\c" ^
   "%CONTROLLER_DIR%controller_camera_map.c" ^
   "%CONTROLLER_DIR%controller_camera_map_io.c" ^
   "%CONTROLLER_DIR%controller_camera_render.c" ^
+  "%CONTROLLER_DIR%controller_camera_fusion.c" ^
   "%CONTROLLER_DIR%controller_drive.c" ^
   "%CONTROLLER_DIR%controller_io.c" ^
   "%CONTROLLER_DIR%controller_lidar_math.c" ^

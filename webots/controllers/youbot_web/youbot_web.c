@@ -8,6 +8,7 @@
 #include "controller_avoidance_service.h"
 #include "controller_avoidance_presentation.h"
 #include "controller_camera.h"
+#include "controller_camera_fusion.h"
 #include "controller_camera_map.h"
 #include "controller_camera_map_io.h"
 #include "controller_camera_render.h"
@@ -485,29 +486,15 @@ static double estimate_camera_range_from_lidar(double relative_angle, double fal
 
   const float *ranges = controller_webots_sensors_lidar_ranges(&webots_sensors);
   if (!ranges) return fallback_range;
-
-  double best_range = LIDAR_MAX_TRACE_RANGE;
-  double best_angle_error = CAMERA_RANGE_SEARCH_WINDOW_RAD;
-  for (int i = 0; i < lidar_resolution; ++i) {
-    const double alpha = (double)i / (double)(lidar_resolution - 1);
-    const double beam_angle = -0.5 * lidar_fov + alpha * lidar_fov;
-    const double angle_error = fabs(beam_angle - relative_angle);
-    const double range = ranges[i];
-    if (angle_error > CAMERA_RANGE_SEARCH_WINDOW_RAD ||
-        !is_finite_double(range) ||
-        range <= LIDAR_MIN_TRACE_RANGE ||
-        range >= LIDAR_MAX_TRACE_RANGE - 0.03) {
-      continue;
-    }
-
-    if (range < best_range || angle_error < best_angle_error * 0.55) {
-      best_range = range;
-      best_angle_error = angle_error;
-    }
-  }
-
-  if (best_range < LIDAR_MAX_TRACE_RANGE) return best_range;
-  return fallback_range;
+  return controller_camera_fusion_estimate_range(
+      ranges,
+      lidar_resolution,
+      lidar_fov,
+      relative_angle,
+      CAMERA_RANGE_SEARCH_WINDOW_RAD,
+      LIDAR_MIN_TRACE_RANGE,
+      LIDAR_MAX_TRACE_RANGE,
+      fallback_range);
 }
 
 static void merge_camera_visible_frustum_into_map(double effective_fov, double default_range) {
