@@ -62,6 +62,12 @@ describe("Webots controller build configuration", () => {
     );
   });
 
+  it("allows a single standalone controller test to be selected", () => {
+    const testRunner = readFileSync(`${controllerDirectory}/run_controller_tests.bat`, "utf8");
+
+    expect(testRunner).toContain("CONTROLLER_TEST_FILTER");
+  });
+
   it("keeps Supervisor pose access outside the orchestration file", () => {
     const source = readFileSync(`${controllerDirectory}/youbot_web.c`, "utf8");
 
@@ -89,5 +95,12 @@ describe("Webots controller build configuration", () => {
     expect(source).not.toContain("<webots/lidar.h>");
     expect(source).not.toContain("<webots/camera.h>");
     expect(source).toContain('#include "controller_webots_sensors.h"');
+  });
+
+  it("delegates limit-zone wall presentation to the Simulation Adapter", () => {
+    const source = readFileSync(`${controllerDirectory}/youbot_web.c`, "utf8");
+
+    expect(source).toContain("controller_webots_simulation_format_limit_wall(");
+    expect(source).not.toContain("name \"dynamic_zone_wall\"");
   });
 });

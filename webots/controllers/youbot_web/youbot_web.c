@@ -1999,45 +1999,19 @@ static void sync_zone_nodes() {
       const double ay = zone->points[point_index].y;
       const double bx = zone->points[next].x;
       const double by = zone->points[next].y;
-      const double dx = bx - ax;
-      const double dy = by - ay;
-      const double length = hypot2(dx, dy);
-      if (length <= 0.05) continue;
-
-      const double center_x = (ax + bx) * 0.5;
-      const double center_y = (ay + by) * 0.5;
-      const double angle = atan2(dy, dx);
-
       char def_name[64];
       char node_string[1024];
       snprintf(def_name, sizeof(def_name), "WEB_LIMIT_%d_%d", zone_index, point_index);
-      snprintf(
+      if (!controller_webots_simulation_format_limit_wall(
           node_string,
           sizeof(node_string),
-          "DEF %s Solid { "
-          "translation %.6f %.6f %.6f "
-          "rotation 0 0 1 %.6f "
-          "name \"dynamic_zone_wall\" "
-          "children [ "
-          "Shape { "
-          "appearance PBRAppearance { baseColor 0.1176 0.4510 0.9725 roughness 1 metalness 0 transparency 0.45 } "
-          "geometry Box { size %.6f %.6f %.6f } "
-          "} "
-          "] "
-          "boundingObject Box { size %.6f %.6f %.6f } "
-          "locked TRUE "
-          "}",
           def_name,
-          center_x,
-          center_y,
-          WALL_HEIGHT * 0.5,
-          angle,
-          length,
+          ax,
+          ay,
+          bx,
+          by,
           WALL_THICKNESS,
-          WALL_HEIGHT,
-          length,
-          WALL_THICKNESS,
-          WALL_HEIGHT);
+          WALL_HEIGHT)) continue;
 
       const int insert_at = wb_supervisor_field_get_count(webots_pose.root_children_field);
       wb_supervisor_field_import_mf_node_from_string(
