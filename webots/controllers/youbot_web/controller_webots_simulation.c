@@ -2,6 +2,7 @@
 
 #include <math.h>
 #include <stdio.h>
+#include <string.h>
 
 int controller_webots_simulation_format_limit_wall(
     char *buffer,
@@ -47,6 +48,85 @@ int controller_webots_simulation_format_limit_wall(
       length,
       wall_thickness,
       wall_height);
+  return written >= 0 && (size_t)written < buffer_size ? written : 0;
+}
+
+static void surface_zone_color(
+    const char *surface_key, double *red, double *green, double *blue) {
+  if (strcmp(surface_key, "rough") == 0) {
+    *red = 0.93;
+    *green = 0.54;
+    *blue = 0.08;
+    return;
+  }
+  if (strcmp(surface_key, "slippery") == 0) {
+    *red = 0.14;
+    *green = 0.66;
+    *blue = 0.88;
+    return;
+  }
+  *red = 0.52;
+  *green = 0.60;
+  *blue = 0.70;
+}
+
+static void append_text(char *buffer, size_t buffer_size, const char *text) {
+  const size_t used = strlen(buffer);
+  if (used >= buffer_size - 1) return;
+  strncat(buffer, text, buffer_size - used - 1);
+}
+
+int controller_webots_simulation_format_surface_zone(
+    char *buffer,
+    size_t buffer_size,
+    const SurfaceZone *zone,
+    int zone_index) {
+  if (!buffer || buffer_size == 0 || !zone || zone->point_count < 3) return 0;
+
+  double red = 0.0;
+  double green = 0.0;
+  double blue = 0.0;
+  surface_zone_color(zone->surface_key, &red, &green, &blue);
+
+  char coord_buffer[2048] = "";
+  char index_buffer[512] = "";
+  char chunk[96];
+  for (int point_index = 0; point_index < zone->point_count; ++point_index) {
+    snprintf(
+        chunk,
+        sizeof(chunk),
+        "%.6f %.6f %.6f, ",
+        zone->points[point_index].x,
+        zone->points[point_index].y,
+        0.012 + zone_index * 0.001);
+    append_text(coord_buffer, sizeof(coord_buffer), chunk);
+
+    snprintf(chunk, sizeof(chunk), "%d ", point_index);
+    append_text(index_buffer, sizeof(index_buffer), chunk);
+  }
+  append_text(index_buffer, sizeof(index_buffer), "-1");
+
+  const int written = snprintf(
+      buffer,
+      buffer_size,
+      "DEF WEB_SURFACE_%d Pose { "
+      "children [ "
+      "Shape { "
+      "appearance PBRAppearance { baseColor %.4f %.4f %.4f roughness 1 metalness 0 transparency 0.58 } "
+      "geometry IndexedFaceSet { "
+      "coord Coordinate { point [ %s ] } "
+      "coordIndex [ %s ] "
+      "solid FALSE "
+      "} "
+      "} "
+      "] "
+      "}",
+      zone_index,
+      red,
+      green,
+      blue,
+      coord_buffer,
+      index_buffer);
   return written >= 0 && (size_t)written < buffer_size ? written : 0;
 }
 

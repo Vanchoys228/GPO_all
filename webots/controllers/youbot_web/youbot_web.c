@@ -2031,30 +2031,6 @@ static void remove_surface_zone_nodes() {
   memset(surface_zone_nodes, 0, sizeof(surface_zone_nodes));
 }
 
-static void get_surface_zone_color(const char *surface_key, double *red, double *green, double *blue) {
-  if (strcmp(surface_key, "rough") == 0) {
-    *red = 0.93;
-    *green = 0.54;
-    *blue = 0.08;
-    return;
-  }
-  if (strcmp(surface_key, "slippery") == 0) {
-    *red = 0.14;
-    *green = 0.66;
-    *blue = 0.88;
-    return;
-  }
-  *red = 0.52;
-  *green = 0.60;
-  *blue = 0.70;
-}
-
-static void append_text(char *buffer, size_t buffer_size, const char *text) {
-  const size_t used = strlen(buffer);
-  if (used >= buffer_size - 1) return;
-  strncat(buffer, text, buffer_size - used - 1);
-}
-
 static void sync_surface_zone_nodes() {
   remove_surface_zone_nodes();
   if (!webots_pose.root_children_field) return;
@@ -2063,53 +2039,14 @@ static void sync_surface_zone_nodes() {
     const SurfaceZone *zone = &surface_zone_data.zones[zone_index];
     if (zone->point_count < 3) continue;
 
-    double red = 0.0;
-    double green = 0.0;
-    double blue = 0.0;
-    get_surface_zone_color(zone->surface_key, &red, &green, &blue);
-
-    char coord_buffer[2048] = "";
-    char index_buffer[512] = "";
-    char chunk[96];
-    for (int point_index = 0; point_index < zone->point_count; ++point_index) {
-      snprintf(
-          chunk,
-          sizeof(chunk),
-          "%.6f %.6f %.6f, ",
-          zone->points[point_index].x,
-          zone->points[point_index].y,
-          0.012 + zone_index * 0.001);
-      append_text(coord_buffer, sizeof(coord_buffer), chunk);
-
-      snprintf(chunk, sizeof(chunk), "%d ", point_index);
-      append_text(index_buffer, sizeof(index_buffer), chunk);
-    }
-    append_text(index_buffer, sizeof(index_buffer), "-1");
-
     char def_name[64];
     char node_string[4096];
     snprintf(def_name, sizeof(def_name), "WEB_SURFACE_%d", zone_index);
-    snprintf(
+    if (!controller_webots_simulation_format_surface_zone(
         node_string,
         sizeof(node_string),
-        "DEF %s Pose { "
-        "children [ "
-        "Shape { "
-        "appearance PBRAppearance { baseColor %.4f %.4f %.4f roughness 1 metalness 0 transparency 0.58 } "
-        "geometry IndexedFaceSet { "
-        "coord Coordinate { point [ %s ] } "
-        "coordIndex [ %s ] "
-        "solid FALSE "
-        "} "
-        "} "
-        "] "
-        "}",
-        def_name,
-        red,
-        green,
-        blue,
-        coord_buffer,
-        index_buffer);
+        zone,
+        zone_index)) continue;
 
     const int insert_at = wb_supervisor_field_get_count(webots_pose.root_children_field);
     wb_supervisor_field_import_mf_node_from_string(

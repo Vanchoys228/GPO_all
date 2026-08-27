@@ -3,6 +3,8 @@
 
 #include <stddef.h>
 
+#include "controller_types.h"
+
 #include <webots/supervisor.h>
 
 int controller_webots_simulation_format_limit_wall(
@@ -15,6 +17,11 @@ int controller_webots_simulation_format_limit_wall(
     double by,
     double wall_thickness,
     double wall_height);
+int controller_webots_simulation_format_surface_zone(
+    char *buffer,
+    size_t buffer_size,
+    const SurfaceZone *zone,
+    int zone_index);
 void controller_webots_simulation_remove_nodes(char defs[][64], int *count);
 
 #endif
