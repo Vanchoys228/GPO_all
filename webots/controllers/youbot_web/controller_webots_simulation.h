@@ -7,6 +7,26 @@
 
 #include <webots/supervisor.h>
 
+#define CONTROLLER_WEBOTS_SIMULATION_MAX_NODE_REGISTRY 512
+
+typedef struct {
+  char defs[CONTROLLER_WEBOTS_SIMULATION_MAX_NODE_REGISTRY][64];
+  int count;
+} ControllerWebotsSimulationNodeRegistry;
+
+int controller_webots_simulation_registry_track(
+    ControllerWebotsSimulationNodeRegistry *registry,
+    int capacity,
+    const char *def_name);
+void controller_webots_simulation_registry_forget(
+    ControllerWebotsSimulationNodeRegistry *registry,
+    int index);
+void controller_webots_simulation_registry_remove_at(
+    ControllerWebotsSimulationNodeRegistry *registry,
+    int index);
+void controller_webots_simulation_registry_remove_all(
+    ControllerWebotsSimulationNodeRegistry *registry);
+
 int controller_webots_simulation_format_limit_wall(
     char *buffer,
     size_t buffer_size,

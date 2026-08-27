@@ -247,15 +247,9 @@ static ControllerWebotsSensors webots_sensors = {0};
 static RouteData route_data = {0};
 static ZoneData zone_data = {0};
 static SurfaceZoneData surface_zone_data = {0};
-static WbNodeRef zone_nodes[MAX_ZONE_NODES];
-static char zone_node_defs[MAX_ZONE_NODES][64];
-static int zone_node_count = 0;
-static WbNodeRef surface_zone_nodes[MAX_SURFACE_ZONE_NODES];
-static char surface_zone_defs[MAX_SURFACE_ZONE_NODES][64];
-static int surface_zone_count = 0;
-static WbNodeRef runtime_obstacle_nodes[MAX_RUNTIME_OBSTACLE_NODES];
-static char runtime_obstacle_defs[MAX_RUNTIME_OBSTACLE_NODES][64];
-static int runtime_obstacle_count = 0;
+static ControllerWebotsSimulationNodeRegistry zone_node_registry = {0};
+static ControllerWebotsSimulationNodeRegistry surface_zone_registry = {0};
+static ControllerWebotsSimulationNodeRegistry runtime_obstacle_registry = {0};
 static ObstacleTracePoint obstacle_trace[MAX_OBSTACLE_TRACE_POINTS];
 static int obstacle_trace_count = 0;
 static MapCell persistent_map[MAX_MAP_POINTS];
@@ -1983,8 +1977,7 @@ static int load_zones(ZoneData *zones) {
 }
 
 static void remove_zone_nodes() {
-  controller_webots_simulation_remove_nodes(zone_node_defs, &zone_node_count);
-  memset(zone_nodes, 0, sizeof(zone_nodes));
+  controller_webots_simulation_registry_remove_all(&zone_node_registry);
 }
 
 static void sync_zone_nodes() {
@@ -2016,19 +2009,14 @@ static void sync_zone_nodes() {
       const int insert_at = wb_supervisor_field_get_count(webots_pose.root_children_field);
       wb_supervisor_field_import_mf_node_from_string(
           webots_pose.root_children_field, insert_at, node_string);
-      if (zone_node_count < MAX_ZONE_NODES) {
-        zone_nodes[zone_node_count] = wb_supervisor_node_get_from_def(def_name);
-        strncpy(zone_node_defs[zone_node_count], def_name, sizeof(zone_node_defs[zone_node_count]) - 1);
-        zone_node_defs[zone_node_count][sizeof(zone_node_defs[zone_node_count]) - 1] = '\0';
-        zone_node_count += 1;
-      }
+      controller_webots_simulation_registry_track(
+          &zone_node_registry, MAX_ZONE_NODES, def_name);
     }
   }
 }
 
 static void remove_surface_zone_nodes() {
-  controller_webots_simulation_remove_nodes(surface_zone_defs, &surface_zone_count);
-  memset(surface_zone_nodes, 0, sizeof(surface_zone_nodes));
+  controller_webots_simulation_registry_remove_all(&surface_zone_registry);
 }
 
 static void sync_surface_zone_nodes() {
@@ -2051,49 +2039,23 @@ static void sync_surface_zone_nodes() {
     const int insert_at = wb_supervisor_field_get_count(webots_pose.root_children_field);
     wb_supervisor_field_import_mf_node_from_string(
         webots_pose.root_children_field, insert_at, node_string);
-    if (surface_zone_count < MAX_SURFACE_ZONE_NODES) {
-      surface_zone_nodes[surface_zone_count] = wb_supervisor_node_get_from_def(def_name);
-      strncpy(surface_zone_defs[surface_zone_count], def_name, sizeof(surface_zone_defs[surface_zone_count]) - 1);
-      surface_zone_defs[surface_zone_count][sizeof(surface_zone_defs[surface_zone_count]) - 1] = '\0';
-      surface_zone_count += 1;
-    }
+    controller_webots_simulation_registry_track(
+        &surface_zone_registry, MAX_SURFACE_ZONE_NODES, def_name);
   }
 }
 
 static void remove_runtime_obstacle_at(int index) {
-  if (index < 0 || index >= runtime_obstacle_count) return;
-
-  if (runtime_obstacle_defs[index][0] != '\0') {
-    WbNodeRef node = wb_supervisor_node_get_from_def(runtime_obstacle_defs[index]);
-    if (node) {
-      wb_supervisor_node_remove(node);
-    }
-  }
-
-  for (int i = index + 1; i < runtime_obstacle_count; ++i) {
-    runtime_obstacle_nodes[i - 1] = runtime_obstacle_nodes[i];
-    strncpy(runtime_obstacle_defs[i - 1], runtime_obstacle_defs[i], sizeof(runtime_obstacle_defs[i - 1]) - 1);
-    runtime_obstacle_defs[i - 1][sizeof(runtime_obstacle_defs[i - 1]) - 1] = '\0';
-  }
-
-  runtime_obstacle_count -= 1;
-  if (runtime_obstacle_count < 0) runtime_obstacle_count = 0;
-  if (runtime_obstacle_count < MAX_RUNTIME_OBSTACLE_NODES) {
-    runtime_obstacle_nodes[runtime_obstacle_count] = 0;
-    runtime_obstacle_defs[runtime_obstacle_count][0] = '\0';
-  }
+  controller_webots_simulation_registry_remove_at(&runtime_obstacle_registry, index);
 }
 
 static void remove_runtime_obstacle_nodes() {
-  while (runtime_obstacle_count > 0) {
-    remove_runtime_obstacle_at(0);
-  }
+  controller_webots_simulation_registry_remove_all(&runtime_obstacle_registry);
 }
 
 static void spawn_runtime_obstacle_from_command(const RuntimeCommand *command) {
   if (!command || !command->has_spawn_obstacle || !webots_pose.root_children_field) return;
 
-  if (runtime_obstacle_count >= MAX_RUNTIME_OBSTACLE_NODES) {
+  if (runtime_obstacle_registry.count >= MAX_RUNTIME_OBSTACLE_NODES) {
     remove_runtime_obstacle_at(0);
   }
 
@@ -2113,12 +2075,8 @@ static void spawn_runtime_obstacle_from_command(const RuntimeCommand *command) {
   const int insert_at = wb_supervisor_field_get_count(webots_pose.root_children_field);
   wb_supervisor_field_import_mf_node_from_string(
       webots_pose.root_children_field, insert_at, node_string);
-  if (runtime_obstacle_count < MAX_RUNTIME_OBSTACLE_NODES) {
-    runtime_obstacle_nodes[runtime_obstacle_count] = wb_supervisor_node_get_from_def(def_name);
-    strncpy(runtime_obstacle_defs[runtime_obstacle_count], def_name, sizeof(runtime_obstacle_defs[runtime_obstacle_count]) - 1);
-    runtime_obstacle_defs[runtime_obstacle_count][sizeof(runtime_obstacle_defs[runtime_obstacle_count]) - 1] = '\0';
-    runtime_obstacle_count += 1;
-  }
+  controller_webots_simulation_registry_track(
+      &runtime_obstacle_registry, MAX_RUNTIME_OBSTACLE_NODES, def_name);
 }
 
 static int load_runtime_command(RuntimeCommand *command) {
@@ -2960,7 +2918,7 @@ static void write_state_snapshot(void) {
       navigation,
       motion_profile,
       zone_data.count,
-      zone_node_count,
+      zone_node_registry.count,
       lidar,
       camera,
       trace_points,

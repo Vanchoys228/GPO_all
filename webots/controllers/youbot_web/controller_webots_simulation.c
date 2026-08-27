@@ -4,6 +4,51 @@
 #include <stdio.h>
 #include <string.h>
 
+int controller_webots_simulation_registry_track(
+    ControllerWebotsSimulationNodeRegistry *registry,
+    int capacity,
+    const char *def_name) {
+  if (!registry || !def_name || capacity <= 0 ||
+      capacity > CONTROLLER_WEBOTS_SIMULATION_MAX_NODE_REGISTRY ||
+      registry->count >= capacity) {
+    return 0;
+  }
+  strncpy(registry->defs[registry->count], def_name, sizeof(registry->defs[0]) - 1);
+  registry->defs[registry->count][sizeof(registry->defs[0]) - 1] = '\0';
+  registry->count += 1;
+  return 1;
+}
+
+void controller_webots_simulation_registry_forget(
+    ControllerWebotsSimulationNodeRegistry *registry,
+    int index) {
+  if (!registry || index < 0 || index >= registry->count) return;
+  for (int i = index + 1; i < registry->count; ++i) {
+    memcpy(registry->defs[i - 1], registry->defs[i], sizeof(registry->defs[0]));
+  }
+  registry->count -= 1;
+  registry->defs[registry->count][0] = '\0';
+}
+
+void controller_webots_simulation_registry_remove_at(
+    ControllerWebotsSimulationNodeRegistry *registry,
+    int index) {
+  if (!registry || index < 0 || index >= registry->count) return;
+  if (registry->defs[index][0] != '\0') {
+    WbNodeRef node = wb_supervisor_node_get_from_def(registry->defs[index]);
+    if (node) wb_supervisor_node_remove(node);
+  }
+  controller_webots_simulation_registry_forget(registry, index);
+}
+
+void controller_webots_simulation_registry_remove_all(
+    ControllerWebotsSimulationNodeRegistry *registry) {
+  if (!registry) return;
+  while (registry->count > 0) {
+    controller_webots_simulation_registry_remove_at(registry, 0);
+  }
+}
+
 int controller_webots_simulation_format_limit_wall(
     char *buffer,
     size_t buffer_size,

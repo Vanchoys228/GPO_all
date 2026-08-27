@@ -4,6 +4,19 @@
 
 #include "controller_types.h"
 
+typedef struct {
+  char defs[4][64];
+  int count;
+} ControllerWebotsSimulationNodeRegistry;
+
+int controller_webots_simulation_registry_track(
+    ControllerWebotsSimulationNodeRegistry *registry,
+    int capacity,
+    const char *def_name);
+void controller_webots_simulation_registry_forget(
+    ControllerWebotsSimulationNodeRegistry *registry,
+    int index);
+
 int controller_webots_simulation_format_limit_wall(
     char *buffer,
     size_t buffer_size,
@@ -29,6 +42,16 @@ int controller_webots_simulation_format_runtime_obstacle(
     double max_y);
 
 int main(void) {
+  ControllerWebotsSimulationNodeRegistry registry = {0};
+  assert(controller_webots_simulation_registry_track(&registry, 2, "WEB_OBS_1"));
+  assert(controller_webots_simulation_registry_track(&registry, 2, "WEB_OBS_2"));
+  assert(!controller_webots_simulation_registry_track(&registry, 2, "WEB_OBS_3"));
+  assert(registry.count == 2);
+  controller_webots_simulation_registry_forget(&registry, 0);
+  assert(registry.count == 1);
+  assert(strcmp(registry.defs[0], "WEB_OBS_2") == 0);
+  assert(registry.defs[1][0] == '\0');
+
   char node_string[1024] = {0};
   const int written = controller_webots_simulation_format_limit_wall(
       node_string,
