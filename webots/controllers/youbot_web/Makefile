@@ -78,6 +78,7 @@ C_SOURCES = \
   controller_camera_map_io.c \
   controller_camera_render.c \
   controller_camera_fusion.c \
+  controller_camera_virtual.c \
   controller_drive.c \
   controller_io.c \
   controller_lidar_math.c \

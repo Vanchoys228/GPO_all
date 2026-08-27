@@ -12,6 +12,7 @@
 #include "controller_camera_map.h"
 #include "controller_camera_map_io.h"
 #include "controller_camera_render.h"
+#include "controller_camera_virtual.h"
 #include "controller_io.h"
 #include "controller_drive.h"
 #include "controller_lidar_math.h"
@@ -595,13 +596,8 @@ static void draw_virtual_camera_overlay(unsigned char *pixels, double effective_
 
 static int write_virtual_camera_frame() {
   static unsigned char pixels[CAMERA_FRAME_WIDTH * CAMERA_FRAME_HEIGHT * 3];
-  typedef struct {
-    double angle;
-    double range;
-    int beams;
-  } VirtualCameraCluster;
-  VirtualCameraCluster clusters[CAMERA_MAX_VIRTUAL_CLUSTERS];
-  int cluster_count = 0;
+  ControllerCameraVirtualCluster clusters[CAMERA_MAX_VIRTUAL_CLUSTERS];
+  ControllerCameraVirtualSummary cluster_summary = {0};
   controller_camera_render_background(pixels, CAMERA_FRAME_WIDTH, CAMERA_FRAME_HEIGHT);
 
   camera_obstacle_visible = 0;
@@ -610,95 +606,40 @@ static int write_virtual_camera_frame() {
 
   const int horizon = (int)(CAMERA_FRAME_HEIGHT * 0.42);
   const double effective_fov = camera_fov > EPS ? camera_fov : 1.05;
-  int total_beams = 0;
-  int close_beams = 0;
-  double weighted_offset_sum = 0.0;
-  double weight_sum = 0.0;
-
   if (lidar_available && controller_webots_sensors_has_lidar(&webots_sensors) &&
       lidar_resolution > 1 && lidar_fov > EPS) {
     const float *ranges = controller_webots_sensors_lidar_ranges(&webots_sensors);
-    int in_cluster = 0;
-    int cluster_beams = 0;
-    double cluster_min_range = LIDAR_MAX_TRACE_RANGE;
-    double cluster_angle_sum = 0.0;
-    double cluster_weight_sum = 0.0;
-    double previous_range = 0.0;
+    const ControllerCameraVirtualConfig virtual_config = {
+        lidar_fov,
+        effective_fov,
+        LIDAR_MIN_TRACE_RANGE,
+        LIDAR_MAX_TRACE_RANGE,
+        LIDAR_TRACK_CAUTION_RANGE,
+        LIDAR_AVOID_STOP_RANGE,
+        0.42,
+    };
+    controller_camera_virtual_collect(
+        ranges, lidar_resolution, &virtual_config, clusters, CAMERA_MAX_VIRTUAL_CLUSTERS,
+        &cluster_summary);
 
     for (int i = 0; ranges && i < lidar_resolution; ++i) {
       const double alpha = (double)i / (double)(lidar_resolution - 1);
       const double beam_angle = -0.5 * lidar_fov + alpha * lidar_fov;
-      const int in_view = fabs(beam_angle) <= effective_fov * 0.5;
-
       const double range = ranges[i];
-      const int valid = in_view && is_finite_double(range) && range > LIDAR_MIN_TRACE_RANGE;
-      const int obstacle_hit = valid && range < (LIDAR_MAX_TRACE_RANGE - 0.04);
-
-      if (valid) total_beams += 1;
+      const int valid = fabs(beam_angle) <= effective_fov * 0.5 &&
+                        is_finite_double(range) && range > LIDAR_MIN_TRACE_RANGE;
       if (valid && (i % 10) == 0) {
         merge_camera_free_ray_into_map(
             beam_angle,
             clamp_value(range, CAMERA_FREE_RAY_MIN_RANGE_M, LIDAR_MAX_TRACE_RANGE),
             1);
       }
-      if (valid && range < LIDAR_TRACK_CAUTION_RANGE) {
-        const double screen_offset = clamp_value(beam_angle / (effective_fov * 0.5), -1.0, 1.0);
-        close_beams += 1;
-        const double closeness = clamp_value((LIDAR_TRACK_CAUTION_RANGE - range) /
-                                                fmax(LIDAR_TRACK_CAUTION_RANGE - LIDAR_AVOID_STOP_RANGE, 0.05),
-                                            0.0,
-                                            1.0);
-        weighted_offset_sum += screen_offset * (0.25 + closeness);
-        weight_sum += 0.25 + closeness;
-      }
-
-      const int split_cluster =
-          !obstacle_hit ||
-          (in_cluster && fabs(range - previous_range) > 0.42);
-      if (split_cluster && in_cluster) {
-        if (cluster_count < CAMERA_MAX_VIRTUAL_CLUSTERS && cluster_beams >= 2) {
-          clusters[cluster_count].angle = cluster_angle_sum / fmax(cluster_weight_sum, EPS);
-          clusters[cluster_count].range = cluster_min_range;
-          clusters[cluster_count].beams = cluster_beams;
-          cluster_count += 1;
-        }
-        in_cluster = 0;
-        cluster_beams = 0;
-        cluster_min_range = LIDAR_MAX_TRACE_RANGE;
-        cluster_angle_sum = 0.0;
-        cluster_weight_sum = 0.0;
-      }
-
-      if (obstacle_hit) {
-        const double weight = 1.0 / fmax(range, 0.16);
-        in_cluster = 1;
-        cluster_beams += 1;
-        if (range < cluster_min_range) cluster_min_range = range;
-        cluster_angle_sum += beam_angle * weight;
-        cluster_weight_sum += weight;
-        previous_range = range;
-      }
-    }
-
-    if (in_cluster && cluster_count < CAMERA_MAX_VIRTUAL_CLUSTERS && cluster_beams >= 2) {
-      clusters[cluster_count].angle = cluster_angle_sum / fmax(cluster_weight_sum, EPS);
-      clusters[cluster_count].range = cluster_min_range;
-      clusters[cluster_count].beams = cluster_beams;
-      cluster_count += 1;
     }
   }
 
-  for (int i = 0; i < cluster_count; ++i) {
-    for (int j = i + 1; j < cluster_count; ++j) {
-      if (clusters[i].range < clusters[j].range) {
-        const VirtualCameraCluster tmp = clusters[i];
-        clusters[i] = clusters[j];
-        clusters[j] = tmp;
-      }
-    }
-  }
+  controller_camera_virtual_sort_by_range_desc(clusters, cluster_summary.cluster_count);
 
-  for (int i = 0; i < cluster_count; ++i) {
+  for (int i = 0; i < cluster_summary.cluster_count; ++i) {
     const double range = clamp_value(clusters[i].range, 0.12, LIDAR_MAX_TRACE_RANGE);
     const double screen_offset = clamp_value(clusters[i].angle / (effective_fov * 0.5), -1.0, 1.0);
     const int screen_x = (int)((screen_offset * 0.5 + 0.5) * (CAMERA_FRAME_WIDTH - 1));
@@ -719,15 +660,18 @@ static int write_virtual_camera_frame() {
         1 + (int)clamp_value((double)clusters[i].beams / 2.0, 1.0, 8.0));
   }
 
-  if (total_beams > 0 && close_beams > 0 && weight_sum > EPS) {
-    camera_obstacle_score = (double)close_beams / (double)total_beams;
+  if (cluster_summary.total_beams > 0 && cluster_summary.close_beams > 0 &&
+      cluster_summary.weight_sum > EPS) {
+    camera_obstacle_score =
+        (double)cluster_summary.close_beams / (double)cluster_summary.total_beams;
     if (camera_obstacle_score >= CAMERA_OBSTACLE_MIN_SCORE) {
       camera_obstacle_visible = 1;
-      camera_obstacle_center_offset = clamp_value(weighted_offset_sum / weight_sum, -1.0, 1.0);
+      camera_obstacle_center_offset = clamp_value(
+          cluster_summary.weighted_offset_sum / cluster_summary.weight_sum, -1.0, 1.0);
       camera_obstacle_angle = camera_obstacle_center_offset * effective_fov * 0.5;
       camera_obstacle_range =
           estimate_camera_range_from_lidar(camera_obstacle_angle, CAMERA_RANGE_FALLBACK_M);
-      camera_detection_count = close_beams;
+      camera_detection_count = cluster_summary.close_beams;
     }
   }
 

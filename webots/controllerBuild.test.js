@@ -156,4 +156,11 @@ describe("Webots controller build configuration", () => {
     expect(source).toContain("controller_camera_observation_hint(");
     expect(source).not.toContain("camera_obstacle_center_offset * fmax(effective_fov, 0.8) * 0.5");
   });
+
+  it("delegates virtual-camera LiDAR clustering to Camera Virtual", () => {
+    const source = readFileSync(`${controllerDirectory}/youbot_web.c`, "utf8");
+
+    expect(source).toContain("controller_camera_virtual_collect(");
+    expect(source).not.toContain("typedef struct {\n    double angle;\n    double range;\n    int beams;\n  } VirtualCameraCluster");
+  });
 });
