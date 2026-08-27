@@ -38,6 +38,15 @@ void controller_webots_simulation_sync_surface_zones(
     ControllerWebotsSimulationNodeRegistry *registry,
     const SurfaceZoneData *zones,
     int capacity);
+void controller_webots_simulation_spawn_runtime_obstacle(
+    WbFieldRef root_children_field,
+    ControllerWebotsSimulationNodeRegistry *registry,
+    const RuntimeCommand *command,
+    int capacity,
+    double min_x,
+    double max_x,
+    double min_y,
+    double max_y);
 
 int controller_webots_simulation_format_limit_wall(
     char *buffer,

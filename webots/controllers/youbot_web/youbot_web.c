@@ -2002,39 +2002,20 @@ static void sync_surface_zone_nodes() {
       MAX_SURFACE_ZONE_NODES);
 }
 
-static void remove_runtime_obstacle_at(int index) {
-  controller_webots_simulation_registry_remove_at(&runtime_obstacle_registry, index);
-}
-
 static void remove_runtime_obstacle_nodes() {
   controller_webots_simulation_registry_remove_all(&runtime_obstacle_registry);
 }
 
 static void spawn_runtime_obstacle_from_command(const RuntimeCommand *command) {
-  if (!command || !command->has_spawn_obstacle || !webots_pose.root_children_field) return;
-
-  if (runtime_obstacle_registry.count >= MAX_RUNTIME_OBSTACLE_NODES) {
-    remove_runtime_obstacle_at(0);
-  }
-
-  const long long compact_id = command->id >= 0 ? command->id : 0;
-  char def_name[64];
-  char node_string[1024];
-  snprintf(def_name, sizeof(def_name), "WEB_OBS_%lld", compact_id);
-  if (!controller_webots_simulation_format_runtime_obstacle(
-          node_string, sizeof(node_string), command, -21.5, 21.5, -16.5, 16.5)) {
-    return;
-  }
-  WbNodeRef existing = wb_supervisor_node_get_from_def(def_name);
-  if (existing) {
-    wb_supervisor_node_remove(existing);
-  }
-
-  const int insert_at = wb_supervisor_field_get_count(webots_pose.root_children_field);
-  wb_supervisor_field_import_mf_node_from_string(
-      webots_pose.root_children_field, insert_at, node_string);
-  controller_webots_simulation_registry_track(
-      &runtime_obstacle_registry, MAX_RUNTIME_OBSTACLE_NODES, def_name);
+  controller_webots_simulation_spawn_runtime_obstacle(
+      webots_pose.root_children_field,
+      &runtime_obstacle_registry,
+      command,
+      MAX_RUNTIME_OBSTACLE_NODES,
+      -21.5,
+      21.5,
+      -16.5,
+      16.5);
 }
 
 static int load_runtime_command(RuntimeCommand *command) {

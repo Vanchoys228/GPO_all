@@ -123,7 +123,9 @@ describe("Webots controller build configuration", () => {
   it("delegates runtime-obstacle presentation to the Simulation Adapter", () => {
     const source = readFileSync(`${controllerDirectory}/youbot_web.c`, "utf8");
 
-    expect(source).toContain("controller_webots_simulation_format_runtime_obstacle(");
+    expect(source).toContain("controller_webots_simulation_spawn_runtime_obstacle(");
     expect(source).not.toContain("name \"runtime_obstacle\"");
+    expect(source).not.toContain("controller_webots_simulation_format_runtime_obstacle(");
+    expect(source).not.toContain("wb_supervisor_node_get_from_def");
   });
 });

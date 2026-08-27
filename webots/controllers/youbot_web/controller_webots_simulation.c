@@ -286,6 +286,38 @@ int controller_webots_simulation_format_runtime_obstacle(
   return written >= 0 && (size_t)written < buffer_size ? written : 0;
 }
 
+void controller_webots_simulation_spawn_runtime_obstacle(
+    WbFieldRef root_children_field,
+    ControllerWebotsSimulationNodeRegistry *registry,
+    const RuntimeCommand *command,
+    int capacity,
+    double min_x,
+    double max_x,
+    double min_y,
+    double max_y) {
+  if (!root_children_field || !registry || !command || !command->has_spawn_obstacle) return;
+
+  if (registry->count >= capacity) {
+    controller_webots_simulation_registry_remove_at(registry, 0);
+  }
+
+  const long long compact_id = command->id >= 0 ? command->id : 0;
+  char def_name[64];
+  char node_string[1024];
+  snprintf(def_name, sizeof(def_name), "WEB_OBS_%lld", compact_id);
+  if (!controller_webots_simulation_format_runtime_obstacle(
+          node_string, sizeof(node_string), command, min_x, max_x, min_y, max_y)) {
+    return;
+  }
+
+  WbNodeRef existing = wb_supervisor_node_get_from_def(def_name);
+  if (existing) wb_supervisor_node_remove(existing);
+
+  const int insert_at = wb_supervisor_field_get_count(root_children_field);
+  wb_supervisor_field_import_mf_node_from_string(root_children_field, insert_at, node_string);
+  controller_webots_simulation_registry_track(registry, capacity, def_name);
+}
+
 void controller_webots_simulation_remove_nodes(char defs[][64], int *count) {
   if (!defs || !count) return;
   for (int i = 0; i < *count; ++i) {
