@@ -40,5 +40,9 @@ int main(void) {
       !(box.danger > 0.39 && box.danger < 0.40)) {
     return 6;
   }
+  const ControllerCameraVirtualObservation observation =
+      controller_camera_virtual_observation(&summary, 0.025);
+  if (!observation.visible || !nearly_equal(observation.score, 4.0 / 7.0) ||
+      observation.detection_count != 4) return 7;
   return 0;
 }

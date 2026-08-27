@@ -654,19 +654,16 @@ static int write_virtual_camera_frame() {
         1 + (int)clamp_value((double)clusters[i].beams / 2.0, 1.0, 8.0));
   }
 
-  if (cluster_summary.total_beams > 0 && cluster_summary.close_beams > 0 &&
-      cluster_summary.weight_sum > EPS) {
-    camera_obstacle_score =
-        (double)cluster_summary.close_beams / (double)cluster_summary.total_beams;
-    if (camera_obstacle_score >= CAMERA_OBSTACLE_MIN_SCORE) {
+  const ControllerCameraVirtualObservation virtual_observation =
+      controller_camera_virtual_observation(&cluster_summary, CAMERA_OBSTACLE_MIN_SCORE);
+  camera_obstacle_score = virtual_observation.score;
+  if (virtual_observation.visible) {
       camera_obstacle_visible = 1;
-      camera_obstacle_center_offset = clamp_value(
-          cluster_summary.weighted_offset_sum / cluster_summary.weight_sum, -1.0, 1.0);
+      camera_obstacle_center_offset = virtual_observation.center_offset;
       camera_obstacle_angle = camera_obstacle_center_offset * effective_fov * 0.5;
       camera_obstacle_range =
           estimate_camera_range_from_lidar(camera_obstacle_angle, CAMERA_RANGE_FALLBACK_M);
-      camera_detection_count = cluster_summary.close_beams;
-    }
+      camera_detection_count = virtual_observation.detection_count;
   }
 
   draw_virtual_camera_overlay(pixels, effective_fov);

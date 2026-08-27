@@ -33,6 +33,13 @@ typedef struct {
   double danger;
 } ControllerCameraVirtualBox;
 
+typedef struct {
+  int visible;
+  double score;
+  double center_offset;
+  int detection_count;
+} ControllerCameraVirtualObservation;
+
 void controller_camera_virtual_collect(
     const float *ranges,
     int resolution,
@@ -49,5 +56,8 @@ int controller_camera_virtual_box(
     int frame_width,
     int frame_height,
     ControllerCameraVirtualBox *box);
+ControllerCameraVirtualObservation controller_camera_virtual_observation(
+    const ControllerCameraVirtualSummary *summary,
+    double min_score);
 
 #endif

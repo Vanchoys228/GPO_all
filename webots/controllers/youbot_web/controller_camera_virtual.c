@@ -106,3 +106,18 @@ int controller_camera_virtual_box(
       0.0, 1.0);
   return 1;
 }
+
+ControllerCameraVirtualObservation controller_camera_virtual_observation(
+    const ControllerCameraVirtualSummary *summary,
+    double min_score) {
+  ControllerCameraVirtualObservation observation = {0};
+  if (!summary || summary->total_beams <= 0 || summary->close_beams <= 0 ||
+      summary->weight_sum <= 1e-9) return observation;
+  observation.score = (double)summary->close_beams / (double)summary->total_beams;
+  if (observation.score < min_score) return observation;
+  observation.visible = 1;
+  observation.center_offset = clamp_value(
+      summary->weighted_offset_sum / summary->weight_sum, -1.0, 1.0);
+  observation.detection_count = summary->close_beams;
+  return observation;
+}
