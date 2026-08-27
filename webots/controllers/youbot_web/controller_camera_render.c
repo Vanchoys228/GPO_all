@@ -115,6 +115,16 @@ void controller_camera_render_background(unsigned char *pixels, int width, int h
   }
 }
 
+void controller_camera_render_reticle(unsigned char *pixels, int width, int height) {
+  if (!pixels || width <= 0 || height <= 0) return;
+  const int horizon = (int)(height * 0.42);
+  const int center_x = width / 2;
+  controller_camera_render_line(
+      pixels, width, height, center_x - 14, horizon, center_x + 14, horizon, 80, 220, 230);
+  controller_camera_render_line(
+      pixels, width, height, center_x, horizon - 10, center_x, horizon + 10, 80, 220, 230);
+}
+
 void controller_camera_render_box(
     unsigned char *pixels, int width, int height,
     int center_x, int bottom_y, int box_width, int box_height, double danger) {

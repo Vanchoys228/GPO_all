@@ -10,6 +10,7 @@ void controller_camera_render_line(
     unsigned char *pixels, int width, int height,
     int x0, int y0, int x1, int y1, int r, int g, int b);
 void controller_camera_render_background(unsigned char *pixels, int width, int height);
+void controller_camera_render_reticle(unsigned char *pixels, int width, int height);
 void controller_camera_render_box(
     unsigned char *pixels, int width, int height,
     int center_x, int bottom_y, int box_width, int box_height, double danger);

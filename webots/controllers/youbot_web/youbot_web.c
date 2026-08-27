@@ -574,11 +574,7 @@ static void update_camera_obstacle_hint(void) {
 
 static void draw_virtual_camera_overlay(unsigned char *pixels, double effective_fov) {
   const int horizon = (int)(CAMERA_FRAME_HEIGHT * 0.42);
-  const int center_x = CAMERA_FRAME_WIDTH / 2;
-  controller_camera_render_line(pixels, CAMERA_FRAME_WIDTH, CAMERA_FRAME_HEIGHT,
-                                center_x - 14, horizon, center_x + 14, horizon, 80, 220, 230);
-  controller_camera_render_line(pixels, CAMERA_FRAME_WIDTH, CAMERA_FRAME_HEIGHT,
-                                center_x, horizon - 10, center_x, horizon + 10, 80, 220, 230);
+  controller_camera_render_reticle(pixels, CAMERA_FRAME_WIDTH, CAMERA_FRAME_HEIGHT);
 
   if (route_data.count > 0 && current_waypoint_index < route_data.count &&
       controller_webots_pose_is_ready(&webots_pose)) {

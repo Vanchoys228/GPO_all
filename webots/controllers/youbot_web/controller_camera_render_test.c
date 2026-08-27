@@ -41,5 +41,10 @@ int main(void) {
   pixel = pixel_at(pixels, 10, 6);
   if (pixel[0] != 188 || pixel[1] != 82 || pixel[2] != 58) return 6;
 
+  memset(pixels, 0, sizeof(pixels));
+  controller_camera_render_reticle(pixels, WIDTH, HEIGHT);
+  pixel = pixel_at(pixels, WIDTH / 2, (int)(HEIGHT * 0.42));
+  if (pixel[0] != 80 || pixel[1] != 220 || pixel[2] != 230) return 7;
+
   return 0;
 }

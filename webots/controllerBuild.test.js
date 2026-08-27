@@ -135,4 +135,11 @@ describe("Webots controller build configuration", () => {
     expect(source).toContain("controller_camera_fusion_estimate_range(");
     expect(source).not.toContain("double best_angle_error = CAMERA_RANGE_SEARCH_WINDOW_RAD");
   });
+
+  it("delegates virtual-camera reticle rendering to Camera Render", () => {
+    const source = readFileSync(`${controllerDirectory}/youbot_web.c`, "utf8");
+
+    expect(source).toContain("controller_camera_render_reticle(");
+    expect(source).not.toContain("center_x - 14, horizon, center_x + 14, horizon, 80, 220, 230");
+  });
 });
