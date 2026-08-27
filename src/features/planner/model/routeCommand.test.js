@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   buildAutoRouteUpdatedStatus,
   buildControllerRoutePayload,
+  buildRouteCommand,
   buildRouteSentStatus,
 } from "./routeCommand";
 
@@ -44,5 +45,18 @@ describe("route command", () => {
     expect(buildAutoRouteUpdatedStatus(6, 1)).toBe(
       "Маршрут обновлён после изменения ограничивающих зон (6 точек, зарядок: 1)."
     );
+  });
+
+  it("wraps a controller payload in the shared route contract", () => {
+    const payload = { type: "route", route: [{ x: 1, y: 2 }] };
+    expect(buildRouteCommand(payload, {
+      requestId: "route-44",
+      timestamp: "2026-01-01T00:00:02.000Z",
+    })).toMatchObject({
+      type: "route.command",
+      source: "frontend",
+      requestId: "route-44",
+      payload,
+    });
   });
 });

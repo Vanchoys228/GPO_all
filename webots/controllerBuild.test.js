@@ -48,4 +48,33 @@ describe("Webots controller build configuration", () => {
       "webots\\controllers\\youbot_web\\run_controller_tests.bat",
     );
   });
+
+  it("keeps Supervisor pose access outside the orchestration file", () => {
+    const source = readFileSync(`${controllerDirectory}/youbot_web.c`, "utf8");
+
+    expect(source).not.toContain("wb_supervisor_node_get_self");
+    expect(source).not.toContain("wb_supervisor_field_get_sf_vec3f");
+    expect(source).not.toContain("wb_supervisor_field_set_sf_vec3f");
+    expect(source).toContain('#include "controller_webots_pose.h"');
+  });
+
+  it("keeps Webots motor access outside the orchestration file", () => {
+    const source = readFileSync(`${controllerDirectory}/youbot_web.c`, "utf8");
+
+    expect(source).not.toContain("wb_motor_set_position");
+    expect(source).not.toContain("wb_motor_set_velocity");
+    expect(source).not.toContain("<webots/motor.h>");
+    expect(source).toContain('#include "controller_webots_devices.h"');
+  });
+
+  it("keeps Webots sensor access outside the orchestration file", () => {
+    const source = readFileSync(`${controllerDirectory}/youbot_web.c`, "utf8");
+
+    expect(source).not.toContain("wb_robot_get_device");
+    expect(source).not.toContain("wb_lidar_");
+    expect(source).not.toContain("wb_camera_");
+    expect(source).not.toContain("<webots/lidar.h>");
+    expect(source).not.toContain("<webots/camera.h>");
+    expect(source).toContain('#include "controller_webots_sensors.h"');
+  });
 });

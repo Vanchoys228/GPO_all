@@ -15,11 +15,19 @@ void controller_mapping_survey_state_init(ControllerMappingSurveyState *state) {
 
 void controller_mapping_survey_state_reset_route(ControllerMappingSurveyState *state) {
   if (!state) return;
+  state->route_active = 0;
   state->room_zone_index = -1;
   state->interior_start_index = 0;
   state->obstacle_scan_active = 0;
   state->obstacle_scan_end_index = -1;
   state->obstacle_scan_cooldown_steps = 0;
+}
+
+void controller_mapping_survey_state_activate_route(
+    ControllerMappingSurveyState *state, MappingSurveyMode mode) {
+  if (!state) return;
+  state->route_active = 1;
+  state->mode = mode;
 }
 
 void controller_mapping_survey_state_prepare(

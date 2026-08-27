@@ -1,12 +1,5 @@
 const http = require("http");
-const {
-  clampInt,
-  normalizeNumber,
-  resolveAlgorithmKey,
-  resolveTaskKey,
-  sanitizeNativeParams,
-  validatePoints,
-} = require("../protocol/validation.cjs");
+const { createPlanningService } = require("../services/planning-service.cjs");
 
 const sendJson = (response, statusCode, payload) => {
   response.writeHead(statusCode, {
@@ -17,8 +10,6 @@ const sendJson = (response, statusCode, payload) => {
   });
   response.end(JSON.stringify(payload));
 };
-
-const MAX_CONCURRENT_SOLVER_RUNS = 2;
 
 const readJsonBody = (request) =>
   new Promise((resolve, reject) => {
@@ -47,7 +38,7 @@ const createSolverHttpServer = ({
   port,
   solverPath,
 }) => {
-  let activeSolverRuns = 0;
+  const planningService = createPlanningService({ nativeSolver });
   const server = http.createServer(async (request, response) => {
     if (request.method === "OPTIONS") {
       sendJson(response, 204, {});
@@ -67,43 +58,17 @@ const createSolverHttpServer = ({
     if (request.method === "POST" && request.url === "/api/solve-route") {
       try {
         const body = await readJsonBody(request);
-        const points = validatePoints(body.points);
-        const algorithmKey = resolveAlgorithmKey(body?.algorithm?.key);
-        const params = sanitizeNativeParams(algorithmKey, body?.algorithm?.params);
-        const taskKey = resolveTaskKey(body?.task);
-        const seed = clampInt(normalizeNumber(body?.seed, 1337), 1, 2147483647);
-
-        if (activeSolverRuns >= MAX_CONCURRENT_SOLVER_RUNS) {
-          sendJson(response, 503, {
-            ok: false,
-            error: "Solver is busy. Try again shortly.",
-          });
-          return;
+        const result = await planningService.solve(body);
+        if (body?.type === "planning.request") {
+          const { createPlanningResult } = await import("../../shared/contracts/index.js");
+          sendJson(response, 200, createPlanningResult({
+            source: "planning-service",
+            requestId: body.requestId,
+            payload: result,
+          }));
+        } else {
+          sendJson(response, 200, result);
         }
-
-        activeSolverRuns += 1;
-        let solved;
-        try {
-          solved = await nativeSolver.run({
-            points,
-            algorithmKey,
-            params,
-            taskKey,
-            seed,
-          });
-        } finally {
-          activeSolverRuns -= 1;
-        }
-
-        sendJson(response, 200, {
-          ok: true,
-          task: taskKey,
-          algorithm: algorithmKey,
-          length: solved.length,
-          closed: solved.closed,
-          order: solved.order,
-          route: solved.route,
-        });
       } catch (error) {
         const statusCode = Number.isInteger(error?.statusCode) ? error.statusCode : 500;
         sendJson(response, statusCode, {

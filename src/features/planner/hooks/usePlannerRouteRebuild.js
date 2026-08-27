@@ -10,6 +10,7 @@ import {
 import {
   buildAutoRouteUpdatedStatus,
   buildControllerRoutePayload,
+  buildRouteCommand,
 } from "../model/routeCommand";
 
 export const usePlannerRouteRebuild = ({
@@ -118,7 +119,7 @@ export const usePlannerRouteRebuild = ({
       routeTaskKey,
       selectedAlgorithmParams,
     });
-    sendRouteChannelPayload(routeSocketRef, payload, {
+    sendRouteChannelPayload(routeSocketRef, buildRouteCommand(payload), {
       onSent: () => {
         startRouteTiming();
         setStatus(

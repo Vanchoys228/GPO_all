@@ -4,6 +4,7 @@
 #include "controller_types.h"
 
 typedef struct {
+  int route_active;
   int room_zone_index;
   MappingSurveyMode mode;
   int interior_start_index;
@@ -18,6 +19,8 @@ typedef struct {
 void controller_mapping_survey_state_init(ControllerMappingSurveyState *state);
 void controller_mapping_survey_state_reset_route(ControllerMappingSurveyState *state);
 void controller_mapping_survey_state_prepare(
+    ControllerMappingSurveyState *state, MappingSurveyMode mode);
+void controller_mapping_survey_state_activate_route(
     ControllerMappingSurveyState *state, MappingSurveyMode mode);
 void controller_mapping_survey_state_tick(ControllerMappingSurveyState *state);
 void controller_mapping_survey_state_begin_scan(

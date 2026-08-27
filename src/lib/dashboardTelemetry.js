@@ -1,4 +1,5 @@
 import coordinateContract from "../../shared/coordinate-contract.json";
+import { unwrapTelemetryEvent } from "../../shared/contracts/index.js";
 import { ROUTE_WS_URL, TELEMETRY_WS_URL } from "./runtimeConfig";
 
 export { ROUTE_WS_URL, TELEMETRY_WS_URL };
@@ -147,6 +148,7 @@ const normalizeCamera = (rawCamera, prevCamera = null) => {
 };
 
 export const normalizeTelemetry = (raw, prev = INITIAL_TELEMETRY) => {
+  raw = unwrapTelemetryEvent(raw) ?? raw;
   if (!raw || typeof raw !== "object") return null;
   if (raw.type && raw.type !== TELEMETRY_MESSAGE_TYPE) return null;
 

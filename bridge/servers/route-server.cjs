@@ -1,4 +1,5 @@
 const WebSocket = require("ws");
+const { createRouteService } = require("../services/route-service.cjs");
 
 const safeJsonParse = (text) => {
   try {
@@ -8,21 +9,17 @@ const safeJsonParse = (text) => {
   }
 };
 
+const normalizeIncomingPayload = async (payload) => {
+  if (payload?.type !== "route.command") return payload;
+  const { unwrapRouteCommand } = await import("../../shared/contracts/index.js");
+  return unwrapRouteCommand(payload);
+};
+
 const createRouteServer = ({ artifactStore, host, port }) => {
   const wss = new WebSocket.Server({ host, port });
   const uiClients = new Set();
   let controllerConnection = null;
-
-  const persistMessage = async (payload) => {
-    if (payload?.type === "route") return artifactStore.writeRoute(payload);
-    if (payload?.type === "limit_zones") return artifactStore.writeLimitZones(payload);
-    if (payload?.type === "surface_zones") return artifactStore.writeSurfaceZones(payload);
-    if (payload?.type === "motion_profile") return artifactStore.writeMotionProfile(payload.motion);
-    if (payload?.type === "spawn_random_obstacle" || payload?.type === "start_mapping_survey") {
-      return artifactStore.writeRuntimeCommand(payload);
-    }
-    return undefined;
-  };
+  const routeService = createRouteService({ artifactStore });
 
   wss.on("connection", (ws, request) => {
     const url = request?.url || "/";
@@ -34,15 +31,19 @@ const createRouteServer = ({ artifactStore, host, port }) => {
     ws.on("message", async (data) => {
       if (!isUi) return;
       const text = data.toString();
-      const payload = safeJsonParse(text);
+      const payload = await normalizeIncomingPayload(safeJsonParse(text));
+      if (!payload) {
+        console.error("[route] rejected invalid route contract");
+        return;
+      }
       try {
-        await persistMessage(payload);
+        await routeService.handle(payload);
       } catch (error) {
         console.error(`[route] failed to persist ${payload?.type || "unknown"}:`, error.message);
       }
 
       if (controllerConnection?.readyState === WebSocket.OPEN) {
-        controllerConnection.send(text);
+        controllerConnection.send(JSON.stringify(payload));
       } else {
         console.log("[route] controller websocket not connected; message saved to web_state");
       }
@@ -61,9 +62,9 @@ const createRouteServer = ({ artifactStore, host, port }) => {
       controllerConnected: controllerConnection?.readyState === WebSocket.OPEN,
       uiClientCount: uiClients.size,
     }),
-    persistMessage,
+    persistMessage: routeService.handle,
     wss,
   };
 };
 
-module.exports = { createRouteServer, safeJsonParse };
+module.exports = { createRouteServer, normalizeIncomingPayload, safeJsonParse };

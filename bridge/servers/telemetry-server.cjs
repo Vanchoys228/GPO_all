@@ -1,4 +1,5 @@
 const WebSocket = require("ws");
+const { createTelemetryService } = require("../services/telemetry-service.cjs");
 
 const createTelemetryServer = ({
   coordinateContract,
@@ -15,6 +16,13 @@ const createTelemetryServer = ({
   let telemetryCount = 0;
   let lastRealTelemetryAt = 0;
   let mockPhase = 0;
+  const telemetryService = createTelemetryService();
+
+  const broadcastTelemetry = async (payload, exclude = null) => {
+    telemetryCount += 1;
+    const message = await telemetryService.publish(payload);
+    broadcast(message, exclude);
+  };
 
   const broadcast = (payload, exclude = null) => {
     for (const client of clients) {
@@ -44,15 +52,15 @@ const createTelemetryServer = ({
   wss.on("connection", (ws) => {
     clients.add(ws);
     console.log("[telemetry] client connected");
-    ws.on("message", (data) => {
+    ws.on("message", async (data) => {
       senders.add(ws);
       lastRealTelemetryAt = Date.now();
       const text = typeof data === "string" ? data : data.toString();
-      telemetryCount += 1;
+      const payload = JSON.parse(text);
       if (telemetryCount % 20 === 1) {
         console.log(`[telemetry] msg ${telemetryCount} size=${text.length}`);
       }
-      broadcast(text, ws);
+      await broadcastTelemetry(payload, ws);
     });
     ws.on("close", () => {
       clients.delete(ws);
@@ -61,10 +69,10 @@ const createTelemetryServer = ({
     });
   });
 
-  const mockTimer = setInterval(() => {
+  const mockTimer = setInterval(async () => {
     if (!enableMockTelemetry || clients.size === 0) return;
     if (Date.now() - lastRealTelemetryAt < mockIdleMs) return;
-    const payload = JSON.stringify(buildMockTelemetry());
+    const payload = await telemetryService.publish(buildMockTelemetry());
     for (const client of clients) {
       if (!senders.has(client) && client.readyState === WebSocket.OPEN) client.send(payload);
     }
@@ -75,7 +83,7 @@ const createTelemetryServer = ({
       const telemetry = await fileSource.poll();
       if (!telemetry) return;
       lastRealTelemetryAt = Date.now();
-      broadcast(JSON.stringify(telemetry));
+      await broadcastTelemetry(telemetry);
     } catch (error) {
       console.error("[telemetry] failed to poll robot_state.json:", error.message);
     }
@@ -93,6 +101,7 @@ const createTelemetryServer = ({
     buildMockTelemetry,
     close,
     getStatus: () => ({ clientCount: clients.size, senderCount: senders.size }),
+    getLatest: telemetryService.getLatest,
     wss,
   };
 };

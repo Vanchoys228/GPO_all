@@ -15,6 +15,7 @@ obj
 native/build
 webots/controllers/youbot_web/build
 webots/controllers/youbot_web/*.exe
+webots/controllers/youbot_web/*.obj
 web_state/*.json
 web_state/*.csv
 web_state/*.txt

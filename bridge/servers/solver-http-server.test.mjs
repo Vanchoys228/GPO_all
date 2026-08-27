@@ -1,5 +1,6 @@
 import { afterEach, describe, expect, it } from "vitest";
 import serverModule from "./solver-http-server.cjs";
+import { createPlanningRequest, unwrapPlanningResult } from "../../shared/contracts/index.js";
 
 const { createSolverHttpServer } = serverModule;
 
@@ -92,6 +93,44 @@ describe("solver HTTP server", () => {
         { x: 1, y: 0 },
       ],
     });
+  });
+
+  it("returns a matched planning result contract for a versioned request", async () => {
+    const baseUrl = await listenForTest({
+      solverExists: async () => true,
+      run: async () => ({
+        length: 1,
+        closed: true,
+        order: [0],
+        route: [{ x: 0, y: 0 }],
+      }),
+    });
+    const request = createPlanningRequest({
+      source: "planner-frontend",
+      requestId: "planning-77",
+      timestamp: "2026-01-01T00:00:00.000Z",
+      payload: {
+        points: [{ x: 0, y: 0 }],
+        task: "tsp",
+        algorithm: { key: "ga_tabu", params: {} },
+      },
+    });
+
+    const response = await fetch(`${baseUrl}/api/solve-route`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(request),
+    });
+    const result = await response.json();
+
+    expect(response.status).toBe(200);
+    expect(result).toMatchObject({
+      contractVersion: 1,
+      type: "planning.result",
+      source: "planning-service",
+      requestId: "planning-77",
+    });
+    expect(unwrapPlanningResult(result)).toMatchObject({ ok: true, route: [{ x: 0, y: 0 }] });
   });
 
   it("returns 400 without invoking the solver for oversized routes", async () => {

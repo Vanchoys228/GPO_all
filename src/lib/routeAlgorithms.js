@@ -1,4 +1,8 @@
 import { SOLVER_HEALTH_URL, SOLVER_ROUTE_URL } from "./runtimeConfig";
+import {
+  createPlanningRequest,
+  unwrapPlanningResult,
+} from "../../shared/contracts/index.js";
 
 const TASKS = {
   tsp: {
@@ -264,17 +268,22 @@ export const solveRouteWithNativeAlgorithm = async (
     headers: {
       "Content-Type": "application/json",
     },
-    body: JSON.stringify({
-      points: points.map((point) => ({ x: point.x, y: point.y })),
-      algorithm: {
-        key: algorithmKey,
-        params,
+    body: JSON.stringify(createPlanningRequest({
+      source: "planner-frontend",
+      requestId: crypto.randomUUID(),
+      payload: {
+        points: points.map((point) => ({ x: point.x, y: point.y })),
+        algorithm: {
+          key: algorithmKey,
+          params,
+        },
+        task: taskKey,
       },
-      task: taskKey,
-    }),
+    })),
   });
 
-  const payload = await response.json().catch(() => null);
+  const rawPayload = await response.json().catch(() => null);
+  const payload = unwrapPlanningResult(rawPayload) || rawPayload;
   if (!response.ok) {
     throw new Error(payload?.error || "Не удалось связаться с нативным solver.");
   }

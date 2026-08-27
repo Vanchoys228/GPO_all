@@ -38,7 +38,7 @@ WorldInfo {
 }
 Viewpoint {
   orientation 0.07467287892190907 0.08761296949069716 -0.9933518655192307 2.4565251739789433
-  position 49.91915451679404 45.71116839941702 19.238782840714542
+  position 32.430003995926356 31.59802927772458 14.95951242560089
   follow "youBot"
 }
 TexturedBackground {
@@ -49,8 +49,22 @@ Floor {
   size 300 300
 }
 Youbot {
-  translation 0 0 0.102838
-  rotation 0 0 1 0
+  hidden position_0_0 -1.1278584212826214e-09
+  hidden position_0_1 -8.544116525399659e-10
+  hidden position_0_2 1.1710894566833315e-09
+  hidden position_0_3 8.903342578261413e-10
+  hidden position_3_0 -1.1569304491710567e-06
+  hidden rotation_4 0 0 -1 1.1569290723670686e-06
+  hidden position_4_0 1.0773609435014209e-07
+  hidden rotation_5 0 -1 0 1.0745380149674385e-07
+  hidden position_5_0 1.6506477307358975e-07
+  hidden rotation_6 0 -1 0 1.6593230851978133e-07
+  hidden position_6_0 -1.3653243387453528e-09
+  hidden position_7_0 2.9830530434034605e-10
+  hidden position_8_0 1.1970644185119108e-11
+  hidden position_8_1 -1.1970939154392025e-11
+  translation 0.00022154575471120073 4.2333633964145944e-06 0.10193771744428143
+  rotation -0.01910501367574832 0.9998174825639843 3.4447974017753594e-06 0.002110345492983813
   controller "youbot_web"
   supervisor TRUE
   bodySlot [
@@ -78,7 +92,7 @@ Youbot {
       defaultFrequency 12
     }
     DEF FRONT_CAMERA Camera {
-      translation 0.30 0 0.24
+      translation 0.3 0 0.24
       rotation 0 1 0 -1.5708
       children [
         Shape {
@@ -91,19 +105,19 @@ Youbot {
             size 0.055 0.07 0.04
           }
         }
-        Transform {
+        Pose {
           translation -0.026 0 0
           rotation 0 1 0 1.5708
           children [
             Shape {
               appearance PBRAppearance {
-                baseColor 0.05 0.45 0.70
+                baseColor 0.05 0.45 0.7
                 roughness 0.45
                 metalness 0.1
               }
               geometry Cylinder {
-                radius 0.018
                 height 0.008
+                radius 0.018
               }
             }
           ]

@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import { createTelemetryEvent } from "../../shared/contracts/index.js";
 import { normalizeTelemetry } from "./dashboardTelemetry";
 
 describe("normalizeTelemetry", () => {
@@ -256,5 +257,16 @@ describe("normalizeTelemetry", () => {
 
   it("ignores payloads with a different message type", () => {
     expect(normalizeTelemetry({ type: "route", pose: { x: 1, y: 2 } })).toBeNull();
+  });
+
+  it("accepts a telemetry event while retaining the legacy dashboard shape", () => {
+    const event = createTelemetryEvent({
+      source: "telemetry-service",
+      requestId: "telemetry-2",
+      timestamp: "2026-01-01T00:00:04.000Z",
+      payload: { type: "telemetry", pose: { x: 4, y: 5, z: 0, yaw: 0 } },
+    });
+
+    expect(normalizeTelemetry(event)).toMatchObject({ x: 4, y: 5, z: 0, yaw: 0 });
   });
 });

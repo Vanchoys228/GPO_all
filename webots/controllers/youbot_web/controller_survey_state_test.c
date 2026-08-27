@@ -5,7 +5,7 @@
 int main(void) {
   ControllerMappingSurveyState state;
   controller_mapping_survey_state_init(&state);
-  if (state.room_zone_index != -1 || state.mode != MAPPING_SURVEY_MODE_SNAKE ||
+  if (state.route_active || state.room_zone_index != -1 || state.mode != MAPPING_SURVEY_MODE_SNAKE ||
       state.interior_start_index != 0 || state.obstacle_scan_active ||
       state.obstacle_scan_end_index != -1 || state.obstacle_scan_cooldown_steps != 0 ||
       state.replan_cooldown_steps != 0 || state.last_scan_x != 1e30 || state.last_scan_y != 1e30) {
@@ -42,12 +42,14 @@ int main(void) {
 
   state.mode = MAPPING_SURVEY_MODE_DOUBLE;
   state.replan_cooldown_steps = 9;
+  controller_mapping_survey_state_activate_route(&state, MAPPING_SURVEY_MODE_SNAKE);
+  if (!state.route_active || state.mode != MAPPING_SURVEY_MODE_SNAKE) return 8;
   controller_mapping_survey_state_reset_route(&state);
-  if (state.room_zone_index != -1 || state.interior_start_index != 0 ||
+  if (state.route_active || state.room_zone_index != -1 || state.interior_start_index != 0 ||
       state.obstacle_scan_active || state.obstacle_scan_end_index != -1 ||
-      state.obstacle_scan_cooldown_steps != 0 || state.mode != MAPPING_SURVEY_MODE_DOUBLE ||
+      state.obstacle_scan_cooldown_steps != 0 || state.mode != MAPPING_SURVEY_MODE_SNAKE ||
       state.replan_cooldown_steps != 9) {
-    return 8;
+    return 9;
   }
 
   return 0;

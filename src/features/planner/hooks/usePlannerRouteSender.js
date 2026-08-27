@@ -7,6 +7,7 @@ import {
 } from "../model/routeEnergy";
 import {
   buildControllerRoutePayload,
+  buildRouteCommand,
   buildRouteSentStatus,
 } from "../model/routeCommand";
 
@@ -74,8 +75,9 @@ export const usePlannerRouteSender = ({
       routeTaskKey,
       selectedAlgorithmParams,
     });
+    const command = buildRouteCommand(payload);
     const sendPayload = (socket) => {
-      socket.send(JSON.stringify(payload));
+      socket.send(JSON.stringify(command));
       startRouteTiming();
       setEnergyWarning("");
       setStatus(buildRouteSentStatus(routeForController.length, chargingStops));

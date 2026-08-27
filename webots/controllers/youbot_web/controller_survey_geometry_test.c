@@ -177,5 +177,105 @@ int main(void) {
       &start_from_low, &start_distance);
   if (start_from_low || !nearly_equal(start_distance, 0.0)) return 24;
 
+  LimitZone obstacle = {0};
+  obstacle.point_count = 4;
+  obstacle.points[0].x = -1.0;
+  obstacle.points[0].y = -1.0;
+  obstacle.points[1].x = 1.0;
+  obstacle.points[1].y = -1.0;
+  obstacle.points[2].x = 1.0;
+  obstacle.points[2].y = 1.0;
+  obstacle.points[3].x = -1.0;
+  obstacle.points[3].y = 1.0;
+
+  SurveyInterval horizontal[4] = {{-3.0, 3.0}};
+  int horizontal_count = 1;
+  controller_survey_subtract_zone_horizontal_band(
+      horizontal, &horizontal_count, 4, &obstacle, 0.0, 0.2, 1e-9);
+  if (horizontal_count != 2 || !nearly_equal(horizontal[0].end, -1.2) ||
+      !nearly_equal(horizontal[1].start, 1.2)) {
+    return 28;
+  }
+
+  SurveyInterval vertical[4] = {{-3.0, 3.0}};
+  int vertical_count = 1;
+  controller_survey_subtract_zone_vertical_band(
+      vertical, &vertical_count, 4, &obstacle, 0.0, 0.2, 1e-9);
+  if (vertical_count != 2 || !nearly_equal(vertical[0].end, -1.2) ||
+      !nearly_equal(vertical[1].start, 1.2)) {
+    return 29;
+  }
+
+  ZoneData coverage_zones = {0};
+  coverage_zones.count = 1;
+  coverage_zones.zones[0] = obstacle;
+  SurveyInterval coverage[4];
+  const int horizontal_coverage_count = controller_survey_build_horizontal_intervals(
+      0.0, 0, NULL, &coverage_zones, NULL, 0, 0.2, 0.5, 1e-9, coverage, 4);
+  if (horizontal_coverage_count != 1 ||
+      !nearly_equal(coverage[0].start, -0.8) ||
+      !nearly_equal(coverage[0].end, 0.8)) {
+    return 30;
+  }
+  const int vertical_coverage_count = controller_survey_build_vertical_intervals(
+      0.0, 0, NULL, &coverage_zones, NULL, 0, 0.2, 0.5, 1e-9, coverage, 4);
+  if (vertical_coverage_count != 1 ||
+      !nearly_equal(coverage[0].start, -0.8) ||
+      !nearly_equal(coverage[0].end, 0.8)) {
+    return 31;
+  }
+
+  double coverage_min_x = 0.0;
+  double coverage_max_x = 0.0;
+  double coverage_min_y = 0.0;
+  double coverage_max_y = 0.0;
+  controller_survey_get_coverage_bounds(
+      &grid, NULL, -1, 0.2,
+      &coverage_min_x, &coverage_max_x, &coverage_min_y, &coverage_max_y);
+  if (!nearly_equal(coverage_min_x, 0.2) || !nearly_equal(coverage_max_x, 1.8) ||
+      !nearly_equal(coverage_min_y, 0.2) || !nearly_equal(coverage_max_y, 1.8)) {
+    return 32;
+  }
+  controller_survey_get_coverage_bounds(
+      &grid, &coverage_zones, 0, 0.2,
+      &coverage_min_x, &coverage_max_x, &coverage_min_y, &coverage_max_y);
+  if (!nearly_equal(coverage_min_x, -0.8) || !nearly_equal(coverage_max_x, 0.8) ||
+      !nearly_equal(coverage_min_y, -0.8) || !nearly_equal(coverage_max_y, 0.8)) {
+    return 33;
+  }
+
+  int sweep_from_high = 0;
+  int start_positive = 0;
+  controller_survey_select_sweep_start(
+      1, 1, 4.0, 1, 0, 2.0, &sweep_from_high, &start_positive);
+  if (!sweep_from_high || start_positive) return 34;
+
+  LimitZone contour_room = {0};
+  contour_room.point_count = 4;
+  contour_room.points[0].x = -2.0;
+  contour_room.points[0].y = -2.0;
+  contour_room.points[1].x = 2.0;
+  contour_room.points[1].y = -2.0;
+  contour_room.points[2].x = 2.0;
+  contour_room.points[2].y = 2.0;
+  contour_room.points[3].x = -2.0;
+  contour_room.points[3].y = 2.0;
+  SurveyPoint inset_contour[4];
+  int inset_count = 0;
+  if (!controller_survey_build_offset_contour(
+          &contour_room, 0.5, inset_contour, 4, &inset_count)) {
+    return 35;
+  }
+  if (inset_count != 4 || !nearly_equal(inset_contour[0].x, -1.5) ||
+      !nearly_equal(inset_contour[0].y, -1.5) ||
+      !nearly_equal(inset_contour[2].x, 1.5) ||
+      !nearly_equal(inset_contour[2].y, 1.5)) {
+    return 36;
+  }
+  if (controller_survey_nearest_point_index(
+          inset_contour, inset_count, 1.4, 1.4) != 2) {
+    return 37;
+  }
+
   return 0;
 }
