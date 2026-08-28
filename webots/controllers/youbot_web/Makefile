@@ -93,9 +93,15 @@ C_SOURCES = \
   controller_mapping_obstacles.c \
   controller_mapping_scan.c \
   controller_mapping_scan_service.c \
+  controller_mapping_scan_transition.c \
+  controller_mapping_survey_escape.c \
+  controller_mapping_survey_safety.c \
   controller_mapping_store.c \
   controller_motion_profile.c \
   controller_navigation_context.c \
+  controller_navigation_adapter.c \
+  controller_navigation_state.c \
+  controller_navigation_metrics.c \
   controller_navigation_lidar.c \
   controller_navigation_motion_service.c \
   controller_navigation_perception.c \

@@ -1,4 +1,6 @@
 #include "controller_survey_geometry.h"
+#include "controller_survey_intervals.h"
+#include "controller_survey_coverage_bounds.h"
 
 #include "controller_zone_geometry.h"
 
@@ -153,51 +155,6 @@ void controller_survey_route_add_segment(
         from.x + (to.x - from.x) * t,
         from.y + (to.y - from.y) * t);
   }
-}
-
-void controller_survey_sort_values(double *values, int count) {
-  if (!values || count <= 1) return;
-  for (int i = 1; i < count; ++i) {
-    const double value = values[i];
-    int j = i - 1;
-    while (j >= 0 && values[j] > value) {
-      values[j + 1] = values[j];
-      --j;
-    }
-    values[j + 1] = value;
-  }
-}
-
-void controller_survey_subtract_interval(
-    SurveyInterval *intervals,
-    int *count,
-    int capacity,
-    double block_start,
-    double block_end) {
-  if (!intervals || !count || *count <= 0 || capacity <= 0) return;
-  SurveyInterval next[64];
-  const int effective_capacity = capacity < 64 ? capacity : 64;
-  int next_count = 0;
-  if (block_end < block_start) {
-    const double tmp = block_start;
-    block_start = block_end;
-    block_end = tmp;
-  }
-  for (int i = 0; i < *count && next_count < effective_capacity; ++i) {
-    const SurveyInterval current = intervals[i];
-    if (block_end <= current.start || block_start >= current.end) {
-      next[next_count++] = current;
-      continue;
-    }
-    if (block_start > current.start) {
-      next[next_count++] = (SurveyInterval){current.start, fmin(block_start, current.end)};
-    }
-    if (block_end < current.end && next_count < effective_capacity) {
-      next[next_count++] = (SurveyInterval){fmax(block_end, current.start), current.end};
-    }
-  }
-  for (int i = 0; i < next_count; ++i) intervals[i] = next[i];
-  *count = next_count;
 }
 
 static double zone_primary(const LimitZone *zone, int index, int vertical) {
@@ -431,50 +388,6 @@ int controller_survey_build_vertical_intervals(
   return build_axis_intervals(
       x, room_zone_index, grid, zones, map, map_count, interior_offset,
       min_strip_length, epsilon, intervals, capacity, 1);
-}
-
-void controller_survey_get_coverage_bounds(
-    const SurveyGrid *grid,
-    const ZoneData *zones,
-    int room_zone_index,
-    double interior_offset,
-    double *min_x,
-    double *max_x,
-    double *min_y,
-    double *max_y) {
-  if (!grid || !min_x || !max_x || !min_y || !max_y) return;
-  *min_x = grid->min_x + interior_offset;
-  *max_x = grid->min_x + (double)(grid->width - 1) * grid->cell - interior_offset;
-  *min_y = grid->min_y + interior_offset;
-  *max_y = grid->min_y + (double)(grid->height - 1) * grid->cell - interior_offset;
-
-  if (!zones || room_zone_index < 0 || room_zone_index >= zones->count) return;
-  const LimitZone *room = &zones->zones[room_zone_index];
-  if (room->point_count <= 0) return;
-  *min_x = *max_x = room->points[0].x;
-  *min_y = *max_y = room->points[0].y;
-  for (int i = 1; i < room->point_count; ++i) {
-    controller_survey_expand_bounds(
-        room->points[i].x, room->points[i].y, min_x, max_x, min_y, max_y);
-  }
-  *min_x += interior_offset;
-  *max_x -= interior_offset;
-  *min_y += interior_offset;
-  *max_y -= interior_offset;
-}
-
-void controller_survey_select_sweep_start(
-    int has_low,
-    int low_positive,
-    double low_distance,
-    int has_high,
-    int high_positive,
-    double high_distance,
-    int *sweep_from_high,
-    int *start_positive) {
-  if (!sweep_from_high || !start_positive) return;
-  *sweep_from_high = has_high && (!has_low || high_distance < low_distance);
-  *start_positive = *sweep_from_high ? high_positive : low_positive;
 }
 
 int controller_survey_grid_index_for_point(const SurveyGrid *grid, double x, double y) {
