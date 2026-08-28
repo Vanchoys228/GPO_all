@@ -18,18 +18,15 @@ import { useSolverHealth } from "./hooks/useSolverHealth";
 import { useTelemetrySocket } from "./hooks/useTelemetrySocket";
 import { usePlannerBridgeSync } from "./hooks/usePlannerBridgeSync";
 import { useRouteTiming } from "./hooks/useRouteTiming";
-import { usePlannerPointEditor } from "./hooks/usePlannerPointEditor";
-import { usePlannerLimitZoneEditor } from "./hooks/usePlannerLimitZoneEditor";
-import { usePlannerSurfaceZoneEditor } from "./hooks/usePlannerSurfaceZoneEditor";
 import { usePlannerRouteOptimization } from "./hooks/usePlannerRouteOptimization";
 import { usePlannerRouteSender } from "./hooks/usePlannerRouteSender";
 import { usePlannerRouteRebuild } from "./hooks/usePlannerRouteRebuild";
-import { usePlannerRuntimeCommands } from "./hooks/usePlannerRuntimeCommands";
 import { usePlannerGraphImport } from "./hooks/usePlannerGraphImport";
-import { usePlannerMapExport } from "./hooks/usePlannerMapExport";
 import { usePlannerEnergySettings } from "./hooks/usePlannerEnergySettings";
 import { usePlannerRouteSelection } from "./hooks/usePlannerRouteSelection";
 import { usePlannerSidebarState } from "./hooks/usePlannerSidebarState";
+import { useDashboardPlannerRuntimeActions } from "./hooks/useDashboardPlannerRuntimeActions";
+import { useDashboardPlannerEditors } from "./hooks/useDashboardPlannerEditors";
 import {
   DEFAULT_SURFACE_PROFILE_KEY,
   createInitialSurfaceZones,
@@ -224,64 +221,16 @@ export default function Dashboard() {
     });
 
   const {
-    clearZone,
-    createZone,
-    removeZone,
-    resetZones,
-    selectZone,
-    toggleZoneClosed,
-  } = usePlannerLimitZoneEditor({
-    activeLimitZoneId,
-    clearRouteState,
-    limitZones,
-    nextZoneNumber,
-    points,
-    setActiveLimitZoneId,
-    setActivePointKind,
-    setLimitZones,
-    setNextZoneNumber,
-    setPoints,
-    setStatus,
-    zoneEntries: plannerModel.zoneEntries,
-  });
-
-  const { clearAllSurfaceZones, clearSurfaceZone, createSurfaceZone, removeSurfaceZone, selectSurfaceZone, toggleSurfaceZoneClosed, updateActiveSurfaceProfile } =
-    usePlannerSurfaceZoneEditor({
-      activeSurfaceProfileKey,
-      activeSurfaceZoneId,
-      clearRouteState,
-      nextSurfaceZoneNumber,
-      setActivePointKind,
-      setActiveSurfaceProfileKey,
-      setActiveSurfaceZoneId,
-      setNextSurfaceZoneNumber,
-      setStatus,
-      setSurfaceZones,
-      surfaceZones,
-    });
-
-  const {
-    addPointFromCanvas,
-    clearPoints,
-    deletePoint,
-    finishDragging,
-    handleCanvasMouseDown,
-    handleCanvasMouseMove,
-    updatePointTask,
-  } = usePlannerPointEditor({
-    activeLimitZoneId,
-    activePointKind,
-    activeSurfaceProfileKey,
-    activeSurfaceZone,
-    activeZone: plannerModel.activeZone,
-    activeZoneName: plannerModel.activeZoneName,
-    canvasRef,
-    clearRouteState,
-    points,
-    resetZones,
-    setPoints,
-    setStatus,
-    setSurfaceZones,
+    addPointFromCanvas, clearAllSurfaceZones, clearPoints, clearSurfaceZone, clearZone,
+    createSurfaceZone, createZone, deletePoint, finishDragging, handleCanvasMouseDown,
+    handleCanvasMouseMove, removeSurfaceZone, removeZone, selectSurfaceZone, selectZone,
+    toggleSurfaceZoneClosed, toggleZoneClosed, updateActiveSurfaceProfile, updatePointTask,
+  } = useDashboardPlannerEditors({
+    activeLimitZoneId, activePointKind, activeSurfaceProfileKey, activeSurfaceZone,
+    activeSurfaceZoneId, canvasRef, clearRouteState, limitZones, nextSurfaceZoneNumber,
+    nextZoneNumber, plannerModel, points, setActiveLimitZoneId, setActivePointKind,
+    setActiveSurfaceProfileKey, setActiveSurfaceZoneId, setLimitZones, setNextSurfaceZoneNumber,
+    setNextZoneNumber, setPoints, setStatus, setSurfaceZones, surfaceZones,
   });
 
   const optimizeRoute = usePlannerRouteOptimization({
@@ -319,23 +268,11 @@ export default function Dashboard() {
     startRouteTiming,
   });
 
-  const { addRandomObstacle, startMappingSurvey } = usePlannerRuntimeCommands({
-    batteryRangeMeters,
-    mappingSurveyMode,
-    optimizedRoute,
-    payloadKg,
-    plannerModel,
-    points,
-    routeSocketRef: routeWsRef,
-    setStatus,
-    telemetry,
-  });
-
-  const { exportMapImage, requestMapExport } = usePlannerMapExport({
-    setMapExportPromptOpen,
-    setStatus,
-    telemetry,
-  });
+  const { addRandomObstacle, exportMapImage, requestMapExport, startMappingSurvey } =
+    useDashboardPlannerRuntimeActions({
+      batteryRangeMeters, mappingSurveyMode, optimizedRoute, payloadKg, plannerModel, points,
+      routeSocketRef: routeWsRef, setMapExportPromptOpen, setStatus, telemetry,
+    });
 
   return (
     <div className="flex h-screen min-h-0 bg-stone-100 text-stone-900">
