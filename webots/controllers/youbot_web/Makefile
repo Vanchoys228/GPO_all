@@ -105,6 +105,7 @@ C_SOURCES = \
   controller_obstacle_map.c \
   controller_paths.c \
   controller_route.c \
+  controller_route_zone_service.c \
   controller_runtime_command.c \
   controller_step.c \
   controller_survey_contour.c \
