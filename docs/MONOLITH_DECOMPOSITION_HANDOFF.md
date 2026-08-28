@@ -8,9 +8,9 @@
 
 ## Правило проверок
 
-- После малого изменения: только целевой C/JS тест и при необходимости `npm run webots:build`.
-- После законченного крупного блока: `npm test`, `npm run lint`, `npm run build`, `npm run test:webots`, `npm run webots:build`.
-- Не запускать полный набор после каждой маленькой правки.
+- После каждого среза: только целевой C/JS тест и затронутая сборка (например, `npm run webots:build`).
+- Полный набор (`npm test`, `npm run lint`, `npm run build`, `npm run test:webots`, `npm run webots:build`) запускать только после нескольких завершённых срезов либо значимого этапа, по явному решению пользователя.
+- Не запускать полный набор автоматически после каждого крупного блока.
 
 ## Рабочая копия
 
@@ -27,6 +27,7 @@
 - `23c9654`, `9e350e1`, `ea74bdc`, `57a437e`, `414e1da`, `7fa546b`, `0b97df4` — camera fusion/virtual camera/renders вынесены в специализированные модули.
 - `37b9f74` — `controller_webots_camera_adapter`: атомарная публикация BMP/JPEG и frame metadata.
 - `0b03843` — `controller_mapping_store`: persistent/camera/free map state, clear/write persistence.
+- `3e7124b` — `controller_route_zone_service`: reload route/limit/surface zones с mtime detection и explicit results.
 
 Размер `youbot_web.c` уменьшен с 3194 до 2866 строк после последнего завершённого Mapping Store коммита.
 

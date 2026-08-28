@@ -39,6 +39,7 @@
 #include "controller_paths.h"
 #include "controller_route.h"
 #include "controller_route_zone_service.h"
+#include "controller_runtime.h"
 #include "controller_runtime_command.h"
 #include "controller_survey_contour.h"
 #include "controller_survey_coverage.h"
@@ -240,18 +241,17 @@
 #define zone_signed_area controller_zone_geometry_signed_area
 #define segment_blocked_by_zones(ax, ay, bx, by, clearance, skip_zone_index) \
   controller_zone_geometry_segment_blocked(                                      \
-      &zone_data, (ax), (ay), (bx), (by), (clearance), (skip_zone_index))
+      &controller_runtime.limit_zones, (ax), (ay), (bx), (by), (clearance), (skip_zone_index))
 #define find_room_zone_index(robot_x, robot_y) \
-  controller_zone_geometry_find_room(&zone_data, (robot_x), (robot_y))
+  controller_zone_geometry_find_room(&controller_runtime.limit_zones, (robot_x), (robot_y))
 
 static ControllerWebotsDevices webots_devices = {0};
 static ControllerWebotsAdapter webots_adapter = {0};
 static ControllerWebotsPose webots_pose = {0};
 static ControllerWebotsSensors webots_sensors = {0};
 
-static RouteData route_data = {0};
-static ZoneData zone_data = {0};
-static SurfaceZoneData surface_zone_data = {0};
+static ControllerRuntime controller_runtime;
+
 static ControllerRouteZoneService route_zone_service;
 static ControllerWebotsSimulationNodeRegistry zone_node_registry = {0};
 static ControllerWebotsSimulationNodeRegistry surface_zone_registry = {0};
@@ -293,60 +293,18 @@ static double camera_obstacle_range = 0.0;
 static int camera_detection_count = 0;
 static int camera_obstacle_update_step = -1;
 static int camera_virtual_mode = 0;
-static int current_waypoint_index = 0;
 static int step_counter = 0;
-static int route_finished = 0;
-static NavigationMode navigation_mode = NAV_MODE_IDLE;
-static int navigation_waypoint_index = -1;
-static double navigation_segment_start_x = START_X;
-static double navigation_segment_start_z = START_Z;
 static char navigation_status[64] = "booting";
 static char navigation_error[160] = "";
-static double distance_to_target = 0.0;
 static double configured_cruise_speed_mps = DEFAULT_CRUISE_SPEED_MPS;
 static double configured_payload_kg = DEFAULT_PAYLOAD_KG;
 static double configured_battery_range_units = DEFAULT_BATTERY_RANGE_UNITS;
 static double runtime_linear_speed_limit = DEFAULT_CRUISE_SPEED_MPS;
 static double runtime_angular_speed_limit = KINEMATIC_ANGULAR_SPEED;
 static double runtime_battery_speed_factor = 1.0;
-static double lidar_priority_turn_sign = 0.0;
-static int lidar_priority_hold_steps = 0;
-static ControllerAvoidanceState avoidance_state = {
-    .mode = AVOID_MODE_NONE,
-    .turn_sign = 1.0,
-    .prev_x = START_X,
-    .prev_z = START_Z,
-    .start_x = START_X,
-    .start_z = START_Z,
-    .detour_x = START_X,
-    .detour_z = START_Z,
-};
-static ControllerNavigationPoseHistory navigation_pose_history = {
-    START_X,
-    START_Z,
-    0.0,
-    0,
-};
 static long long motion_profile_last_modified = -1;
 static long long runtime_command_last_modified = -1;
 static long long last_processed_runtime_command_id = -1;
-static ControllerMappingSurveyState mapping_survey_state = {
-    .room_zone_index = -1,
-    .mode = MAPPING_SURVEY_MODE_SNAKE,
-    .obstacle_scan_end_index = -1,
-    .last_scan_x = 1e30,
-    .last_scan_y = 1e30,
-};
-#define route_source_mapping_survey mapping_survey_state.route_active
-#define mapping_survey_room_zone_index mapping_survey_state.room_zone_index
-#define mapping_survey_mode mapping_survey_state.mode
-#define mapping_survey_interior_start_index mapping_survey_state.interior_start_index
-#define mapping_survey_obstacle_scan_active mapping_survey_state.obstacle_scan_active
-#define mapping_survey_obstacle_scan_end_index mapping_survey_state.obstacle_scan_end_index
-#define mapping_survey_obstacle_scan_cooldown_steps mapping_survey_state.obstacle_scan_cooldown_steps
-#define mapping_survey_last_scan_x mapping_survey_state.last_scan_x
-#define mapping_survey_last_scan_y mapping_survey_state.last_scan_y
-#define mapping_survey_replan_cooldown_steps mapping_survey_state.replan_cooldown_steps
 static double route_avoidance_time_sec = 0.0;
 static int route_avoidance_steps = 0;
 
@@ -580,13 +538,13 @@ static void update_camera_obstacle_hint(void) {
 static void draw_virtual_camera_overlay(unsigned char *pixels, double effective_fov) {
   controller_camera_render_reticle(pixels, CAMERA_FRAME_WIDTH, CAMERA_FRAME_HEIGHT);
 
-  if (route_data.count > 0 && current_waypoint_index < route_data.count &&
+  if (controller_runtime.route.count > 0 && controller_runtime.current_waypoint_index < controller_runtime.route.count &&
       controller_webots_pose_is_ready(&webots_pose)) {
     double x = 0.0;
     double z = 0.0;
     double heading = 0.0;
     read_pose(&x, &z, &heading);
-    const Waypoint *target = &route_data.waypoints[current_waypoint_index];
+    const Waypoint *target = &controller_runtime.route.waypoints[controller_runtime.current_waypoint_index];
     const double target_angle = wrap_angle(atan2(target->z - z, target->x - x) - heading);
     if (fabs(target_angle) < effective_fov * 0.5) {
       const double offset = clamp_value(target_angle / (effective_fov * 0.5), -1.0, 1.0);
@@ -738,9 +696,9 @@ static void reset_robot_pose() {
   if (!controller_webots_adapter_reset_pose(
           &webots_pose, START_X, START_Z, START_HEIGHT, 0.0)) return;
   controller_webots_devices_reset_wheels(&webots_devices);
-  avoidance_state.hold_steps = 0;
-  avoidance_state.turn_sign = 1.0;
-  navigation_pose_history = (ControllerNavigationPoseHistory){
+  controller_runtime.avoidance.hold_steps = 0;
+  controller_runtime.avoidance.turn_sign = 1.0;
+  controller_runtime.navigation_pose_history = (ControllerNavigationPoseHistory){
       START_X,
       START_Z,
       0.0,
@@ -780,37 +738,37 @@ static double sign_or_one(double value) {
 }
 
 static void reset_navigation_mode(void) {
-  navigation_mode = NAV_MODE_IDLE;
-  navigation_waypoint_index = -1;
-  navigation_segment_start_x = START_X;
-  navigation_segment_start_z = START_Z;
-  lidar_priority_turn_sign = 0.0;
-  lidar_priority_hold_steps = 0;
-  controller_avoidance_state_reset(&avoidance_state, START_X, START_Z);
-  mapping_survey_replan_cooldown_steps = 0;
+  controller_runtime.navigation_mode = NAV_MODE_IDLE;
+  controller_runtime.navigation_waypoint_index = -1;
+  controller_runtime.navigation_segment_start_x = START_X;
+  controller_runtime.navigation_segment_start_z = START_Z;
+  controller_runtime.lidar_priority_turn_sign = 0.0;
+  controller_runtime.lidar_priority_hold_steps = 0;
+  controller_avoidance_state_reset(&controller_runtime.avoidance, START_X, START_Z);
+  controller_runtime.mapping_survey.replan_cooldown_steps = 0;
 }
 
 static void begin_navigation_for_waypoint(int waypoint_index, double current_x, double current_z) {
-  navigation_waypoint_index = waypoint_index;
-  navigation_segment_start_x = current_x;
-  navigation_segment_start_z = current_z;
-  navigation_mode = NAV_MODE_TURN;
+  controller_runtime.navigation_waypoint_index = waypoint_index;
+  controller_runtime.navigation_segment_start_x = current_x;
+  controller_runtime.navigation_segment_start_z = current_z;
+  controller_runtime.navigation_mode = NAV_MODE_TURN;
 }
 
 static void ensure_navigation_waypoint_initialized(double current_x, double current_z) {
-  if (navigation_waypoint_index != current_waypoint_index) {
-    begin_navigation_for_waypoint(current_waypoint_index, current_x, current_z);
+  if (controller_runtime.navigation_waypoint_index != controller_runtime.current_waypoint_index) {
+    begin_navigation_for_waypoint(controller_runtime.current_waypoint_index, current_x, current_z);
   }
 }
 
 static void clear_local_navigation_state(void) {
-  lidar_priority_turn_sign = 0.0;
-  lidar_priority_hold_steps = 0;
-  const double previous_x = avoidance_state.prev_x;
-  const double previous_z = avoidance_state.prev_z;
-  controller_avoidance_state_reset(&avoidance_state, START_X, START_Z);
-  avoidance_state.prev_x = previous_x;
-  avoidance_state.prev_z = previous_z;
+  controller_runtime.lidar_priority_turn_sign = 0.0;
+  controller_runtime.lidar_priority_hold_steps = 0;
+  const double previous_x = controller_runtime.avoidance.prev_x;
+  const double previous_z = controller_runtime.avoidance.prev_z;
+  controller_avoidance_state_reset(&controller_runtime.avoidance, START_X, START_Z);
+  controller_runtime.avoidance.prev_x = previous_x;
+  controller_runtime.avoidance.prev_z = previous_z;
 }
 
 static void reset_route_avoidance_metrics(void) {
@@ -819,8 +777,8 @@ static void reset_route_avoidance_metrics(void) {
 }
 
 static int route_off_route_active_now() {
-  if (route_finished || route_data.count <= 0) return 0;
-  if (avoidance_state.active) return 1;
+  if (controller_runtime.route_finished || controller_runtime.route.count <= 0) return 0;
+  if (controller_runtime.avoidance.active) return 1;
   if (strncmp(navigation_status, "avoiding_", 9) == 0) return 1;
   if (strcmp(navigation_status, "passing_lidar_gap") == 0) return 1;
   if (strcmp(navigation_status, "tracking_lidar_priority") == 0) return 1;
@@ -902,10 +860,10 @@ static void compute_lidar_obstacle_context(LidarObstacleContext *context,
       const double hit_x = sensor_origin_x + cos(world_angle) * raw_range;
       const double hit_y = sensor_origin_y + sin(world_angle) * raw_range;
 
-      for (int zone_index = 0; zone_index < zone_data.count; ++zone_index) {
+      for (int zone_index = 0; zone_index < controller_runtime.limit_zones.count; ++zone_index) {
         if (point_near_zone_boundary(hit_x,
                                      hit_y,
-                                     &zone_data.zones[zone_index],
+                                     &controller_runtime.limit_zones.zones[zone_index],
                                      ZONE_WALL_EXPECTED_TOLERANCE)) {
           expected_zone_wall = 1;
           break;
@@ -1164,7 +1122,7 @@ static int survey_map_obstacle_near(double x, double y, double clearance) {
 
 static int survey_point_safe(double x, double y, int room_zone_index, double clearance) {
   if (room_zone_index >= 0) {
-    const LimitZone *room = &zone_data.zones[room_zone_index];
+    const LimitZone *room = &controller_runtime.limit_zones.zones[room_zone_index];
     if (!point_in_zone(x, y, room)) return 0;
     if (point_near_zone_boundary(x, y, room, clearance * 0.72)) return 0;
   } else if (x < -MAPPING_SURVEY_MAX_EXTENT_X || x > MAPPING_SURVEY_MAX_EXTENT_X ||
@@ -1172,9 +1130,9 @@ static int survey_point_safe(double x, double y, int room_zone_index, double cle
     return 0;
   }
 
-  for (int i = 0; i < zone_data.count; ++i) {
+  for (int i = 0; i < controller_runtime.limit_zones.count; ++i) {
     if (i == room_zone_index) continue;
-    if (point_near_zone(x, y, &zone_data.zones[i], clearance)) return 0;
+    if (point_near_zone(x, y, &controller_runtime.limit_zones.zones[i], clearance)) return 0;
   }
 
   return !survey_map_obstacle_near(x, y, fmax(clearance, MAPPING_SURVEY_MAP_OBSTACLE_CLEARANCE));
@@ -1237,9 +1195,9 @@ static int mapping_survey_segment_clear_of_known_obstacles(
 }
 
 static int mapping_survey_segment_stays_in_room(double ax, double ay, double bx, double by) {
-  if (mapping_survey_room_zone_index < 0) return 1;
+  if (controller_runtime.mapping_survey.room_zone_index < 0) return 1;
 
-  const LimitZone *room = &zone_data.zones[mapping_survey_room_zone_index];
+  const LimitZone *room = &controller_runtime.limit_zones.zones[controller_runtime.mapping_survey.room_zone_index];
   const double length = hypot2(bx - ax, by - ay);
   const int steps = (int)ceil(length / fmax(MAPPING_SURVEY_GRID_CELL, 0.08));
   for (int i = 1; i <= steps; ++i) {
@@ -1252,15 +1210,15 @@ static int mapping_survey_segment_stays_in_room(double ax, double ay, double bx,
 }
 
 static int find_mapping_survey_escape_waypoint(double x, double y, int start_index) {
-  if (!route_source_mapping_survey || route_data.count <= 0) return -1;
+  if (!controller_runtime.mapping_survey.route_active || controller_runtime.route.count <= 0) return -1;
 
-  const int first = (int)clamp_value((double)start_index + 1.0, 0.0, (double)route_data.count);
+  const int first = (int)clamp_value((double)start_index + 1.0, 0.0, (double)controller_runtime.route.count);
   const int last = (int)fmin(
-      (double)route_data.count,
+      (double)controller_runtime.route.count,
       (double)first + (double)MAPPING_SURVEY_ESCAPE_SCAN_AHEAD);
 
   for (int i = first; i < last; ++i) {
-    const Waypoint *candidate = &route_data.waypoints[i];
+    const Waypoint *candidate = &controller_runtime.route.waypoints[i];
     const double candidate_distance = hypot2(candidate->x - x, candidate->z - y);
     if (candidate_distance < MAPPING_SURVEY_ESCAPE_MIN_TARGET_DISTANCE) continue;
     if (survey_known_obstacle_near(
@@ -1278,7 +1236,7 @@ static int find_mapping_survey_escape_waypoint(double x, double y, int start_ind
             candidate->x,
             candidate->z,
             MAPPING_SURVEY_ESCAPE_SEGMENT_CLEARANCE,
-            mapping_survey_room_zone_index)) {
+            controller_runtime.mapping_survey.room_zone_index)) {
       continue;
     }
     if (!mapping_survey_segment_clear_of_known_obstacles(
@@ -1339,7 +1297,7 @@ static int append_room_contour_phase(
   SurveyPoint contour[MAX_ZONE_POINTS];
   int contour_count = 0;
   if (!controller_survey_build_offset_contour(
-          &zone_data.zones[room_zone_index],
+          &controller_runtime.limit_zones.zones[room_zone_index],
           MAPPING_SURVEY_CONTOUR_OFFSET,
           contour,
           MAX_ZONE_POINTS,
@@ -1388,7 +1346,7 @@ static int survey_build_grid(
       MAPPING_SURVEY_MAX_GRID_CELLS,
   };
   const ControllerSurveyGridInput input = {
-      &zone_data,
+      &controller_runtime.limit_zones,
       persistent_map,
       persistent_map_count,
       room_zone_index,
@@ -1434,7 +1392,7 @@ static int build_scanline_intervals(
       y,
       room_zone_index,
       grid,
-      &zone_data,
+      &controller_runtime.limit_zones,
       persistent_map,
       persistent_map_count,
       MAPPING_SURVEY_INTERIOR_OFFSET,
@@ -1577,7 +1535,7 @@ static void append_scanline_coverage_phase(
   double min_y = 0.0;
   double max_y = 0.0;
   controller_survey_get_coverage_bounds(
-      grid, &zone_data, room_zone_index, MAPPING_SURVEY_INTERIOR_OFFSET,
+      grid, &controller_runtime.limit_zones, room_zone_index, MAPPING_SURVEY_INTERIOR_OFFSET,
       &min_x, &max_x, &min_y, &max_y);
 
   const SurveyPoint current =
@@ -1600,7 +1558,7 @@ static int build_vertical_intervals(
       x,
       room_zone_index,
       grid,
-      &zone_data,
+      &controller_runtime.limit_zones,
       persistent_map,
       persistent_map_count,
       MAPPING_SURVEY_INTERIOR_OFFSET,
@@ -1635,7 +1593,7 @@ static void append_vertical_coverage_phase(
   double min_y = 0.0;
   double max_y = 0.0;
   controller_survey_get_coverage_bounds(
-      grid, &zone_data, room_zone_index, MAPPING_SURVEY_INTERIOR_OFFSET,
+      grid, &controller_runtime.limit_zones, room_zone_index, MAPPING_SURVEY_INTERIOR_OFFSET,
       &min_x, &max_x, &min_y, &max_y);
 
   const SurveyPoint current =
@@ -1649,7 +1607,7 @@ static void append_vertical_coverage_phase(
 }
 
 static void write_mapping_survey_route_file(const char *path, const SurveyPoint *route, int route_count) {
-  if (!controller_mapping_route_write(path, route, route_count, mapping_survey_mode)) {
+  if (!controller_mapping_route_write(path, route, route_count, controller_runtime.mapping_survey.mode)) {
     set_error("Cannot write mapping survey route to route.csv");
   }
 }
@@ -1722,7 +1680,7 @@ static void survey_generator_clear_map(void *context) {
 
 static void survey_generator_prepare(void *context, MappingSurveyMode mode) {
   (void)context;
-  controller_mapping_survey_state_prepare(&mapping_survey_state, mode);
+  controller_mapping_survey_state_prepare(&controller_runtime.mapping_survey, mode);
 }
 
 static SurveyPoint survey_generator_read_robot(void *context) {
@@ -1779,7 +1737,7 @@ static int survey_generator_build_route(
       survey_route_append_vertical,
   };
   return controller_survey_build_route_phases(
-      mapping_survey_mode,
+      controller_runtime.mapping_survey.mode,
       robot,
       route_count,
       interior_start_index,
@@ -1802,7 +1760,7 @@ static int generate_mapping_survey_route(
     int clear_map_before_start,
     const RuntimeCommand *command) {
   const MappingSurveyMode survey_mode =
-      command ? command->survey_mode : mapping_survey_mode;
+      command ? command->survey_mode : controller_runtime.mapping_survey.mode;
   static SurveyGeneratorContext generator;
   generator.path = path;
   generator.command = command;
@@ -1819,8 +1777,8 @@ static int generate_mapping_survey_route(
   const ControllerSurveyGenerateResult result = controller_survey_generate(
       clear_map_before_start,
       survey_mode,
-      &mapping_survey_room_zone_index,
-      &mapping_survey_interior_start_index,
+      &controller_runtime.mapping_survey.room_zone_index,
+      &controller_runtime.mapping_survey.interior_start_index,
       &callbacks,
       &generator);
   if (result == CONTROLLER_SURVEY_GENERATE_GRID_FAILED) {
@@ -1841,7 +1799,7 @@ static void sync_zone_nodes() {
   controller_webots_simulation_sync_limit_zones(
       webots_pose.root_children_field,
       &zone_node_registry,
-      &zone_data,
+      &controller_runtime.limit_zones,
       MAX_ZONE_NODES,
       WALL_THICKNESS,
       WALL_HEIGHT);
@@ -1855,7 +1813,7 @@ static void sync_surface_zone_nodes() {
   controller_webots_simulation_sync_surface_zones(
       webots_pose.root_children_field,
       &surface_zone_registry,
-      &surface_zone_data,
+      &controller_runtime.surface_zones,
       MAX_SURFACE_ZONE_NODES);
 }
 
@@ -1936,10 +1894,10 @@ static void maybe_reload_runtime_command(void) {
     controller_survey_integration_start(
         ROUTE_PATH,
         &command,
-        &route_data,
-        &current_waypoint_index,
-        &route_finished,
-        &mapping_survey_state,
+        &controller_runtime.route,
+        &controller_runtime.current_waypoint_index,
+        &controller_runtime.route_finished,
+        &controller_runtime.mapping_survey,
         &ops);
     return;
   }
@@ -1958,16 +1916,16 @@ static void maybe_reload_zones(void) {
   const ControllerRouteZoneServiceResult result =
       controller_route_zone_service_reload(
           &route_zone_service, &paths, &request,
-          &route_data, &zone_data, &surface_zone_data);
+          &controller_runtime.route, &controller_runtime.limit_zones, &controller_runtime.surface_zones);
   if (result.limit_zones_status != CONTROLLER_ROUTE_ZONE_STATUS_OK &&
       result.limit_zones_status != CONTROLLER_ROUTE_ZONE_STATUS_UNCHANGED) {
     set_error("Cannot parse limit_zones.txt");
     return;
   }
   if (result.limit_zones_changed) {
-    zone_data = result.limit_zones;
+    controller_runtime.limit_zones = result.limit_zones;
     sync_zone_nodes();
-    set_status(zone_data.count > 0 ? "zones_synced" : "zones_cleared");
+    set_status(controller_runtime.limit_zones.count > 0 ? "zones_synced" : "zones_cleared");
   }
 }
 
@@ -1980,16 +1938,16 @@ static void maybe_reload_surface_zones(void) {
   const ControllerRouteZoneServiceResult result =
       controller_route_zone_service_reload(
           &route_zone_service, &paths, &request,
-          &route_data, &zone_data, &surface_zone_data);
+          &controller_runtime.route, &controller_runtime.limit_zones, &controller_runtime.surface_zones);
   if (result.surface_zones_status != CONTROLLER_ROUTE_ZONE_STATUS_OK &&
       result.surface_zones_status != CONTROLLER_ROUTE_ZONE_STATUS_UNCHANGED) {
     set_error("Cannot parse surface_zones.txt");
     return;
   }
   if (result.surface_zones_changed) {
-    surface_zone_data = result.surface_zones;
+    controller_runtime.surface_zones = result.surface_zones;
     sync_surface_zone_nodes();
-    set_status(surface_zone_data.count > 0 ? "surfaces_synced" : "surfaces_cleared");
+    set_status(controller_runtime.surface_zones.count > 0 ? "surfaces_synced" : "surfaces_cleared");
   }
 }
 
@@ -2017,7 +1975,7 @@ static void maybe_reload_route(void) {
   const ControllerRouteZoneServiceResult result =
       controller_route_zone_service_reload(
           &route_zone_service, &paths, &request,
-          &route_data, &zone_data, &surface_zone_data);
+          &controller_runtime.route, &controller_runtime.limit_zones, &controller_runtime.surface_zones);
   if (result.route_status == CONTROLLER_ROUTE_ZONE_STATUS_ROUTE_CANNOT_OPEN) {
     set_error("Cannot open route.csv");
     return;
@@ -2028,13 +1986,13 @@ static void maybe_reload_route(void) {
   }
   if (result.route_changed) {
     controller_survey_lifecycle_accept_route(
-        &route_data,
+        &controller_runtime.route,
         &result.route,
-        &current_waypoint_index,
-        &route_finished,
-        &mapping_survey_state,
+        &controller_runtime.current_waypoint_index,
+        &controller_runtime.route_finished,
+        &controller_runtime.mapping_survey,
         0,
-        mapping_survey_mode);
+        controller_runtime.mapping_survey.mode);
     reset_route_avoidance_metrics();
     reset_navigation_mode();
     set_status("route_reloaded");
@@ -2042,7 +2000,7 @@ static void maybe_reload_route(void) {
 }
 
 static int replan_mapping_survey_route_from_current_map(void) {
-  if (!route_source_mapping_survey) return 0;
+  if (!controller_runtime.mapping_survey.route_active) return 0;
 
   double robot_x = 0.0;
   double robot_y = 0.0;
@@ -2052,10 +2010,10 @@ static int replan_mapping_survey_route_from_current_map(void) {
   return controller_survey_integration_replan(
       ROUTE_PATH,
       (SurveyPoint){robot_x, robot_y},
-      &route_data,
-      &current_waypoint_index,
-      &route_finished,
-      &mapping_survey_state,
+      &controller_runtime.route,
+      &controller_runtime.current_waypoint_index,
+      &controller_runtime.route_finished,
+      &controller_runtime.mapping_survey,
       MAPPING_SURVEY_REPLAN_COOLDOWN_STEPS,
       &ops);
 }
@@ -2065,32 +2023,32 @@ static int escape_mapping_survey_orbit(double x, double y) {
   return controller_survey_integration_escape_orbit(
       ROUTE_PATH,
       (SurveyPoint){x, y},
-      &route_data,
-      &current_waypoint_index,
-      &route_finished,
-      &distance_to_target,
-      &mapping_survey_state,
+      &controller_runtime.route,
+      &controller_runtime.current_waypoint_index,
+      &controller_runtime.route_finished,
+      &controller_runtime.distance_to_target,
+      &controller_runtime.mapping_survey,
       MAPPING_SURVEY_REPLAN_COOLDOWN_STEPS,
       &ops);
 }
 
 static void wait_for_fresh_route() {
-  route_data.count = 0;
-  route_data.last_modified = get_file_mtime(ROUTE_PATH);
-  current_waypoint_index = 0;
-  route_finished = 0;
-  controller_mapping_survey_state_reset_route(&mapping_survey_state);
+  controller_runtime.route.count = 0;
+  controller_runtime.route.last_modified = get_file_mtime(ROUTE_PATH);
+  controller_runtime.current_waypoint_index = 0;
+  controller_runtime.route_finished = 0;
+  controller_mapping_survey_state_reset_route(&controller_runtime.mapping_survey);
   reset_route_avoidance_metrics();
   reset_navigation_mode();
-  distance_to_target = 0.0;
+  controller_runtime.distance_to_target = 0.0;
   clear_error();
   set_status("waiting_for_route");
   stop_robot();
 }
 
 static int mapping_survey_scan_point_allowed(double x, double y) {
-  if (mapping_survey_room_zone_index >= 0) {
-    const LimitZone *room = &zone_data.zones[mapping_survey_room_zone_index];
+  if (controller_runtime.mapping_survey.room_zone_index >= 0) {
+    const LimitZone *room = &controller_runtime.limit_zones.zones[controller_runtime.mapping_survey.room_zone_index];
     if (!point_in_zone(x, y, room)) return 0;
     if (point_near_zone_boundary(x, y, room, ZONE_CLEARANCE * 0.72)) return 0;
   } else if (x < -MAPPING_SURVEY_MAX_EXTENT_X || x > MAPPING_SURVEY_MAX_EXTENT_X ||
@@ -2098,9 +2056,9 @@ static int mapping_survey_scan_point_allowed(double x, double y) {
     return 0;
   }
 
-  for (int zone_index = 0; zone_index < zone_data.count; ++zone_index) {
-    if (zone_index == mapping_survey_room_zone_index) continue;
-    if (point_near_zone(x, y, &zone_data.zones[zone_index], ZONE_CLEARANCE)) return 0;
+  for (int zone_index = 0; zone_index < controller_runtime.limit_zones.count; ++zone_index) {
+    if (zone_index == controller_runtime.mapping_survey.room_zone_index) continue;
+    if (point_near_zone(x, y, &controller_runtime.limit_zones.zones[zone_index], ZONE_CLEARANCE)) return 0;
   }
 
   return !survey_map_obstacle_near(x, y, ZONE_CLEARANCE * 0.68);
@@ -2132,18 +2090,18 @@ static int insert_mapping_survey_obstacle_scan_route(
       },
   };
   const ControllerMappingScanServiceInput scan_input = {
-      .mapping_survey = route_source_mapping_survey,
-      .route = &route_data,
-      .state = &mapping_survey_state,
-      .current_waypoint_index = current_waypoint_index,
+      .mapping_survey = controller_runtime.mapping_survey.route_active,
+      .route = &controller_runtime.route,
+      .state = &controller_runtime.mapping_survey,
+      .current_waypoint_index = controller_runtime.current_waypoint_index,
       .robot_x = x,
       .robot_y = z,
       .heading = heading,
       .target = target,
       .lidar_context = lidar_context,
       .turn_sign = turn_sign,
-      .segment_start_x = navigation_segment_start_x,
-      .segment_start_y = navigation_segment_start_z,
+      .segment_start_x = controller_runtime.navigation_segment_start_x,
+      .segment_start_y = controller_runtime.navigation_segment_start_z,
   };
   ControllerMappingScanServiceOutput scan_output;
   if (!controller_mapping_scan_service_start(
@@ -2155,9 +2113,9 @@ static int insert_mapping_survey_obstacle_scan_route(
     return 0;
   }
   clear_local_navigation_state();
-  begin_navigation_for_waypoint(current_waypoint_index, x, z);
-  distance_to_target = hypot2(route_data.waypoints[current_waypoint_index].x - x,
-                              route_data.waypoints[current_waypoint_index].z - z);
+  begin_navigation_for_waypoint(controller_runtime.current_waypoint_index, x, z);
+  controller_runtime.distance_to_target = hypot2(controller_runtime.route.waypoints[controller_runtime.current_waypoint_index].x - x,
+                              controller_runtime.route.waypoints[controller_runtime.current_waypoint_index].z - z);
   clear_error();
   set_status("mapping_survey_circle_scan_started");
   return 1;
@@ -2170,26 +2128,26 @@ static void run_navigation_step(void) {
 
   read_pose(&x, &z, &heading);
   const int manual_relocation_detected = controller_navigation_context_update_pose(
-      &navigation_pose_history,
+      &controller_runtime.navigation_pose_history,
       x,
       z,
       heading,
       POSE_RELOCATION_DISTANCE,
       POSE_RELOCATION_HEADING_RAD);
   const ControllerNavigationServiceFrameInput navigation_frame_input = {
-      .route = &route_data,
-      .current_waypoint_index = &current_waypoint_index,
-      .route_finished = &route_finished,
+      .route = &controller_runtime.route,
+      .current_waypoint_index = &controller_runtime.current_waypoint_index,
+      .route_finished = &controller_runtime.route_finished,
       .manual_relocation_detected = manual_relocation_detected,
       .x = x,
       .z = z,
       .heading = heading,
       .position_tolerance = POSITION_TOLERANCE,
       .heading_tolerance_rad = HEADING_TOLERANCE_RAD,
-      .zones = &zone_data,
+      .zones = &controller_runtime.limit_zones,
       .zone_clearance = ZONE_CLEARANCE,
-      .mapping_survey = route_source_mapping_survey,
-      .survey_room_zone_index = mapping_survey_room_zone_index,
+      .mapping_survey = controller_runtime.mapping_survey.route_active,
+      .survey_room_zone_index = controller_runtime.mapping_survey.room_zone_index,
   };
   ControllerNavigationServiceFrameOutput navigation_frame_output = {0};
   const ControllerNavigationServiceFrameDecision navigation_frame_decision =
@@ -2198,32 +2156,32 @@ static void run_navigation_step(void) {
 
   if (navigation_frame_decision == CONTROLLER_NAVIGATION_FRAME_WAIT_FOR_ROUTE) {
     set_status("waiting_for_route");
-    route_finished = 0;
-    avoidance_state.hold_steps = 0;
+    controller_runtime.route_finished = 0;
+    controller_runtime.avoidance.hold_steps = 0;
     reset_navigation_mode();
-    distance_to_target = 0.0;
+    controller_runtime.distance_to_target = 0.0;
     stop_robot();
     return;
   }
 
   if (navigation_frame_decision == CONTROLLER_NAVIGATION_FRAME_STOP_FINISHED) {
     set_status("finished");
-    avoidance_state.hold_steps = 0;
+    controller_runtime.avoidance.hold_steps = 0;
     reset_navigation_mode();
-    distance_to_target = 0.0;
+    controller_runtime.distance_to_target = 0.0;
     stop_robot();
     return;
   }
 
-  controller_mapping_survey_state_tick(&mapping_survey_state);
+  controller_mapping_survey_state_tick(&controller_runtime.mapping_survey);
 
   if (navigation_frame_decision == CONTROLLER_NAVIGATION_FRAME_RELOCALIZE) {
     clear_local_navigation_state();
-    navigation_waypoint_index = current_waypoint_index;
-    navigation_segment_start_x = navigation_frame_output.session.session.segment_start_x;
-    navigation_segment_start_z = navigation_frame_output.session.session.segment_start_z;
-    navigation_mode = NAV_MODE_TRACK;
-    distance_to_target = navigation_frame_output.session.session.distance_to_target;
+    controller_runtime.navigation_waypoint_index = controller_runtime.current_waypoint_index;
+    controller_runtime.navigation_segment_start_x = navigation_frame_output.session.session.segment_start_x;
+    controller_runtime.navigation_segment_start_z = navigation_frame_output.session.session.segment_start_z;
+    controller_runtime.navigation_mode = NAV_MODE_TRACK;
+    controller_runtime.distance_to_target = navigation_frame_output.session.session.distance_to_target;
     clear_error();
     set_status("relocalized_pose");
     stop_robot();
@@ -2235,28 +2193,28 @@ static void run_navigation_step(void) {
   if (navigation_frame_decision == CONTROLLER_NAVIGATION_FRAME_ROUTE_COMPLETED) {
     set_status("finished");
     reset_navigation_mode();
-    distance_to_target = 0.0;
+    controller_runtime.distance_to_target = 0.0;
     stop_robot();
     return;
   }
   if (navigation_frame_output.route_decision == CONTROLLER_NAVIGATION_ROUTE_ADVANCED)
-    begin_navigation_for_waypoint(current_waypoint_index, x, z);
+    begin_navigation_for_waypoint(controller_runtime.current_waypoint_index, x, z);
   Waypoint target = navigation_frame_output.route.route.target;
   int is_final_waypoint = navigation_frame_output.route.route.is_final_waypoint;
 
   if (controller_mapping_survey_state_complete_scan(
-          &mapping_survey_state,
-          current_waypoint_index,
+          &controller_runtime.mapping_survey,
+          controller_runtime.current_waypoint_index,
           MAPPING_SURVEY_OBSTACLE_SCAN_COOLDOWN_STEPS)) {
     clear_local_navigation_state();
-    begin_navigation_for_waypoint(current_waypoint_index, x, z);
+    begin_navigation_for_waypoint(controller_runtime.current_waypoint_index, x, z);
     set_status("mapping_survey_resumed_route");
   }
 
   if (navigation_frame_decision == CONTROLLER_NAVIGATION_FRAME_SKIP_BLOCKED_TARGET ||
       navigation_frame_decision == CONTROLLER_NAVIGATION_FRAME_SKIP_BLOCKED_SEGMENT) {
-    ++current_waypoint_index;
-    begin_navigation_for_waypoint(current_waypoint_index, x, z);
+    ++controller_runtime.current_waypoint_index;
+    begin_navigation_for_waypoint(controller_runtime.current_waypoint_index, x, z);
     clear_error();
     set_status(
         navigation_frame_decision == CONTROLLER_NAVIGATION_FRAME_SKIP_BLOCKED_TARGET
@@ -2267,14 +2225,14 @@ static void run_navigation_step(void) {
   if (navigation_frame_decision == CONTROLLER_NAVIGATION_FRAME_BLOCKED_TARGET) {
     set_status("blocked_by_dynamic_zone");
     set_error("Current waypoint is blocked by a dynamic zone");
-    distance_to_target = hypot2(target.x - x, target.z - z);
+    controller_runtime.distance_to_target = hypot2(target.x - x, target.z - z);
     stop_robot();
     return;
   }
   if (navigation_frame_decision == CONTROLLER_NAVIGATION_FRAME_BLOCKED_SEGMENT) {
     set_status("blocked_by_dynamic_zone");
     set_error("Dynamic zone blocks the current segment");
-    distance_to_target = hypot2(target.x - x, target.z - z);
+    controller_runtime.distance_to_target = hypot2(target.x - x, target.z - z);
     stop_robot();
     return;
   }
@@ -2282,8 +2240,8 @@ static void run_navigation_step(void) {
   ControllerNavigationTargetContext target_context;
   controller_navigation_context_target(
       &target,
-      current_waypoint_index,
-      route_data.count,
+      controller_runtime.current_waypoint_index,
+      controller_runtime.route.count,
       x,
       z,
       heading,
@@ -2293,8 +2251,8 @@ static void run_navigation_step(void) {
 
   LidarObstacleContext lidar_context;
   compute_lidar_obstacle_context(
-      &lidar_context, -heading_error_to_target, avoidance_state.turn_sign);
-  const int avoidance_was_active = avoidance_state.active;
+      &lidar_context, -heading_error_to_target, controller_runtime.avoidance.turn_sign);
+  const int avoidance_was_active = controller_runtime.avoidance.active;
   const ControllerNavigationPerceptionConfig perception_config = {
       .camera_range_epsilon = EPS,
       .camera_range_fallback = CAMERA_RANGE_FALLBACK_M,
@@ -2364,7 +2322,7 @@ static void run_navigation_step(void) {
           heading,
           &target,
           &lidar_context,
-          fabs(lidar_priority_turn_sign) > 0.0 ? lidar_priority_turn_sign : sign_or_one(heading_error_to_target))) {
+          fabs(controller_runtime.lidar_priority_turn_sign) > 0.0 ? controller_runtime.lidar_priority_turn_sign : sign_or_one(heading_error_to_target))) {
     stop_robot();
     return;
   }
@@ -2386,27 +2344,27 @@ static void run_navigation_step(void) {
       .z = z,
       .heading = heading,
       .target_distance = target_distance_now,
-      .priority_turn_sign = lidar_priority_turn_sign,
+      .priority_turn_sign = controller_runtime.lidar_priority_turn_sign,
       .camera_turn_sign = camera_preferred_turn_sign,
       .heading_error = heading_error_to_target,
   };
   ControllerAvoidanceStartOutput avoidance_start_output;
   if (controller_avoidance_start(
-          &avoidance_state,
+          &controller_runtime.avoidance,
           &avoidance_start_input,
           &avoidance_start_config,
           &avoidance_start_output)) {
-    lidar_priority_turn_sign = avoidance_start_output.priority_turn_sign;
-    lidar_priority_hold_steps = avoidance_start_output.priority_hold_steps;
+    controller_runtime.lidar_priority_turn_sign = avoidance_start_output.priority_turn_sign;
+    controller_runtime.lidar_priority_hold_steps = avoidance_start_output.priority_hold_steps;
   }
 
-  if (avoidance_state.active) {
-    const double detour_dx = avoidance_state.detour_x - x;
-    const double detour_dz = avoidance_state.detour_z - z;
+  if (controller_runtime.avoidance.active) {
+    const double detour_dx = controller_runtime.avoidance.detour_x - x;
+    const double detour_dz = controller_runtime.avoidance.detour_z - z;
     const double detour_distance =
-        avoidance_state.detour_active ? hypot2(detour_dx, detour_dz) : 0.0;
+        controller_runtime.avoidance.detour_active ? hypot2(detour_dx, detour_dz) : 0.0;
     const double detour_heading_error =
-        avoidance_state.detour_active
+        controller_runtime.avoidance.detour_active
             ? wrap_angle(atan2(detour_dz, detour_dx) - heading)
             : 0.0;
     const ControllerAvoidanceProgressConfig progress_config = {
@@ -2438,8 +2396,8 @@ static void run_navigation_step(void) {
         .clear_steps = LIDAR_AVOID_CLEAR_STEPS,
     };
     const ControllerAvoidanceLifecycleInput lifecycle_input = {
-        .mapping_survey = route_source_mapping_survey,
-        .replan_cooldown_steps = mapping_survey_replan_cooldown_steps,
+        .mapping_survey = controller_runtime.mapping_survey.route_active,
+        .replan_cooldown_steps = controller_runtime.mapping_survey.replan_cooldown_steps,
         .x = x,
         .z = z,
         .target_distance = target_distance_now,
@@ -2480,7 +2438,7 @@ static void run_navigation_step(void) {
         .progress_input = progress_input,
         .lifecycle_config = &lifecycle_config,
         .lifecycle_input = lifecycle_input,
-        .has_next_waypoint = current_waypoint_index + 1 < route_data.count,
+        .has_next_waypoint = controller_runtime.current_waypoint_index + 1 < controller_runtime.route.count,
         .command_config = &command_config,
         .command_input = command_input,
         .priority_hold_steps = LIDAR_PRIORITY_HOLD_STEPS,
@@ -2489,17 +2447,17 @@ static void run_navigation_step(void) {
     };
     ControllerAvoidanceServiceOutput avoidance_service_output;
     controller_avoidance_service_process_active(
-        &avoidance_state, &avoidance_service_input, &avoidance_service_output);
+        &controller_runtime.avoidance, &avoidance_service_input, &avoidance_service_output);
     const ControllerAvoidanceRecoveryOutput recovery_output =
         avoidance_service_output.recovery;
 
     if (recovery_output.rejoin_route) {
       clear_local_navigation_state();
-      navigation_waypoint_index = current_waypoint_index;
-      navigation_segment_start_x = x;
-      navigation_segment_start_z = z;
-      navigation_mode = NAV_MODE_TRACK;
-      distance_to_target = target_distance_now;
+      controller_runtime.navigation_waypoint_index = controller_runtime.current_waypoint_index;
+      controller_runtime.navigation_segment_start_x = x;
+      controller_runtime.navigation_segment_start_z = z;
+      controller_runtime.navigation_mode = NAV_MODE_TRACK;
+      controller_runtime.distance_to_target = target_distance_now;
       clear_error();
       set_status("mapping_survey_rejoined_route");
     }
@@ -2508,20 +2466,20 @@ static void run_navigation_step(void) {
         const ControllerAvoidanceRecoveryAfterOrbit after_orbit =
             controller_avoidance_recovery_after_orbit(
                 escape_mapping_survey_orbit(x, z),
-                current_waypoint_index + 1 < route_data.count);
+                controller_runtime.current_waypoint_index + 1 < controller_runtime.route.count);
         if (after_orbit == CONTROLLER_AVOIDANCE_RECOVERY_STOP_AFTER_ESCAPE) {
-          distance_to_target = 0.0;
+          controller_runtime.distance_to_target = 0.0;
           stop_robot();
           return;
         }
 
         if (after_orbit == CONTROLLER_AVOIDANCE_RECOVERY_SKIP_LOOPED_WAYPOINT) {
-          ++current_waypoint_index;
+          ++controller_runtime.current_waypoint_index;
           clear_local_navigation_state();
-          begin_navigation_for_waypoint(current_waypoint_index, x, z);
-          mapping_survey_replan_cooldown_steps = MAPPING_SURVEY_REPLAN_COOLDOWN_STEPS;
-          distance_to_target = hypot2(route_data.waypoints[current_waypoint_index].x - x,
-                                      route_data.waypoints[current_waypoint_index].z - z);
+          begin_navigation_for_waypoint(controller_runtime.current_waypoint_index, x, z);
+          controller_runtime.mapping_survey.replan_cooldown_steps = MAPPING_SURVEY_REPLAN_COOLDOWN_STEPS;
+          controller_runtime.distance_to_target = hypot2(controller_runtime.route.waypoints[controller_runtime.current_waypoint_index].x - x,
+                                      controller_runtime.route.waypoints[controller_runtime.current_waypoint_index].z - z);
           clear_error();
           set_status("mapping_survey_skipped_looped_obstacle");
           stop_robot();
@@ -2531,23 +2489,23 @@ static void run_navigation_step(void) {
 
     if (recovery_output.reacquire_free_space) {
       clear_local_navigation_state();
-      navigation_waypoint_index = current_waypoint_index;
-      navigation_segment_start_x = x;
-      navigation_segment_start_z = z;
-      navigation_mode = NAV_MODE_TRACK;
-      distance_to_target = target_distance_now;
+      controller_runtime.navigation_waypoint_index = controller_runtime.current_waypoint_index;
+      controller_runtime.navigation_segment_start_x = x;
+      controller_runtime.navigation_segment_start_z = z;
+      controller_runtime.navigation_mode = NAV_MODE_TRACK;
+      controller_runtime.distance_to_target = target_distance_now;
       clear_error();
       set_status("reacquired_free_space");
     }
 
-    if (avoidance_state.active && avoidance_service_output.has_command) {
+    if (controller_runtime.avoidance.active && avoidance_service_output.has_command) {
       if (avoidance_service_output.presentation.priority_updated) {
-        lidar_priority_turn_sign = avoidance_service_output.presentation.priority_turn_sign;
-        lidar_priority_hold_steps = avoidance_service_output.presentation.priority_hold_steps;
+        controller_runtime.lidar_priority_turn_sign = avoidance_service_output.presentation.priority_turn_sign;
+        controller_runtime.lidar_priority_hold_steps = avoidance_service_output.presentation.priority_hold_steps;
       }
       set_status(avoidance_service_output.presentation.status);
 
-      distance_to_target = target_distance_now;
+      controller_runtime.distance_to_target = target_distance_now;
       clear_error();
       set_base_velocity(
           avoidance_service_output.command.linear_speed,
@@ -2557,15 +2515,15 @@ static void run_navigation_step(void) {
     }
   }
 
-  controller_avoidance_lifecycle_finish(&avoidance_state, START_X, START_Z);
+  controller_avoidance_lifecycle_finish(&controller_runtime.avoidance, START_X, START_Z);
   if (avoidance_was_active) {
-    navigation_segment_start_x = x;
-    navigation_segment_start_z = z;
-    navigation_mode = NAV_MODE_TRACK;
+    controller_runtime.navigation_segment_start_x = x;
+    controller_runtime.navigation_segment_start_z = z;
+    controller_runtime.navigation_mode = NAV_MODE_TRACK;
   }
-  distance_to_target = target_distance_now;
-  navigation_segment_start_x = x;
-  navigation_segment_start_z = z;
+  controller_runtime.distance_to_target = target_distance_now;
+  controller_runtime.navigation_segment_start_x = x;
+  controller_runtime.navigation_segment_start_z = z;
   const int route_relaxed_mode_base = 1;
   const ControllerNavigationTrackingConfig tracking_config = {
       .final_align_distance = FINAL_ALIGN_DISTANCE,
@@ -2582,16 +2540,16 @@ static void run_navigation_step(void) {
       .position_tolerance = POSITION_TOLERANCE,
   };
   ControllerNavigationTrackingInput tracking_input = {
-      .mode = navigation_mode,
+      .mode = controller_runtime.navigation_mode,
       .is_final_waypoint = is_final_waypoint,
       .target_has_heading = target.has_heading,
       .target_heading = target.heading_rad,
       .current_heading = heading,
-      .distance_to_target = distance_to_target,
+      .distance_to_target = controller_runtime.distance_to_target,
       .heading_error_to_target = heading_error_to_target,
       .updated_heading_error = heading_error_to_target,
       .route_relaxed_mode = route_relaxed_mode_base,
-      .avoidance_active = avoidance_state.active,
+      .avoidance_active = controller_runtime.avoidance.active,
       .lidar_speed_scale = 1.0,
       .expected_wall_speed_scale = 1.0,
       .expected_zone_wall_slowdown = expected_zone_wall_slowdown,
@@ -2627,8 +2585,8 @@ static void run_navigation_step(void) {
       .expected_zone_wall_close = expected_zone_wall_close,
       .expected_zone_wall_slowdown = expected_zone_wall_slowdown,
       .expected_front_range = expected_front_range,
-      .current_priority_turn_sign = lidar_priority_turn_sign,
-      .current_priority_hold_steps = lidar_priority_hold_steps,
+      .current_priority_turn_sign = controller_runtime.lidar_priority_turn_sign,
+      .current_priority_hold_steps = controller_runtime.lidar_priority_hold_steps,
   };
   const ControllerNavigationMotionServiceInput motion_input = {
       .tracking = tracking_input,
@@ -2640,7 +2598,7 @@ static void run_navigation_step(void) {
       &navigation_lidar_config,
       &motion_input,
       &motion_output);
-  navigation_mode = motion_output.motion.tracking.mode;
+  controller_runtime.navigation_mode = motion_output.motion.tracking.mode;
   if (final_alignment) {
     clear_error();
     set_status("aligning_final_heading");
@@ -2652,8 +2610,8 @@ static void run_navigation_step(void) {
         motion_output.motion.tracking.angular_speed);
     return;
   }
-  lidar_priority_turn_sign = motion_output.motion.lidar.priority_turn_sign;
-  lidar_priority_hold_steps = motion_output.motion.lidar.priority_hold_steps;
+  controller_runtime.lidar_priority_turn_sign = motion_output.motion.lidar.priority_turn_sign;
+  controller_runtime.lidar_priority_hold_steps = motion_output.motion.lidar.priority_hold_steps;
   clear_error();
   set_status(controller_navigation_presentation_tracking_status(
       motion_output.motion.tracking.status));
@@ -2686,14 +2644,14 @@ static void write_state_snapshot(void) {
   controller_telemetry_service_build_navigation(
       navigation_status,
       navigation_error,
-      current_waypoint_index,
-      route_finished,
-      distance_to_target,
-      avoidance_state.active,
+      controller_runtime.current_waypoint_index,
+      controller_runtime.route_finished,
+      controller_runtime.distance_to_target,
+      controller_runtime.avoidance.active,
       route_off_route_active_now(),
       route_avoidance_time_sec,
       route_avoidance_steps,
-      &route_data,
+      &controller_runtime.route,
       &navigation);
   const ControllerTelemetryMotionProfile motion_profile = {
       configured_cruise_speed_mps,
@@ -2741,7 +2699,7 @@ static void write_state_snapshot(void) {
       heading,
       navigation,
       motion_profile,
-      zone_data.count,
+      controller_runtime.limit_zones.count,
       zone_node_registry.count,
       lidar,
       camera,
@@ -2753,8 +2711,8 @@ static void write_state_snapshot(void) {
       camera_map_count,
       camera_free_map_count,
       CAMERA_MAP_CELL_SIZE,
-      route_data.waypoints,
-      route_data.count,
+      controller_runtime.route.waypoints,
+      controller_runtime.route.count,
   };
   ControllerTelemetrySnapshot snapshot = {0};
   controller_telemetry_service_build_snapshot(&snapshot_input, &snapshot);
@@ -2808,6 +2766,7 @@ int main(int argc, char **argv) {
   init_sensors();
   init_pose_tracking();
   reset_robot_pose();
+  controller_runtime_init(&controller_runtime);
   controller_mapping_store_init(&mapping_store);
   controller_route_zone_service_init(&route_zone_service);
   camera_map = mapping_store.camera_map;
