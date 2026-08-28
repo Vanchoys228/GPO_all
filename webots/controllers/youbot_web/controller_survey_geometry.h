@@ -2,6 +2,8 @@
 #define YOUBOT_WEB_CONTROLLER_SURVEY_GEOMETRY_H
 
 #include "controller_types.h"
+#include "controller_survey_coverage_bounds.h"
+#include "controller_survey_intervals.h"
 
 #define CONTROLLER_SURVEY_MAX_BOUNDARY_POINTS 4096
 
@@ -29,13 +31,6 @@ void controller_survey_route_add_segment(
     double max_step,
     SurveyPoint from,
     SurveyPoint to);
-void controller_survey_sort_values(double *values, int count);
-void controller_survey_subtract_interval(
-    SurveyInterval *intervals,
-    int *count,
-    int capacity,
-    double block_start,
-    double block_end);
 void controller_survey_subtract_zone_horizontal_band(
     SurveyInterval *intervals,
     int *count,
@@ -76,24 +71,6 @@ int controller_survey_build_vertical_intervals(
     double epsilon,
     SurveyInterval *intervals,
     int capacity);
-void controller_survey_get_coverage_bounds(
-    const SurveyGrid *grid,
-    const ZoneData *zones,
-    int room_zone_index,
-    double interior_offset,
-    double *min_x,
-    double *max_x,
-    double *min_y,
-    double *max_y);
-void controller_survey_select_sweep_start(
-    int has_low,
-    int low_positive,
-    double low_distance,
-    int has_high,
-    int high_positive,
-    double high_distance,
-    int *sweep_from_high,
-    int *start_positive);
 int controller_survey_grid_index_for_point(const SurveyGrid *grid, double x, double y);
 SurveyPoint controller_survey_grid_point(const SurveyGrid *grid, int index);
 int controller_survey_flood_component(SurveyGrid *grid, double robot_x, double robot_y);

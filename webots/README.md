@@ -35,10 +35,7 @@
 - Общие структуры и enum-типы контроллера: `controller_types.c/.h`
 - Парсинг ограничивающих зон и покрытий: `controller_zones.c/.h`
 - Сборка контроллера: `webots/controllers/youbot_web/build_youbot_web.bat`
-- Runtime state:
-  - [web_state/route.csv](C:/Users/User/Desktop/GPO-main/web_state/route.csv)
-  - [web_state/route.json](C:/Users/User/Desktop/GPO-main/web_state/route.json)
-  - [web_state/robot_state.json](C:/Users/User/Desktop/GPO-main/web_state/robot_state.json)
+- Runtime state хранится в корневом каталоге `web_state/`.
 
 ## Как это связано с UI
 
@@ -64,7 +61,6 @@ cd webots\controllers\youbot_web
 
 3. Запустить bridge из корня проекта:
 ```powershell
-cd C:\GPO\_ne_monolit
 npm run bridge
 ```
 
@@ -74,9 +70,7 @@ npm run dev
 ```
 
 5. В `Webots` открыть мир:
-```text
-C:\GPO\_ne_monolit\webots\worlds\youbot_only.wbt
-```
+Открыть `webots/worlds/youbot_only.wbt` из текущего checkout.
 
 6. Нажать `Run`
 

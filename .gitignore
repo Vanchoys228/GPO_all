@@ -20,6 +20,9 @@ webots/controllers/youbot_web/*.obj
 web_state/*.json
 web_state/*.csv
 web_state/*.txt
+web_state/*.jpg
+webots/worlds/.*.wbproj
+webots/worlds/.*.jpg
 *.local
 
 # Editor directories and files

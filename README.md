@@ -180,15 +180,20 @@ npm run test:bridge
 npm run test:webots
 ```
 
-## Текущая Docker-заготовка bridge
+## Docker-стек
 
-Текущая конфигурация запускает в Docker WebSocket bridge и Linux-версию native
-solver. Полная контейнеризация и сквозная проверка ещё выполняются отдельным
-этапом. Webots с графическим окном пока работает на Windows и использует общий
+Compose запускает production frontend, WebSocket bridge и Linux-версию native
+solver. Webots с графическим окном пока работает на Windows и использует общий
 каталог `web_state`.
 
 ```bash
-docker compose up --build bridge
+docker compose up --build
+```
+
+Headless Webots R2025a запускается отдельным профилем:
+
+```bash
+docker compose --profile simulation up --build
 ```
 
 После запуска доступны прежние адреса:
@@ -196,6 +201,7 @@ docker compose up --build bridge
 - `ws://127.0.0.1:9001` — телеметрия;
 - `ws://127.0.0.1:9002/ui` — маршруты и команды UI;
 - `http://127.0.0.1:9003/health` — состояние bridge и solver.
+- `http://127.0.0.1:8080` — frontend.
 
 Пошаговая декомпозиция описана в [REFACTORING_PLAN.md](./REFACTORING_PLAN.md).
 

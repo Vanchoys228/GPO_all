@@ -3,6 +3,9 @@
 dist
 node_modules
 native/build
+webots/controllers/youbot_web/build
+webots/controllers/youbot_web/*.exe
+webots/controllers/youbot_web/*.obj
 web_state/*
 !web_state/.gitkeep
 *.log

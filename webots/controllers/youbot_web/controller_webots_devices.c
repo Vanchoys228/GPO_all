@@ -8,7 +8,7 @@
 static void init_wheels(ControllerWebotsDevices *devices) {
   char name[16];
   for (int i = 0; i < 4; ++i) {
-    sprintf(name, "wheel%d", i + 1);
+    snprintf(name, sizeof(name), "wheel%d", i + 1);
     devices->wheels[i] = wb_robot_get_device(name);
     wb_motor_set_position(devices->wheels[i], INFINITY);
     wb_motor_set_velocity(devices->wheels[i], 0.0);

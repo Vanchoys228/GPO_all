@@ -1,6 +1,5 @@
 #include "controller_survey_geometry.h"
 #include "controller_survey_intervals.h"
-#include "controller_survey_coverage_bounds.h"
 
 #include "controller_zone_geometry.h"
 

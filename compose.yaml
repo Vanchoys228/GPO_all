@@ -1,4 +1,14 @@
 services:
+  frontend:
+    build:
+      context: .
+      dockerfile: docker/frontend.Dockerfile
+    depends_on:
+      - bridge
+    ports:
+      - "127.0.0.1:8080:80"
+    restart: unless-stopped
+
   bridge:
     build:
       context: .
@@ -18,3 +28,15 @@ services:
     volumes:
       - ./web_state:/state
     restart: unless-stopped
+
+  webots:
+    profiles:
+      - simulation
+    build:
+      context: .
+      dockerfile: docker/webots.Dockerfile
+    depends_on:
+      - bridge
+    volumes:
+      - ./web_state:/project/web_state
+    restart: "no"
