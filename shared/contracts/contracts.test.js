@@ -7,11 +7,17 @@ import {
   createMotionCommand,
   createPlanningRequest,
   createPlanningResult,
+  createRobotState,
+  createSensorFrame,
+  createServiceError,
   unwrapMotionCommand,
   unwrapPlanningRequest,
   unwrapPlanningResult,
   unwrapTelemetryEvent,
   unwrapRouteCommand,
+  unwrapRobotState,
+  unwrapSensorFrame,
+  unwrapServiceError,
   validateContractEnvelope,
   validatePayload,
 } from "./index.js";
@@ -121,5 +127,15 @@ describe("shared service contracts", () => {
       timestamp: "2026-01-01T00:00:00.000Z",
       payload: {},
     })).toEqual({ valid: false, error: "invalid_service_error" });
+  });
+
+  it("round-trips robot-control contracts through typed envelopes", () => {
+    const options = { source: "webots-adapter", requestId: "frame-1", timestamp: "2026-01-01T00:00:08.000Z" };
+    const frame = createSensorFrame({ ...options, payload: { pose: { x: 1, y: 2 } } });
+    const state = createRobotState({ ...options, payload: { pose: { x: 1, y: 2 } } });
+    const error = createServiceError({ ...options, payload: { code: "unavailable" } });
+    expect(unwrapSensorFrame(frame)).toEqual(frame.payload);
+    expect(unwrapRobotState(state)).toEqual(state.payload);
+    expect(unwrapServiceError(error)).toEqual(error.payload);
   });
 });

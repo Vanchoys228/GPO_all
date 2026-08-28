@@ -80,6 +80,19 @@ export const unwrapMotionCommand = (envelope) => {
   return envelope.payload;
 };
 
+const createTypedContract = (type, options) => createContractEnvelope({ type, ...options });
+const unwrapTypedContract = (type, envelope) => {
+  const validation = validateContractEnvelope(envelope);
+  return validation.valid && envelope.type === type ? envelope.payload : null;
+};
+
+export const createRobotState = (options) => createTypedContract("robot.state", options);
+export const unwrapRobotState = (envelope) => unwrapTypedContract("robot.state", envelope);
+export const createSensorFrame = (options) => createTypedContract("sensor.frame", options);
+export const unwrapSensorFrame = (envelope) => unwrapTypedContract("sensor.frame", envelope);
+export const createServiceError = (options) => createTypedContract("service.error", options);
+export const unwrapServiceError = (envelope) => unwrapTypedContract("service.error", envelope);
+
 export const createPlanningRequest = ({ source, requestId, timestamp, payload }) =>
   createContractEnvelope({
     type: "planning.request",
