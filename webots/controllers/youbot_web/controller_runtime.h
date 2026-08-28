@@ -3,6 +3,7 @@
 
 #include "controller_avoidance.h"
 #include "controller_navigation_context.h"
+#include "controller_navigation_service.h"
 #include "controller_survey_state.h"
 #include "controller_types.h"
 
@@ -50,6 +51,32 @@ typedef struct {
   ControllerRuntimeMotionCommand motion;
 } ControllerRuntimeFrameResult;
 
+typedef struct {
+  double position_tolerance;
+  double heading_tolerance_rad;
+  double zone_clearance;
+  double relocation_distance;
+  double relocation_heading_rad;
+} ControllerRuntimeNavigationConfig;
+
+typedef enum {
+  CONTROLLER_RUNTIME_ACTION_WAIT_FOR_ROUTE = 0,
+  CONTROLLER_RUNTIME_ACTION_STOP_FINISHED = 1,
+  CONTROLLER_RUNTIME_ACTION_RELOCALIZE = 2,
+  CONTROLLER_RUNTIME_ACTION_ROUTE_COMPLETED = 3,
+  CONTROLLER_RUNTIME_ACTION_SKIP_BLOCKED_TARGET = 4,
+  CONTROLLER_RUNTIME_ACTION_SKIP_BLOCKED_SEGMENT = 5,
+  CONTROLLER_RUNTIME_ACTION_BLOCKED_TARGET = 6,
+  CONTROLLER_RUNTIME_ACTION_BLOCKED_SEGMENT = 7,
+  CONTROLLER_RUNTIME_ACTION_TRACK_ROUTE = 8,
+} ControllerRuntimeAction;
+
+typedef struct {
+  ControllerRuntimeAction action;
+  Waypoint target;
+  ControllerNavigationServiceFrameOutput navigation;
+} ControllerRuntimeNavigationResult;
+
 void controller_runtime_init(ControllerRuntime *runtime);
 ControllerRuntimeFrameDecision controller_runtime_process_sensor_frame(
     ControllerRuntime *runtime,
@@ -57,5 +84,9 @@ ControllerRuntimeFrameDecision controller_runtime_process_sensor_frame(
     ControllerRuntimeFrameResult *result);
 ControllerRuntimeMotionCommand controller_runtime_calculate_motion_command(
     const ControllerRuntime *runtime);
+ControllerRuntimeNavigationResult controller_runtime_process_navigation_frame(
+    ControllerRuntime *runtime,
+    const ControllerRuntimeSensorFrame *frame,
+    const ControllerRuntimeNavigationConfig *config);
 
 #endif

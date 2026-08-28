@@ -2127,34 +2127,18 @@ static void run_navigation_step(void) {
   double heading = 0.0;
 
   read_pose(&x, &z, &heading);
-  const int manual_relocation_detected = controller_navigation_context_update_pose(
-      &controller_runtime.navigation_pose_history,
-      x,
-      z,
-      heading,
+  const ControllerRuntimeSensorFrame sensor_frame = {x, z, heading, 0};
+  const ControllerRuntimeNavigationConfig navigation_config = {
+      POSITION_TOLERANCE,
+      HEADING_TOLERANCE_RAD,
+      ZONE_CLEARANCE,
       POSE_RELOCATION_DISTANCE,
-      POSE_RELOCATION_HEADING_RAD);
-  const ControllerNavigationServiceFrameInput navigation_frame_input = {
-      .route = &controller_runtime.route,
-      .current_waypoint_index = &controller_runtime.current_waypoint_index,
-      .route_finished = &controller_runtime.route_finished,
-      .manual_relocation_detected = manual_relocation_detected,
-      .x = x,
-      .z = z,
-      .heading = heading,
-      .position_tolerance = POSITION_TOLERANCE,
-      .heading_tolerance_rad = HEADING_TOLERANCE_RAD,
-      .zones = &controller_runtime.limit_zones,
-      .zone_clearance = ZONE_CLEARANCE,
-      .mapping_survey = controller_runtime.mapping_survey.route_active,
-      .survey_room_zone_index = controller_runtime.mapping_survey.room_zone_index,
-  };
-  ControllerNavigationServiceFrameOutput navigation_frame_output = {0};
-  const ControllerNavigationServiceFrameDecision navigation_frame_decision =
-      controller_navigation_service_process_frame(
-          &navigation_frame_input, &navigation_frame_output);
+      POSE_RELOCATION_HEADING_RAD};
+  const ControllerRuntimeNavigationResult navigation_result =
+      controller_runtime_process_navigation_frame(
+          &controller_runtime, &sensor_frame, &navigation_config);
 
-  if (navigation_frame_decision == CONTROLLER_NAVIGATION_FRAME_WAIT_FOR_ROUTE) {
+  if (navigation_result.action == CONTROLLER_RUNTIME_ACTION_WAIT_FOR_ROUTE) {
     set_status("waiting_for_route");
     controller_runtime.route_finished = 0;
     controller_runtime.avoidance.hold_steps = 0;
@@ -2164,7 +2148,7 @@ static void run_navigation_step(void) {
     return;
   }
 
-  if (navigation_frame_decision == CONTROLLER_NAVIGATION_FRAME_STOP_FINISHED) {
+  if (navigation_result.action == CONTROLLER_RUNTIME_ACTION_STOP_FINISHED) {
     set_status("finished");
     controller_runtime.avoidance.hold_steps = 0;
     reset_navigation_mode();
@@ -2175,13 +2159,13 @@ static void run_navigation_step(void) {
 
   controller_mapping_survey_state_tick(&controller_runtime.mapping_survey);
 
-  if (navigation_frame_decision == CONTROLLER_NAVIGATION_FRAME_RELOCALIZE) {
+  if (navigation_result.action == CONTROLLER_RUNTIME_ACTION_RELOCALIZE) {
     clear_local_navigation_state();
     controller_runtime.navigation_waypoint_index = controller_runtime.current_waypoint_index;
-    controller_runtime.navigation_segment_start_x = navigation_frame_output.session.session.segment_start_x;
-    controller_runtime.navigation_segment_start_z = navigation_frame_output.session.session.segment_start_z;
+    controller_runtime.navigation_segment_start_x = navigation_result.navigation.session.session.segment_start_x;
+    controller_runtime.navigation_segment_start_z = navigation_result.navigation.session.session.segment_start_z;
     controller_runtime.navigation_mode = NAV_MODE_TRACK;
-    controller_runtime.distance_to_target = navigation_frame_output.session.session.distance_to_target;
+    controller_runtime.distance_to_target = navigation_result.navigation.session.session.distance_to_target;
     clear_error();
     set_status("relocalized_pose");
     stop_robot();
@@ -2190,17 +2174,17 @@ static void run_navigation_step(void) {
 
   ensure_navigation_waypoint_initialized(x, z);
 
-  if (navigation_frame_decision == CONTROLLER_NAVIGATION_FRAME_ROUTE_COMPLETED) {
+  if (navigation_result.action == CONTROLLER_RUNTIME_ACTION_ROUTE_COMPLETED) {
     set_status("finished");
     reset_navigation_mode();
     controller_runtime.distance_to_target = 0.0;
     stop_robot();
     return;
   }
-  if (navigation_frame_output.route_decision == CONTROLLER_NAVIGATION_ROUTE_ADVANCED)
+  if (navigation_result.navigation.route_decision == CONTROLLER_NAVIGATION_ROUTE_ADVANCED)
     begin_navigation_for_waypoint(controller_runtime.current_waypoint_index, x, z);
-  Waypoint target = navigation_frame_output.route.route.target;
-  int is_final_waypoint = navigation_frame_output.route.route.is_final_waypoint;
+  Waypoint target = navigation_result.target;
+  int is_final_waypoint = navigation_result.navigation.route.route.is_final_waypoint;
 
   if (controller_mapping_survey_state_complete_scan(
           &controller_runtime.mapping_survey,
@@ -2211,25 +2195,25 @@ static void run_navigation_step(void) {
     set_status("mapping_survey_resumed_route");
   }
 
-  if (navigation_frame_decision == CONTROLLER_NAVIGATION_FRAME_SKIP_BLOCKED_TARGET ||
-      navigation_frame_decision == CONTROLLER_NAVIGATION_FRAME_SKIP_BLOCKED_SEGMENT) {
+  if (navigation_result.action == CONTROLLER_RUNTIME_ACTION_SKIP_BLOCKED_TARGET ||
+      navigation_result.action == CONTROLLER_RUNTIME_ACTION_SKIP_BLOCKED_SEGMENT) {
     ++controller_runtime.current_waypoint_index;
     begin_navigation_for_waypoint(controller_runtime.current_waypoint_index, x, z);
     clear_error();
     set_status(
-        navigation_frame_decision == CONTROLLER_NAVIGATION_FRAME_SKIP_BLOCKED_TARGET
+        navigation_result.action == CONTROLLER_RUNTIME_ACTION_SKIP_BLOCKED_TARGET
             ? "mapping_survey_skipped_blocked_waypoint"
             : "mapping_survey_skipped_blocked_segment");
     return;
   }
-  if (navigation_frame_decision == CONTROLLER_NAVIGATION_FRAME_BLOCKED_TARGET) {
+  if (navigation_result.action == CONTROLLER_RUNTIME_ACTION_BLOCKED_TARGET) {
     set_status("blocked_by_dynamic_zone");
     set_error("Current waypoint is blocked by a dynamic zone");
     controller_runtime.distance_to_target = hypot2(target.x - x, target.z - z);
     stop_robot();
     return;
   }
-  if (navigation_frame_decision == CONTROLLER_NAVIGATION_FRAME_BLOCKED_SEGMENT) {
+  if (navigation_result.action == CONTROLLER_RUNTIME_ACTION_BLOCKED_SEGMENT) {
     set_status("blocked_by_dynamic_zone");
     set_error("Dynamic zone blocks the current segment");
     controller_runtime.distance_to_target = hypot2(target.x - x, target.z - z);

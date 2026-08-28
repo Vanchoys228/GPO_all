@@ -19,5 +19,15 @@ int main(void) {
     return 2;
   }
   if (result.motion.command != CONTROLLER_RUNTIME_MOTION_STOP) return 3;
+
+  runtime.route.count = 1;
+  runtime.route.waypoints[0] = (Waypoint){1.0, 0.0, 0.0, 0};
+  const ControllerRuntimeNavigationConfig config = {0.05, 0.08, 0.32, 0.45, 1.2};
+  const ControllerRuntimeNavigationResult navigation =
+      controller_runtime_process_navigation_frame(&runtime, &frame, &config);
+  if (navigation.action != CONTROLLER_RUNTIME_ACTION_TRACK_ROUTE ||
+      navigation.target.x != 1.0 || navigation.target.z != 0.0) {
+    return 4;
+  }
   return 0;
 }
