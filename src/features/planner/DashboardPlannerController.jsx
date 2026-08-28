@@ -13,7 +13,6 @@ import PlannerCanvas from "../../components/dashboard/PlannerCanvas";
 import PlannerLeftSidebar from "../../components/dashboard/PlannerLeftSidebar";
 import PlannerRightSidebar from "../../components/dashboard/PlannerRightSidebar";
 import SidebarCollapseRail from "../../components/dashboard/SidebarCollapseRail";
-import { loadPlannerUiState, savePlannerUiState } from "../../lib/plannerUiState";
 import { useRouteSocket } from "./hooks/useRouteSocket";
 import { useSolverHealth } from "./hooks/useSolverHealth";
 import { useTelemetrySocket } from "./hooks/useTelemetrySocket";
@@ -30,6 +29,7 @@ import { usePlannerGraphImport } from "./hooks/usePlannerGraphImport";
 import { usePlannerMapExport } from "./hooks/usePlannerMapExport";
 import { usePlannerEnergySettings } from "./hooks/usePlannerEnergySettings";
 import { usePlannerRouteSelection } from "./hooks/usePlannerRouteSelection";
+import { usePlannerSidebarState } from "./hooks/usePlannerSidebarState";
 import {
   DEFAULT_SURFACE_PROFILE_KEY,
   createInitialSurfaceZones,
@@ -96,7 +96,7 @@ export default function Dashboard() {
     setHoveredPointIndex,
     setRouteEnergyStats,
   });
-  const [plannerUiState, setPlannerUiState] = useState(loadPlannerUiState);
+  const { plannerUiState, setSidebarCollapsed } = usePlannerSidebarState();
   const [limitZones, setLimitZones] = useState([INITIAL_ZONE]);
   const [activeLimitZoneId, setActiveLimitZoneId] = useState(INITIAL_ZONE.id);
   const [nextZoneNumber, setNextZoneNumber] = useState(2);
@@ -336,14 +336,6 @@ export default function Dashboard() {
     setStatus,
     telemetry,
   });
-
-  const setSidebarCollapsed = (key, collapsed) => {
-    setPlannerUiState((prev) => {
-      const next = { ...prev, [key]: collapsed };
-      savePlannerUiState(next);
-      return next;
-    });
-  };
 
   return (
     <div className="flex h-screen min-h-0 bg-stone-100 text-stone-900">
