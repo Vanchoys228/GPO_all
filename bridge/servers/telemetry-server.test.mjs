@@ -16,6 +16,30 @@ const waitForMessage = (socket) =>
     socket.once("error", reject);
   });
 
+const expectNoMessage = (socket, timeoutMs = 50) =>
+  new Promise((resolve, reject) => {
+    const cleanup = () => {
+      clearTimeout(timer);
+      socket.off("message", onMessage);
+      socket.off("error", onError);
+    };
+    const onMessage = (data) => {
+      cleanup();
+      reject(new Error(`Unexpected message: ${data.toString()}`));
+    };
+    const onError = (error) => {
+      cleanup();
+      reject(error);
+    };
+    const timer = setTimeout(() => {
+      cleanup();
+      resolve();
+    }, timeoutMs);
+
+    socket.once("message", onMessage);
+    socket.once("error", onError);
+  });
+
 describe("telemetry WebSocket server", () => {
   it("rejects invalid input and continues delivering the next valid telemetry event", async () => {
     const server = createTelemetryServer({
@@ -32,12 +56,16 @@ describe("telemetry WebSocket server", () => {
     try {
       await Promise.all([waitForOpen(sender), waitForOpen(receiver)]);
 
+      const noMalformedBroadcast = expectNoMessage(receiver);
       const malformedResponse = waitForMessage(sender);
       sender.send("{");
       expect(await malformedResponse).toMatchObject({
         type: "service.error",
         code: "invalid_json",
       });
+      await noMalformedBroadcast;
+      expect(server.getStatus()).toEqual({ clientCount: 2, senderCount: 0 });
+      expect(server.getLatest()).toBeNull();
 
       const unsupportedVersionResponse = waitForMessage(sender);
       sender.send(JSON.stringify({
@@ -59,6 +87,7 @@ describe("telemetry WebSocket server", () => {
         type: "telemetry.event",
         payload: { type: "telemetry", pose: { x: 1, y: 2, z: 0, yaw: 0 } },
       });
+      expect(server.getStatus()).toEqual({ clientCount: 2, senderCount: 1 });
     } finally {
       sender.terminate();
       receiver.terminate();

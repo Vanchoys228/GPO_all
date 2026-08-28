@@ -43,7 +43,6 @@ describe("Webots controller build configuration", () => {
       "maybe_write_map",
       "maybe_update_camera_perception",
       "maybe_write_camera_frame",
-      "maybe_write_camera_map",
       "run_navigation_step",
       "update_route_avoidance_metrics",
       "write_state_snapshot",
@@ -66,6 +65,28 @@ describe("Webots controller build configuration", () => {
     const testRunner = readFileSync(`${controllerDirectory}/run_controller_tests.bat`, "utf8");
 
     expect(testRunner).toContain("CONTROLLER_TEST_FILTER");
+  });
+
+  it("builds standalone tests with the Webots SDK and production adapters", () => {
+    const testRunner = readFileSync(`${controllerDirectory}/run_controller_tests.bat`, "utf8");
+
+    for (const source of [
+      "controller_webots_devices.c",
+      "controller_webots_pose.c",
+      "controller_webots_sensors.c",
+      "controller_webots_simulation.c",
+    ]) {
+      expect(testRunner, `${source} is missing from the standalone test runner`).toContain(source);
+    }
+
+    expect(testRunner).toContain("if not defined WEBOTS_HOME (");
+    expect(testRunner).toContain('"D:\\DS\\Programs\\Webots\\include\\controller\\c\\webots\\robot.h"');
+    expect(testRunner).toContain('"C:\\Program Files\\Webots\\include\\controller\\c\\webots\\robot.h"');
+    expect(testRunner).toContain('if not exist "%WEBOTS_HOME%\\include\\controller\\c\\webots\\robot.h" (');
+    expect(testRunner).toContain('set "WEBOTS_INCLUDE=%WEBOTS_HOME%\\include\\controller\\c"');
+    expect(testRunner).toContain('set "WEBOTS_LIBRARY=%WEBOTS_HOME%\\lib\\controller"');
+    expect(testRunner).toContain('/I"%WEBOTS_INCLUDE%"');
+    expect(testRunner).toContain('/LIBPATH:"%WEBOTS_LIBRARY%" Controller.lib');
   });
 
   it("keeps Supervisor pose access outside the orchestration file", () => {

@@ -67,10 +67,9 @@
 
 C_SOURCES = \
   youbot_web.c \
-  controller_avoidance.c \
-  controller_avoidance_command.c \\
-  controller_avoidance_detection.c \\
-  controller_avoidance_state.c \\
+  controller_avoidance_command.c \
+  controller_avoidance_detection.c \
+  controller_avoidance_state.c \
   controller_avoidance_start.c \
   controller_avoidance_lifecycle.c \
   controller_avoidance_recovery.c \
@@ -120,9 +119,11 @@ C_SOURCES = \
   controller_step.c \
   controller_survey_contour.c \
   controller_survey_coverage.c \
+  controller_survey_coverage_bounds.c \
   controller_survey_generator.c \
   controller_survey_grid.c \
   controller_survey_geometry.c \
+  controller_survey_intervals.c \
   controller_survey_integration.c \
   controller_survey_lifecycle.c \
   controller_survey_route_builder.c \

@@ -15,10 +15,7 @@ if not defined VCVARS (
 )
 
 call "%VCVARS%" >nul
-if errorlevel 1 (
-  popd
-  exit /b 1
-)
+if errorlevel 1 exit /b 1
 
 if not defined WEBOTS_HOME (
   if exist "D:\DS\Programs\Webots\include\controller\c\webots\robot.h" (
@@ -92,9 +89,11 @@ cl /nologo /std:c11 /O2 /I"%WEBOTS_HOME%\include\controller\c" ^
   "controller_runtime_command.c" ^
   "controller_survey_contour.c" ^
   "controller_survey_coverage.c" ^
+  "controller_survey_coverage_bounds.c" ^
   "controller_survey_generator.c" ^
   "controller_survey_grid.c" ^
   "controller_survey_geometry.c" ^
+  "controller_survey_intervals.c" ^
   "controller_survey_integration.c" ^
   "controller_survey_lifecycle.c" ^
   "controller_survey_route_builder.c" ^
@@ -121,4 +120,5 @@ if errorlevel 1 (
   exit /b 1
 )
 
-echo Built: "youbot_web.exe"
+echo Built: "%CONTROLLER_DIR%youbot_web.exe"
+popd
