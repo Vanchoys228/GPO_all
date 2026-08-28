@@ -68,6 +68,9 @@
 C_SOURCES = \
   youbot_web.c \
   controller_avoidance.c \
+  controller_avoidance_command.c \\
+  controller_avoidance_detection.c \\
+  controller_avoidance_state.c \\
   controller_avoidance_start.c \
   controller_avoidance_lifecycle.c \
   controller_avoidance_recovery.c \

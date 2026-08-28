@@ -194,4 +194,8 @@ void controller_avoidance_update_progress(
     const ControllerAvoidanceProgressInput *input,
     const ControllerAvoidanceProgressConfig *config);
 
+#include "controller_avoidance_command.h"
+#include "controller_avoidance_detection.h"
+#include "controller_avoidance_state.h"
+
 #endif

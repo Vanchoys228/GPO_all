@@ -10,8 +10,9 @@
 - Mecanum-кинематика и slew limits колёс: `controller_drive.c/.h`
 - Чистая математика лидара, контекста препятствий и уверенности трассы:
   `controller_lidar_math.c/.h`
-- Состояние, progress/stuck и detour-геометрия, классификация локального
-  уклонения, выбор стороны и расчёт команды скорости: `controller_avoidance.c/.h`
+- Локальное уклонение: lidar-классификация — `controller_avoidance_detection.c/.h`,
+  выбор стороны и команда движения — `controller_avoidance_command.c/.h`, состояние,
+  progress/stuck и detour-геометрия — `controller_avoidance_state.c/.h`.
 - Чистый анализ RGB-кадра, camera obstacle observation и геометрия точек карты:
   `controller_camera.c/.h`
 - Хранение и объединение camera obstacle/free-space ячеек:

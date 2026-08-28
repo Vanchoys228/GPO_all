@@ -1,4 +1,7 @@
 #include "controller_avoidance.h"
+#include "controller_avoidance_command.h"
+#include "controller_avoidance_detection.h"
+#include "controller_avoidance_state.h"
 
 #include <math.h>
 #include <stddef.h>
