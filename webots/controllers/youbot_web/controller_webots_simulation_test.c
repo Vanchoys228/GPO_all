@@ -1,45 +1,9 @@
 #include <assert.h>
-#include <stddef.h>
 #include <string.h>
 
 #include "controller_types.h"
-
-typedef struct {
-  char defs[4][64];
-  int count;
-} ControllerWebotsSimulationNodeRegistry;
-
-int controller_webots_simulation_registry_track(
-    ControllerWebotsSimulationNodeRegistry *registry,
-    int capacity,
-    const char *def_name);
-void controller_webots_simulation_registry_forget(
-    ControllerWebotsSimulationNodeRegistry *registry,
-    int index);
-
-int controller_webots_simulation_format_limit_wall(
-    char *buffer,
-    size_t buffer_size,
-    const char *def_name,
-    double ax,
-    double ay,
-    double bx,
-    double by,
-    double wall_thickness,
-    double wall_height);
-int controller_webots_simulation_format_surface_zone(
-    char *buffer,
-    size_t buffer_size,
-    const SurfaceZone *zone,
-    int zone_index);
-int controller_webots_simulation_format_runtime_obstacle(
-    char *buffer,
-    size_t buffer_size,
-    const RuntimeCommand *command,
-    double min_x,
-    double max_x,
-    double min_y,
-    double max_y);
+#include "controller_webots_simulation_format.h"
+#include "controller_webots_simulation_registry.h"
 
 int main(void) {
   ControllerWebotsSimulationNodeRegistry registry = {0};
