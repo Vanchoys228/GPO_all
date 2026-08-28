@@ -13,6 +13,7 @@ import {
   unwrapTelemetryEvent,
   unwrapRouteCommand,
   validateContractEnvelope,
+  validatePayload,
 } from "./index.js";
 
 describe("shared service contracts", () => {
@@ -105,5 +106,20 @@ describe("shared service contracts", () => {
     expect(result.requestId).toBe(request.requestId);
     expect(unwrapPlanningRequest(request)).toEqual({ points: [{ x: 0, y: 0 }] });
     expect(unwrapPlanningResult(result)).toEqual({ route: [{ x: 0, y: 0 }] });
+  });
+
+  it("rejects malformed typed payloads", () => {
+    expect(validatePayload("motion.command", { linearSpeed: 0.2 })).toEqual({
+      valid: false,
+      error: "invalid_motion_command",
+    });
+    expect(validateContractEnvelope({
+      contractVersion: CONTRACT_VERSION,
+      type: "service.error",
+      source: "gateway",
+      requestId: "error-1",
+      timestamp: "2026-01-01T00:00:00.000Z",
+      payload: {},
+    })).toEqual({ valid: false, error: "invalid_service_error" });
   });
 });

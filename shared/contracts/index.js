@@ -1,4 +1,7 @@
+import { validatePayload } from "./payloads.js";
+
 export const CONTRACT_VERSION = 1;
+export { CONTRACT_TYPES, validatePayload } from "./payloads.js";
 
 const hasText = (value) => typeof value === "string" && value.trim().length > 0;
 
@@ -14,7 +17,7 @@ export const validateContractEnvelope = (envelope) => {
       !("payload" in envelope)) {
     return { valid: false, error: "invalid_contract_envelope" };
   }
-  return { valid: true };
+  return validatePayload(envelope.type, envelope.payload);
 };
 
 export const createContractEnvelope = ({
