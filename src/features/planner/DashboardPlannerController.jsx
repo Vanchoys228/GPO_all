@@ -29,6 +29,7 @@ import { usePlannerRuntimeCommands } from "./hooks/usePlannerRuntimeCommands";
 import { usePlannerGraphImport } from "./hooks/usePlannerGraphImport";
 import { usePlannerMapExport } from "./hooks/usePlannerMapExport";
 import { usePlannerEnergySettings } from "./hooks/usePlannerEnergySettings";
+import { usePlannerRouteSelection } from "./hooks/usePlannerRouteSelection";
 import {
   DEFAULT_SURFACE_PROFILE_KEY,
   createInitialSurfaceZones,
@@ -215,17 +216,12 @@ export default function Dashboard() {
     zoneSyncPayloadText,
   });
 
-  const clearRouteState = ({ dropSolvedRoute = true } = {}) => {
-    setExpandedPoint(null);
-    setHoveredPointIndex(null);
-    if (dropSolvedRoute) {
-      setRouteSeed([]);
-      setOptimizedRoute([]);
-      setEnergyWarning("");
-      setRouteEnergyStats(createEmptyRouteEnergyStats());
-      resetRouteTiming();
-    }
-  };
+  const { clearRouteState, handleAlgorithmChange, handleRouteTaskChange, updateAlgorithmParam } =
+    usePlannerRouteSelection({
+      algorithmKey, resetRouteTiming, setAlgorithmKey, setAlgorithmParams, setEnergyWarning,
+      setExpandedPoint, setHoveredPointIndex, setOptimizedRoute, setRouteEnergyStats,
+      setRouteSeed, setRouteTaskKey, setStatus,
+    });
 
   const {
     clearZone,
@@ -264,21 +260,6 @@ export default function Dashboard() {
       surfaceZones,
     });
 
-  const updateAlgorithmParam = (field, rawValue) => {
-    const parsed = field.integer ? parseInt(rawValue, 10) : parseFloat(rawValue);
-    if (!Number.isFinite(parsed)) return;
-
-    setAlgorithmParams((prev) => ({
-      ...prev,
-      [algorithmKey]: {
-        ...getDefaultAlgorithmParams(algorithmKey),
-        ...prev[algorithmKey],
-        [field.key]: parsed,
-      },
-    }));
-    clearRouteState();
-  };
-
   const {
     addPointFromCanvas,
     clearPoints,
@@ -302,20 +283,6 @@ export default function Dashboard() {
     setStatus,
     setSurfaceZones,
   });
-
-  const handleRouteTaskChange = (nextTaskKey) => {
-    setRouteTaskKey(nextTaskKey);
-    clearRouteState();
-    setStatus("");
-    setEnergyWarning("");
-  };
-
-  const handleAlgorithmChange = (nextAlgorithmKey) => {
-    setAlgorithmKey(nextAlgorithmKey);
-    clearRouteState();
-    setStatus("");
-    setEnergyWarning("");
-  };
 
   const optimizeRoute = usePlannerRouteOptimization({
     algorithmKey,
