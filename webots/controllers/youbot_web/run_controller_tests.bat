@@ -37,6 +37,7 @@ set SOURCES=%SOURCES% controller_webots_camera_adapter.c
 set SOURCES=%SOURCES% controller_navigation_motion_service.c
 set SOURCES=%SOURCES% controller_survey_route_primitives.c
 set SOURCES=%SOURCES% controller_survey_contour_path.c
+set SOURCES=%SOURCES% controller_survey_contour_adapter.c
 set SOURCES=%SOURCES% controller_survey_coverage_intervals.c
 set SOURCES=%SOURCES% controller_camera_geometry.c
 set SOURCES=%SOURCES% controller_webots_zone_sync.c

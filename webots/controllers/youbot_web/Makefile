@@ -131,6 +131,7 @@ C_SOURCES = \
   controller_survey_geometry.c \
   controller_survey_offset_contour.c \
   controller_survey_contour_path.c \
+  controller_survey_contour_adapter.c \
   controller_survey_coverage_intervals.c \
   controller_survey_intervals.c \
   controller_survey_integration.c \

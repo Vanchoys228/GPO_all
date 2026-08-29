@@ -51,6 +51,7 @@
 #include "controller_runtime.h"
 #include "controller_runtime_command.h"
 #include "controller_survey_contour.h"
+#include "controller_survey_contour_adapter.h"
 #include "controller_survey_coverage.h"
 #include "controller_survey_default_route.h"
 #include "controller_survey_generator.h"
@@ -954,9 +955,6 @@ static void maybe_write_map(void) {
 }
 
 
-#define survey_expand_bounds(x, y, min_x, max_x, min_y, max_y) \
-  controller_survey_expand_bounds((x), (y), (min_x), (max_x), (min_y), (max_y))
-
 static ControllerMappingSurveySafetyContext mapping_survey_safety_context(void) {
   return (ControllerMappingSurveySafetyContext){
       &controller_runtime.limit_zones, persistent_map, persistent_map_count,
@@ -1074,38 +1072,12 @@ static int append_room_contour_phase(
     double robot_x,
     double robot_y) {
   if (room_zone_index < 0) return 0;
-  SurveyPoint contour[MAX_ZONE_POINTS];
-  int contour_count = 0;
-  if (!controller_survey_build_offset_contour(
-          &controller_runtime.limit_zones.zones[room_zone_index],
-          MAPPING_SURVEY_CONTOUR_OFFSET,
-          contour,
-          MAX_ZONE_POINTS,
-          &contour_count)) {
-    return 0;
-  }
-
   SurveyContourContext context = {route, route_count, room_zone_index};
-  return controller_survey_append_contour(
-      contour,
-      contour_count,
-      robot_x,
-      robot_y,
-      route_count,
-      survey_contour_point_is_safe,
-      survey_contour_add_point,
-      survey_contour_add_segment,
-      &context);
-}
-
-static int survey_grid_point_is_safe(
-    void *context,
-    double x,
-    double y,
-    int room_zone_index,
-    double clearance) {
-  (void)context;
-  return survey_point_safe(x, y, room_zone_index, clearance);
+  return controller_survey_contour_adapter_append(
+      &controller_runtime.limit_zones.zones[room_zone_index], route, route_count,
+      MAX_WAYPOINTS, 0.18, MAPPING_SURVEY_MAX_CONTOUR_STEP,
+      MAPPING_SURVEY_CONTOUR_OFFSET, robot_x, robot_y,
+      survey_contour_point_is_safe, &context);
 }
 
 static int survey_build_grid(
@@ -1132,15 +1104,8 @@ static int survey_build_grid(
       &adapter, grid, room_zone_index, (SurveyPoint){robot_x, robot_y}, clearance);
 }
 
-#define survey_grid_index_for_point(grid, x, y) \
-  controller_survey_grid_index_for_point((grid), (x), (y))
-#define survey_grid_point(grid, index) controller_survey_grid_point((grid), (index))
 #define survey_flood_component(grid, robot_x, robot_y) \
   controller_survey_flood_component((grid), (robot_x), (robot_y))
-#define survey_cell_is_boundary(grid, index) \
-  controller_survey_cell_is_boundary((grid), (index))
-#define survey_rdp_keep(points, first, last, keep) \
-  controller_survey_rdp_keep((points), (first), (last), MAPPING_SURVEY_RDP_EPS, (keep))
 
 #define append_grid_boundary_contour_phase(grid, route, route_count, robot_x, robot_y) \
   controller_survey_append_boundary_contour( \

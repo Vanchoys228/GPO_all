@@ -101,6 +101,7 @@ cl /nologo /std:c11 /O2 /I"%WEBOTS_HOME%\include\controller\c" ^
   "controller_survey_geometry.c" ^
   "controller_survey_offset_contour.c" ^
   "controller_survey_contour_path.c" ^
+  "controller_survey_contour_adapter.c" ^
   "controller_survey_coverage_intervals.c" ^
   "controller_survey_intervals.c" ^
   "controller_survey_integration.c" ^
