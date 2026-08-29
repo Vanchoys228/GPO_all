@@ -67,6 +67,7 @@
 #include "controller_webots_pose.h"
 #include "controller_webots_simulation.h"
 #include "controller_webots_motion_state.h"
+#include "controller_webots_navigation_state.h"
 #include "controller_webots_zone_sync.h"
 #include "controller_webots_sensors.h"
 #include "controller_zone_geometry.h"
@@ -304,8 +305,9 @@ static int camera_detection_count = 0;
 static int camera_obstacle_update_step = -1;
 static int camera_virtual_mode = 0;
 static int step_counter = 0;
-static char navigation_status[64] = "booting";
-static char navigation_error[160] = "";
+static ControllerWebotsNavigationState navigation_state;
+#define navigation_status navigation_state.status
+#define navigation_error navigation_state.error
 static ControllerWebotsMotionState motion_state = {
     {DEFAULT_CRUISE_SPEED_MPS, DEFAULT_PAYLOAD_KG, DEFAULT_BATTERY_RANGE_UNITS},
     {DEFAULT_CRUISE_SPEED_MPS, KINEMATIC_ANGULAR_SPEED, 1.0},
@@ -397,17 +399,15 @@ static void maybe_reload_motion_profile(void) {
 
 
 static void set_error(const char *message) {
-  strncpy(navigation_error, message, sizeof(navigation_error) - 1);
-  navigation_error[sizeof(navigation_error) - 1] = '\0';
+  controller_webots_navigation_state_set_error(&navigation_state, message);
 }
 
 static void clear_error(void) {
-  navigation_error[0] = '\0';
+  controller_webots_navigation_state_clear_error(&navigation_state);
 }
 
 static void set_status(const char *status) {
-  strncpy(navigation_status, status, sizeof(navigation_status) - 1);
-  navigation_status[sizeof(navigation_status) - 1] = '\0';
+  controller_webots_navigation_state_set_status(&navigation_state, status);
 }
 
 static void init_sensors(void) {
@@ -2562,6 +2562,7 @@ int main(int argc, char **argv) {
   controller_webots_adapter_init(
       &webots_adapter, &drive_config, drive_webots_base, &webots_devices);
   controller_webots_sensors_init(&webots_sensors);
+  controller_webots_navigation_state_init(&navigation_state);
   init_sensors();
   init_pose_tracking();
   webots_zone_sync = (ControllerWebotsZoneSyncContext){
