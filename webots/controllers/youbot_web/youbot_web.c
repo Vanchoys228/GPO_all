@@ -26,6 +26,7 @@
 #include "controller_mapping_scan_service.h"
 #include "controller_mapping_scan_transition.h"
 #include "controller_mapping_survey_escape.h"
+#include "controller_mapping_survey_escape_safety.h"
 #include "controller_mapping_survey_safety.h"
 #include "controller_mapping_survey_runtime_safety.h"
 #include "controller_mapping_store.h"
@@ -1011,16 +1012,15 @@ static int mapping_survey_segment_stays_in_room(double ax, double ay, double bx,
 
 static int mapping_survey_escape_candidate_allowed(void *context, const Waypoint *candidate) {
   const SurveyPoint *robot = context;
-  const double x = robot->x;
-  const double y = robot->y;
-  if (survey_known_obstacle_near(
-          candidate->x, candidate->z, MAPPING_SURVEY_ESCAPE_OBSTACLE_CLEARANCE)) return 0;
-  if (!mapping_survey_segment_stays_in_room(x, y, candidate->x, candidate->z)) return 0;
-  if (segment_blocked_by_zones(
-          x, y, candidate->x, candidate->z, MAPPING_SURVEY_ESCAPE_SEGMENT_CLEARANCE,
-          controller_runtime.mapping_survey.room_zone_index)) return 0;
-  return mapping_survey_segment_clear_of_known_obstacles(
-      x, y, candidate->x, candidate->z, MAPPING_SURVEY_ESCAPE_SEGMENT_CLEARANCE);
+  const ControllerMappingSurveyEscapeSafetyContext safety = {
+      mapping_survey_safety_context(),
+      controller_runtime.mapping_survey.room_zone_index,
+      MAPPING_SURVEY_GRID_CELL,
+      MAPPING_SURVEY_ESCAPE_OBSTACLE_CLEARANCE,
+      MAPPING_SURVEY_ESCAPE_SEGMENT_CLEARANCE,
+      LIDAR_NEAR_ROBOT_IGNORE_RADIUS,
+  };
+  return controller_mapping_survey_escape_candidate_allowed(&safety, *robot, candidate);
 }
 
 static int find_mapping_survey_escape_waypoint(double x, double y, int start_index) {
