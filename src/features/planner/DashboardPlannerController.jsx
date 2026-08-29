@@ -1,9 +1,8 @@
 ﻿import { useRef, useState } from "react";
-import { getAlgorithmFields, getDefaultAlgorithmParams } from "../../lib/routeAlgorithms";
-import { useMemo } from "react";
 import {
   DEFAULT_SURFACE_ZONES,
 } from "../../lib/zonePlanner";
+import { useMemo } from "react";
 import {
   buildPlannerModel,
   INITIAL_ZONE,
@@ -37,6 +36,7 @@ import {
 import { MAPPING_SURVEY_MODES } from "./model/runtimeCommands";
 import { buildPlannerSyncPayloads } from "./model/plannerSync";
 import { createDashboardAlgorithmParams } from "./model/dashboardAlgorithmParams";
+import { createDashboardPlannerViewModel } from "./model/dashboardPlannerViewModel";
 
 export default function Dashboard() {
   const canvasRef = useRef(null);
@@ -109,11 +109,13 @@ export default function Dashboard() {
     activeLimitZoneId,
     surfaceZones,
   });
-  const activeSurfaceZone =
-    surfaceZones.find((zone) => zone.id === activeSurfaceZoneId) || surfaceZones[0] || null;
-  const algorithmFields = getAlgorithmFields(algorithmKey);
-  const selectedAlgorithmParams =
-    algorithmParams[algorithmKey] || getDefaultAlgorithmParams(algorithmKey);
+  const { activeSurfaceZone, algorithmFields, selectedAlgorithmParams } =
+    createDashboardPlannerViewModel({
+      algorithmKey,
+      algorithmParams,
+      activeSurfaceZoneId,
+      surfaceZones,
+    });
   const {
     chargePointsRoutingText,
     previewPolygonRoutingText,
