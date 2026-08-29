@@ -27,6 +27,7 @@
 #include "controller_mapping_scan_transition.h"
 #include "controller_mapping_survey_escape.h"
 #include "controller_mapping_survey_escape_safety.h"
+#include "controller_mapping_survey_grid_adapter.h"
 #include "controller_mapping_survey_safety.h"
 #include "controller_mapping_survey_runtime_safety.h"
 #include "controller_mapping_store.h"
@@ -1114,7 +1115,9 @@ static int survey_build_grid(
     double robot_y,
     double clearance,
     const RuntimeCommand *command) {
-  const ControllerSurveyGridConfig config = {
+  ControllerMappingSurveyGridAdapter adapter = {
+      mapping_survey_safety_context(),
+      {
       SURVEY_X_MIN,
       SURVEY_X_MAX,
       SURVEY_Y_MIN,
@@ -1123,27 +1126,10 @@ static int survey_build_grid(
       MAPPING_SURVEY_MAX_EXTENT_Y,
       MAPPING_SURVEY_GRID_CELL,
       MAPPING_SURVEY_MAX_GRID_CELLS,
-  };
-  const ControllerSurveyGridInput input = {
-      &controller_runtime.limit_zones,
-      persistent_map,
-      persistent_map_count,
-      room_zone_index,
-      robot_x,
-      robot_y,
-      clearance,
-      command && command->has_field_bounds,
-      command ? command->field_min_x : 0.0,
-      command ? command->field_max_x : 0.0,
-      command ? command->field_min_y : 0.0,
-      command ? command->field_max_y : 0.0,
-  };
-  return controller_survey_grid_build(
-      grid,
-      &config,
-      &input,
-      survey_grid_point_is_safe,
-      NULL);
+      },
+      command};
+  return controller_mapping_survey_grid_adapter_build(
+      &adapter, grid, room_zone_index, (SurveyPoint){robot_x, robot_y}, clearance);
 }
 
 #define survey_grid_index_for_point(grid, x, y) \

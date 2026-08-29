@@ -98,6 +98,7 @@ C_SOURCES = \
   controller_mapping_survey_safety.c \
   controller_mapping_survey_runtime_safety.c \
   controller_mapping_survey_escape_safety.c \
+  controller_mapping_survey_grid_adapter.c \
   controller_mapping_store.c \
   controller_motion_profile.c \
   controller_navigation_context.c \
