@@ -348,7 +348,6 @@ static ControllerPaths controller_paths;
 static int load_route(RouteData *route);
 static void reset_navigation_mode(void);
 static void set_status(const char *status);
-static int is_finite_double(double value);
 static void read_pose(double *x, double *z, double *heading);
 static void merge_camera_observation_into_map(double relative_angle, double range, int confidence_boost);
 static void merge_camera_free_ray_into_map(double relative_angle, double range, int confidence_boost);
@@ -577,7 +576,7 @@ static int write_virtual_camera_frame() {
       const double beam_angle = -0.5 * lidar_fov + alpha * lidar_fov;
       const double range = ranges[i];
       const int valid = fabs(beam_angle) <= effective_fov * 0.5 &&
-                        is_finite_double(range) && range > LIDAR_MIN_TRACE_RANGE;
+                        controller_math_is_finite(range) && range > LIDAR_MIN_TRACE_RANGE;
       if (valid && (i % 10) == 0) {
         merge_camera_free_ray_into_map(
             beam_angle,
@@ -668,14 +667,6 @@ static void set_base_velocity(double vx, double vy, double omega) {
 }
 static void stop_robot() {
   controller_webots_adapter_stop(&webots_adapter);
-}
-
-static int is_finite_double(double value) {
-#ifdef _WIN32
-  return _finite(value) != 0;
-#else
-  return isfinite(value);
-#endif
 }
 
 static void init_pose_tracking() {
@@ -797,7 +788,7 @@ static void compute_lidar_obstacle_context(LidarObstacleContext *context,
 
   for (int i = 0; i < lidar_resolution; i += LIDAR_SAMPLE_STRIDE) {
     const double raw_range = (double)ranges[i];
-    const int range_is_finite = is_finite_double(raw_range);
+    const int range_is_finite = controller_math_is_finite(raw_range);
     const double sensed_range = range_is_finite
                                     ? clamp_value(raw_range, 0.0, effective_max_range)
                                     : effective_max_range;
@@ -957,7 +948,7 @@ static void append_camera_free_map_cell(double x, double y, int confidence_boost
 }
 
 static void merge_camera_free_ray_into_map(double relative_angle, double range, int confidence_boost) {
-  if (!is_finite_double(relative_angle) || !is_finite_double(range)) return;
+  if (!controller_math_is_finite(relative_angle) || !controller_math_is_finite(range)) return;
   if (range < CAMERA_FREE_RAY_MIN_RANGE_M) return;
 
   double robot_x = 0.0;
@@ -985,7 +976,7 @@ static void merge_camera_free_ray_into_map(double relative_angle, double range, 
 }
 
 static void merge_camera_observation_into_map(double relative_angle, double range, int confidence_boost) {
-  if (!is_finite_double(relative_angle) || !is_finite_double(range)) return;
+  if (!controller_math_is_finite(relative_angle) || !controller_math_is_finite(range)) return;
   if (range < LIDAR_MIN_TRACE_RANGE || range > LIDAR_MAX_TRACE_RANGE) return;
 
   double robot_x = 0.0;

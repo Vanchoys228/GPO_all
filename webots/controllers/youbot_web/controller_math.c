@@ -32,3 +32,11 @@ double blend_angle(double from_angle, double to_angle, double weight_to) {
   if (fabs(x) <= CONTROLLER_EPS && fabs(y) <= CONTROLLER_EPS) return to_angle;
   return atan2(y, x);
 }
+
+int controller_math_is_finite(double value) {
+#ifdef _WIN32
+  return _finite(value) != 0;
+#else
+  return isfinite(value);
+#endif
+}
