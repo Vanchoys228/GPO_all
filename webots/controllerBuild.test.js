@@ -120,31 +120,39 @@ describe("Webots controller build configuration", () => {
 
   it("delegates limit-zone rendering to the Simulation Adapter", () => {
     const source = readFileSync(`${controllerDirectory}/youbot_web.c`, "utf8");
+    const adapter = readFileSync(`${controllerDirectory}/controller_webots_zone_sync.c`, "utf8");
 
-    expect(source).toContain("controller_webots_simulation_sync_limit_zones(");
+    expect(source).toContain("controller_webots_zone_sync_limit_zones(");
+    expect(adapter).toContain("controller_webots_simulation_sync_limit_zones(");
     expect(source).not.toContain("name \"dynamic_zone_wall\"");
     expect(source).not.toContain("controller_webots_simulation_format_limit_wall(");
   });
 
   it("delegates limit-zone node synchronization to the Simulation Adapter", () => {
     const source = readFileSync(`${controllerDirectory}/youbot_web.c`, "utf8");
+    const adapter = readFileSync(`${controllerDirectory}/controller_webots_zone_sync.c`, "utf8");
 
-    expect(source).toContain("controller_webots_simulation_sync_limit_zones(");
+    expect(source).toContain("controller_webots_zone_sync_limit_zones(");
+    expect(adapter).toContain("controller_webots_simulation_sync_limit_zones(");
     expect(source).not.toContain('"WEB_LIMIT_%d_%d"');
   });
 
   it("delegates surface-zone presentation to the Simulation Adapter", () => {
     const source = readFileSync(`${controllerDirectory}/youbot_web.c`, "utf8");
+    const adapter = readFileSync(`${controllerDirectory}/controller_webots_zone_sync.c`, "utf8");
 
-    expect(source).toContain("controller_webots_simulation_sync_surface_zones(");
+    expect(source).toContain("controller_webots_zone_sync_surface_zones(");
+    expect(adapter).toContain("controller_webots_simulation_sync_surface_zones(");
     expect(source).not.toContain("geometry IndexedFaceSet {");
     expect(source).not.toContain("controller_webots_simulation_format_surface_zone(");
   });
 
   it("delegates runtime-obstacle presentation to the Simulation Adapter", () => {
     const source = readFileSync(`${controllerDirectory}/youbot_web.c`, "utf8");
+    const adapter = readFileSync(`${controllerDirectory}/controller_webots_zone_sync.c`, "utf8");
 
-    expect(source).toContain("controller_webots_simulation_spawn_runtime_obstacle(");
+    expect(source).toContain("controller_webots_zone_sync_spawn_obstacle(");
+    expect(adapter).toContain("controller_webots_simulation_spawn_runtime_obstacle(");
     expect(source).not.toContain("name \"runtime_obstacle\"");
     expect(source).not.toContain("controller_webots_simulation_format_runtime_obstacle(");
     expect(source).not.toContain("wb_supervisor_node_get_from_def");
@@ -152,8 +160,10 @@ describe("Webots controller build configuration", () => {
 
   it("delegates camera-to-LiDAR range matching to Camera Fusion", () => {
     const source = readFileSync(`${controllerDirectory}/youbot_web.c`, "utf8");
+    const adapter = readFileSync(`${controllerDirectory}/controller_webots_camera_range.c`, "utf8");
 
-    expect(source).toContain("controller_camera_fusion_estimate_range(");
+    expect(source).toContain("controller_webots_camera_range_from_lidar(");
+    expect(adapter).toContain("controller_camera_fusion_estimate_range(");
     expect(source).not.toContain("double best_angle_error = CAMERA_RANGE_SEARCH_WINDOW_RAD");
   });
 
@@ -173,8 +183,10 @@ describe("Webots controller build configuration", () => {
 
   it("delegates camera-observation decisions to Camera", () => {
     const source = readFileSync(`${controllerDirectory}/youbot_web.c`, "utf8");
+    const adapter = readFileSync(`${controllerDirectory}/controller_webots_camera_perception.c`, "utf8");
 
-    expect(source).toContain("controller_camera_observation_hint(");
+    expect(source).toContain("controller_webots_camera_perception_analyze(");
+    expect(adapter).toContain("controller_camera_observation_hint(");
     expect(source).not.toContain("camera_obstacle_center_offset * fmax(effective_fov, 0.8) * 0.5");
   });
 
