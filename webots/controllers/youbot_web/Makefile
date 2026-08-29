@@ -76,6 +76,7 @@ C_SOURCES = \
   controller_avoidance_service.c \
   controller_avoidance_presentation.c \
   controller_camera.c \
+  controller_camera_geometry.c \
   controller_camera_map.c \
   controller_camera_map_io.c \
   controller_camera_render.c \
@@ -95,6 +96,7 @@ C_SOURCES = \
   controller_mapping_scan_transition.c \
   controller_mapping_survey_escape.c \
   controller_mapping_survey_safety.c \
+  controller_mapping_survey_runtime_safety.c \
   controller_mapping_store.c \
   controller_motion_profile.c \
   controller_navigation_context.c \
@@ -122,11 +124,16 @@ C_SOURCES = \
   controller_survey_coverage_bounds.c \
   controller_survey_generator.c \
   controller_survey_grid.c \
+  controller_survey_grid_navigation.c \
   controller_survey_geometry.c \
+  controller_survey_offset_contour.c \
+  controller_survey_contour_path.c \
+  controller_survey_coverage_intervals.c \
   controller_survey_intervals.c \
   controller_survey_integration.c \
   controller_survey_lifecycle.c \
   controller_survey_route_builder.c \
+  controller_survey_route_primitives.c \
   controller_survey_state.c \
   controller_telemetry.c \
   controller_telemetry_service.c \
@@ -134,11 +141,17 @@ C_SOURCES = \
   controller_webots_devices.c \
   controller_webots_adapter.c \
   controller_webots_camera_adapter.c \
+  controller_webots_camera_map_sync.c \
+  controller_webots_camera_perception.c \
+  controller_webots_camera_range.c \
+  controller_webots_motion_state.c \
+  controller_webots_navigation_state.c \
   controller_webots_pose.c \
   controller_webots_sensors.c \
   controller_webots_simulation_format.c \
   controller_webots_simulation_registry.c \
   controller_webots_simulation.c \
+  controller_webots_zone_sync.c \
   controller_zone_geometry.c \
   controller_zones.c
 

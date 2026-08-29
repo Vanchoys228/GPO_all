@@ -45,6 +45,7 @@ set SOURCES=%SOURCES% controller_mapping_survey_runtime_safety.c
 set SOURCES=%SOURCES% controller_webots_navigation_state.c
 set SOURCES=%SOURCES% controller_webots_camera_range.c
 set SOURCES=%SOURCES% controller_webots_camera_perception.c
+set SOURCES=%SOURCES% controller_webots_camera_map_sync.c
 set SOURCES=%SOURCES% controller_mapping_survey_safety.c
 set SOURCES=%SOURCES% controller_navigation_adapter.c
 set SOURCES=%SOURCES% controller_navigation_state.c

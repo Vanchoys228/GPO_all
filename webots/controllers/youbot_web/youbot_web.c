@@ -70,6 +70,7 @@
 #include "controller_webots_navigation_state.h"
 #include "controller_webots_camera_range.h"
 #include "controller_webots_camera_perception.h"
+#include "controller_webots_camera_map_sync.h"
 #include "controller_webots_zone_sync.h"
 #include "controller_webots_sensors.h"
 #include "controller_zone_geometry.h"
@@ -317,9 +318,9 @@ static ControllerWebotsMotionState motion_state = {
 #define configured_cruise_speed_mps motion_state.profile.cruise_speed_mps
 #define configured_payload_kg motion_state.profile.payload_kg
 #define configured_battery_range_units motion_state.profile.battery_range_units
-#define runtime_linear_speed_limit motion_state.limits.linear_speed_mps
-#define runtime_angular_speed_limit motion_state.limits.angular_speed_rad_s
-#define runtime_battery_speed_factor motion_state.limits.battery_speed_factor
+#define active_linear_speed_limit motion_state.limits.linear_speed_mps
+#define active_angular_speed_limit motion_state.limits.angular_speed_rad_s
+#define active_battery_speed_factor motion_state.limits.battery_speed_factor
 static long long motion_profile_last_modified = -1;
 static long long runtime_command_last_modified = -1;
 static long long last_processed_runtime_command_id = -1;
@@ -354,13 +355,13 @@ static void read_pose(double *x, double *z, double *heading);
 static void merge_camera_observation_into_map(double relative_angle, double range, int confidence_boost);
 static void merge_camera_free_ray_into_map(double relative_angle, double range, int confidence_boost);
 static double scaled_linear_floor(double factor) {
-  const double floor_cap = fmin(TRACK_MIN_LINEAR_SPEED, runtime_linear_speed_limit);
-  return clamp_value(runtime_linear_speed_limit * factor, 0.01, floor_cap);
+  const double floor_cap = fmin(TRACK_MIN_LINEAR_SPEED, active_linear_speed_limit);
+  return clamp_value(active_linear_speed_limit * factor, 0.01, floor_cap);
 }
 
 static double scaled_linear_cap(double factor) {
   const double floor = scaled_linear_floor(0.24);
-  return clamp_value(runtime_linear_speed_limit * factor, floor, runtime_linear_speed_limit);
+  return clamp_value(active_linear_speed_limit * factor, floor, active_linear_speed_limit);
 }
 
 
@@ -378,8 +379,8 @@ static void maybe_reload_motion_profile(void) {
   const double previous_cruise_speed = configured_cruise_speed_mps;
   const double previous_payload_kg = configured_payload_kg;
   const double previous_battery_range = configured_battery_range_units;
-  const double previous_linear_limit = runtime_linear_speed_limit;
-  const double previous_angular_limit = runtime_angular_speed_limit;
+  const double previous_linear_limit = active_linear_speed_limit;
+  const double previous_angular_limit = active_angular_speed_limit;
   const long long mtime = get_file_mtime(MOTION_PROFILE_PATH);
   if (mtime < 0) return;
 
@@ -389,8 +390,8 @@ static void maybe_reload_motion_profile(void) {
         fabs(configured_cruise_speed_mps - previous_cruise_speed) > 1e-6 ||
         fabs(configured_payload_kg - previous_payload_kg) > 1e-6 ||
         fabs(configured_battery_range_units - previous_battery_range) > 1e-6 ||
-        fabs(runtime_linear_speed_limit - previous_linear_limit) > 1e-6 ||
-        fabs(runtime_angular_speed_limit - previous_angular_limit) > 1e-6;
+        fabs(active_linear_speed_limit - previous_linear_limit) > 1e-6 ||
+        fabs(active_angular_speed_limit - previous_angular_limit) > 1e-6;
     motion_profile_last_modified = mtime;
     if (profile_changed) {
       set_status("motion_profile_reloaded");
@@ -670,12 +671,12 @@ static void apply_kinematic_step(
 
   const double limited_linear = clamp_value(
       linear_speed,
-      -runtime_linear_speed_limit,
-      runtime_linear_speed_limit);
+      -active_linear_speed_limit,
+      active_linear_speed_limit);
   const double limited_angular = clamp_value(
       angular_speed,
-      -runtime_angular_speed_limit,
-      runtime_angular_speed_limit);
+      -active_angular_speed_limit,
+      active_angular_speed_limit);
   set_base_velocity(limited_linear, 0.0, limited_angular);
 }
 
@@ -880,92 +881,49 @@ static void merge_trace_into_map(double now_time) {
       &map_dirty);
 }
 
-static void append_camera_map_cell(double x, double y, int confidence_boost) {
-  if (controller_camera_map_append_obstacle(
-          camera_map,
-          &camera_map_count,
-          MAX_CAMERA_MAP_POINTS,
-          camera_free_map,
-          &camera_free_map_count,
-          CAMERA_MAP_CELL_SIZE,
-          EPS,
-          x,
-          y,
-          confidence_boost)) {
-    camera_map_dirty = 1;
-  }
-}
-
-static void append_camera_free_map_cell(double x, double y, int confidence_boost) {
-  if (controller_camera_map_append_free(
-          camera_map,
-          camera_map_count,
-          camera_free_map,
-          &camera_free_map_count,
-          MAX_CAMERA_FREE_MAP_POINTS,
-          CAMERA_MAP_CELL_SIZE,
-          EPS,
-          x,
-          y,
-          confidence_boost)) {
-    camera_map_dirty = 1;
-  }
-}
-
-static void merge_camera_free_ray_into_map(double relative_angle, double range, int confidence_boost) {
-  if (!controller_math_is_finite(relative_angle) || !controller_math_is_finite(range)) return;
-  if (range < CAMERA_FREE_RAY_MIN_RANGE_M) return;
-
+static ControllerWebotsCameraMapSyncContext camera_map_sync_context(void) {
   double robot_x = 0.0;
   double robot_y = 0.0;
   double heading = 0.0;
   read_pose(&robot_x, &robot_y, &heading);
 
-  const ControllerCameraPose pose = {robot_x, robot_y, heading};
-  const ControllerCameraMapGeometryConfig geometry_config = {
-      LIDAR_LOCAL_X,
-      LIDAR_LOCAL_Y,
-      LIDAR_MIN_TRACE_RANGE,
-      LIDAR_MAX_TRACE_RANGE,
-      CAMERA_FREE_RAY_MIN_RANGE_M,
-      CAMERA_FREE_RAY_MARGIN_M,
-      CAMERA_FREE_RAY_STEP_M,
-      LIDAR_NEAR_ROBOT_IGNORE_RADIUS,
+  return (ControllerWebotsCameraMapSyncContext){
+      camera_map,
+      &camera_map_count,
+      MAX_CAMERA_MAP_POINTS,
+      camera_free_map,
+      &camera_free_map_count,
+      MAX_CAMERA_FREE_MAP_POINTS,
+      CAMERA_MAP_CELL_SIZE,
+      EPS,
+      {
+          LIDAR_LOCAL_X,
+          LIDAR_LOCAL_Y,
+          LIDAR_MIN_TRACE_RANGE,
+          LIDAR_MAX_TRACE_RANGE,
+          CAMERA_FREE_RAY_MIN_RANGE_M,
+          CAMERA_FREE_RAY_MARGIN_M,
+          CAMERA_FREE_RAY_STEP_M,
+          LIDAR_NEAR_ROBOT_IGNORE_RADIUS,
+      },
+      {robot_x, robot_y, heading},
   };
-  ControllerCameraMapPoint points[32];
-  const int point_count = controller_camera_free_ray_points(
-      &geometry_config, &pose, relative_angle, range, points, 32);
-  for (int i = 0; i < point_count; ++i) {
-    append_camera_free_map_cell(points[i].x, points[i].y, confidence_boost);
+}
+
+static void merge_camera_free_ray_into_map(double relative_angle, double range, int confidence_boost) {
+  ControllerWebotsCameraMapSyncContext context = camera_map_sync_context();
+  if (controller_webots_camera_map_sync_free_ray(
+          &context, relative_angle, range, confidence_boost)) {
+    camera_map_dirty = 1;
   }
 }
 
 static void merge_camera_observation_into_map(double relative_angle, double range, int confidence_boost) {
-  if (!controller_math_is_finite(relative_angle) || !controller_math_is_finite(range)) return;
-  if (range < LIDAR_MIN_TRACE_RANGE || range > LIDAR_MAX_TRACE_RANGE) return;
-
-  double robot_x = 0.0;
-  double robot_y = 0.0;
-  double heading = 0.0;
-  read_pose(&robot_x, &robot_y, &heading);
-
-  const ControllerCameraPose pose = {robot_x, robot_y, heading};
-  const ControllerCameraMapGeometryConfig geometry_config = {
-      LIDAR_LOCAL_X,
-      LIDAR_LOCAL_Y,
-      LIDAR_MIN_TRACE_RANGE,
-      LIDAR_MAX_TRACE_RANGE,
-      CAMERA_FREE_RAY_MIN_RANGE_M,
-      CAMERA_FREE_RAY_MARGIN_M,
-      CAMERA_FREE_RAY_STEP_M,
-      LIDAR_NEAR_ROBOT_IGNORE_RADIUS,
-  };
-  ControllerCameraMapPoint point;
-  if (!controller_camera_obstacle_point(
-          &geometry_config, &pose, relative_angle, range, &point)) {
-    return;
+  ControllerWebotsCameraMapSyncContext context = camera_map_sync_context();
+  if (controller_webots_camera_map_sync_observation(
+          &context, relative_angle, range, confidence_boost)) {
+    camera_map_dirty = 1;
   }
-  append_camera_map_cell(point.x, point.y, confidence_boost);
 }
 
 static ControllerMappingStorePaths mapping_store_paths(void) {
@@ -2180,8 +2138,8 @@ static void run_navigation_step(void) {
         .detection = &avoidance_detection,
         .detour_heading_error = detour_heading_error,
         .heading_error_to_target = heading_error_to_target,
-        .runtime_linear_speed_limit = runtime_linear_speed_limit,
-        .runtime_angular_speed_limit = runtime_angular_speed_limit,
+        .runtime_linear_speed_limit = active_linear_speed_limit,
+        .runtime_angular_speed_limit = active_angular_speed_limit,
         .pass_min_speed = scaled_linear_floor(0.35),
         .pass_max_speed = scaled_linear_cap(LIDAR_PASS_MAX_SPEED_FACTOR),
         .avoid_min_speed = scaled_linear_floor(0.30),
@@ -2309,8 +2267,8 @@ static void run_navigation_step(void) {
       .expected_wall_speed_scale = 1.0,
       .expected_zone_wall_slowdown = expected_zone_wall_slowdown,
       .expected_zone_wall_ahead = expected_zone_wall_ahead,
-      .runtime_linear_speed_limit = runtime_linear_speed_limit,
-      .runtime_angular_speed_limit = runtime_angular_speed_limit,
+      .runtime_linear_speed_limit = active_linear_speed_limit,
+      .runtime_angular_speed_limit = active_angular_speed_limit,
   };
   const ControllerNavigationLidarConfig navigation_lidar_config = {
       .track_caution_range = LIDAR_TRACK_CAUTION_RANGE,
@@ -2412,9 +2370,9 @@ static void write_state_snapshot(void) {
       configured_cruise_speed_mps,
       configured_payload_kg,
       configured_battery_range_units,
-      runtime_battery_speed_factor,
-      runtime_linear_speed_limit,
-      runtime_angular_speed_limit,
+      active_battery_speed_factor,
+      active_linear_speed_limit,
+      active_angular_speed_limit,
   };
   const ControllerTelemetryLidar lidar = {
       lidar_available,
