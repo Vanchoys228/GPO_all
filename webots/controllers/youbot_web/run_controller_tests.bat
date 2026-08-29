@@ -58,6 +58,7 @@ set SOURCES=%SOURCES% controller_avoidance_detection.c
 set SOURCES=%SOURCES% controller_avoidance_state.c
 set SOURCES=%SOURCES% controller_survey_intervals.c
 set SOURCES=%SOURCES% controller_survey_coverage_bounds.c
+set SOURCES=%SOURCES% controller_survey_default_route.c
 set /a PASSED=0
 set "TEST_PATTERN=controller_*_test.c"
 if defined CONTROLLER_TEST_FILTER set "TEST_PATTERN=%CONTROLLER_TEST_FILTER%"

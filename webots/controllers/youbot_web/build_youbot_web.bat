@@ -92,6 +92,7 @@ cl /nologo /std:c11 /O2 /I"%WEBOTS_HOME%\include\controller\c" ^
   "controller_survey_contour.c" ^
   "controller_survey_coverage.c" ^
   "controller_survey_coverage_bounds.c" ^
+  "controller_survey_default_route.c" ^
   "controller_survey_generator.c" ^
   "controller_survey_grid.c" ^
   "controller_survey_grid_navigation.c" ^

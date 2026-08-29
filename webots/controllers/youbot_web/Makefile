@@ -122,6 +122,7 @@ C_SOURCES = \
   controller_survey_contour.c \
   controller_survey_coverage.c \
   controller_survey_coverage_bounds.c \
+  controller_survey_default_route.c \
   controller_survey_generator.c \
   controller_survey_grid.c \
   controller_survey_grid_navigation.c \

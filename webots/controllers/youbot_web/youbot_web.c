@@ -50,6 +50,7 @@
 #include "controller_runtime_command.h"
 #include "controller_survey_contour.h"
 #include "controller_survey_coverage.h"
+#include "controller_survey_default_route.h"
 #include "controller_survey_generator.h"
 #include "controller_survey_grid.h"
 #include "controller_survey_geometry.h"
@@ -939,23 +940,9 @@ static void clear_persistent_map() {
 }
 
 static void generate_survey_route(const char *path) {
-  FILE *file = fopen(path, "w");
-  if (!file) return;
-
-  fprintf(file, "%.3f,%.3f\n", SURVEY_X_MIN, SURVEY_Y_MIN);
-  int forward = 1;
-  for (double y = SURVEY_Y_MIN; y <= SURVEY_Y_MAX + 0.01; y += SURVEY_STRIP) {
-    if (forward) {
-      fprintf(file, "%.3f,%.3f\n", SURVEY_X_MIN, y);
-      fprintf(file, "%.3f,%.3f\n", SURVEY_X_MAX, y);
-    } else {
-      fprintf(file, "%.3f,%.3f\n", SURVEY_X_MAX, y);
-      fprintf(file, "%.3f,%.3f\n", SURVEY_X_MIN, y);
-    }
-    forward = !forward;
-  }
-
-  fclose(file);
+  const ControllerSurveyDefaultRouteConfig config = {
+      SURVEY_X_MIN, SURVEY_X_MAX, SURVEY_Y_MIN, SURVEY_Y_MAX, SURVEY_STRIP};
+  controller_survey_default_route_write(path, &config);
 }
 
 static void maybe_write_map(void) {
