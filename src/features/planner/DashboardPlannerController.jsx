@@ -7,7 +7,6 @@ import {
   buildPlannerModel,
   INITIAL_ZONE,
 } from "../../lib/plannerModel";
-import { analyzeRouteInfluence } from "../../lib/energyModel";
 import DashboardPlannerWorkspace from "./DashboardPlannerWorkspace";
 import { useRouteSocket } from "./hooks/useRouteSocket";
 import { useSolverHealth } from "./hooks/useSolverHealth";
@@ -20,6 +19,7 @@ import { usePlannerSidebarState } from "./hooks/usePlannerSidebarState";
 import { useDashboardPlannerRuntimeActions } from "./hooks/useDashboardPlannerRuntimeActions";
 import { useDashboardPlannerEditors } from "./hooks/useDashboardPlannerEditors";
 import { useDashboardPlannerRouteLifecycle } from "./hooks/useDashboardPlannerRouteLifecycle";
+import { useDashboardPlannerPresentation } from "./hooks/useDashboardPlannerPresentation";
 import {
   DEFAULT_SURFACE_PROFILE_KEY,
   createInitialSurfaceZones,
@@ -131,39 +131,10 @@ export default function Dashboard() {
     }),
     [cruiseSpeedMps, payloadKg]
   );
-  const telemetryForSidebar = useMemo(
-    () => ({
-      ...telemetry,
-      navigation: {
-        ...telemetry.navigation,
-        avoidanceTimeSec: routeAvoidanceTimeSec,
-        offRouteActive: routeOffRouteActive,
-      },
-    }),
-    [routeAvoidanceTimeSec, routeOffRouteActive, telemetry]
-  );
-  const routeInfluenceRows = useMemo(
-    () =>
-      analyzeRouteInfluence(optimizedRoute, {
-        surfaceZones: plannerModel.surfaceZones,
-        speedMps: cruiseSpeedMps,
-        payloadKg,
-        stationStopCount: routeEnergyStats.stationStopCount,
-        plannedTimeSec: routeEnergyStats.estimatedTimeSec,
-        actualTimeSec: routeTimingDisplay.actualTimeSec,
-        avoidanceTimeSec: routeAvoidanceTimeSec,
-      }),
-    [
-      cruiseSpeedMps,
-      optimizedRoute,
-      payloadKg,
-      plannerModel.surfaceZones,
-      routeAvoidanceTimeSec,
-      routeEnergyStats.estimatedTimeSec,
-      routeEnergyStats.stationStopCount,
-      routeTimingDisplay.actualTimeSec,
-    ]
-  );
+  const { routeInfluenceRows, telemetryForSidebar } = useDashboardPlannerPresentation({
+    optimizedRoute, plannerModel, payloadKg, cruiseSpeedMps, routeEnergyStats,
+    routeTimingDisplay, routeAvoidanceTimeSec, routeOffRouteActive, telemetry,
+  });
 
   const { handleImportFile, optimizeRoute, sendRoute } = useDashboardPlannerRouteLifecycle({
     resetRouteTiming,
