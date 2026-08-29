@@ -65,6 +65,7 @@
 #include "controller_webots_camera_adapter.h"
 #include "controller_webots_pose.h"
 #include "controller_webots_simulation.h"
+#include "controller_webots_zone_sync.h"
 #include "controller_webots_sensors.h"
 #include "controller_zone_geometry.h"
 #include "controller_zones.h"
@@ -262,6 +263,7 @@ static ControllerRouteZoneService route_zone_service;
 static ControllerWebotsSimulationNodeRegistry zone_node_registry = {0};
 static ControllerWebotsSimulationNodeRegistry surface_zone_registry = {0};
 static ControllerWebotsSimulationNodeRegistry runtime_obstacle_registry = {0};
+static ControllerWebotsZoneSyncContext webots_zone_sync = {0};
 static ObstacleTracePoint obstacle_trace[MAX_OBSTACLE_TRACE_POINTS];
 static int obstacle_trace_count = 0;
 static ControllerMappingStore mapping_store;
@@ -1724,48 +1726,6 @@ static int generate_mapping_survey_route(
   return result == CONTROLLER_SURVEY_GENERATE_OK;
 }
 
-static void remove_zone_nodes() {
-  controller_webots_simulation_registry_remove_all(&zone_node_registry);
-}
-
-static void sync_zone_nodes() {
-  controller_webots_simulation_sync_limit_zones(
-      webots_pose.root_children_field,
-      &zone_node_registry,
-      &controller_runtime.limit_zones,
-      MAX_ZONE_NODES,
-      WALL_THICKNESS,
-      WALL_HEIGHT);
-}
-
-static void remove_surface_zone_nodes() {
-  controller_webots_simulation_registry_remove_all(&surface_zone_registry);
-}
-
-static void sync_surface_zone_nodes() {
-  controller_webots_simulation_sync_surface_zones(
-      webots_pose.root_children_field,
-      &surface_zone_registry,
-      &controller_runtime.surface_zones,
-      MAX_SURFACE_ZONE_NODES);
-}
-
-static void remove_runtime_obstacle_nodes() {
-  controller_webots_simulation_registry_remove_all(&runtime_obstacle_registry);
-}
-
-static void spawn_runtime_obstacle_from_command(const RuntimeCommand *command) {
-  controller_webots_simulation_spawn_runtime_obstacle(
-      webots_pose.root_children_field,
-      &runtime_obstacle_registry,
-      command,
-      MAX_RUNTIME_OBSTACLE_NODES,
-      -21.5,
-      21.5,
-      -16.5,
-      16.5);
-}
-
 static int load_runtime_command(RuntimeCommand *command) {
   const ControllerRuntimeCommandLimits limits = {
       SURVEY_X_MIN,
@@ -1835,7 +1795,7 @@ static void maybe_reload_runtime_command(void) {
     return;
   }
 
-  spawn_runtime_obstacle_from_command(&command);
+  controller_webots_zone_sync_spawn_obstacle(&webots_zone_sync, &command);
   clear_error();
   set_status("runtime_obstacle_spawned");
 }
@@ -1857,7 +1817,8 @@ static void maybe_reload_zones(void) {
   }
   if (result.limit_zones_changed) {
     controller_runtime.limit_zones = result.limit_zones;
-    sync_zone_nodes();
+    controller_webots_zone_sync_limit_zones(
+        &webots_zone_sync, &controller_runtime.limit_zones);
     set_status(controller_runtime.limit_zones.count > 0 ? "zones_synced" : "zones_cleared");
   }
 }
@@ -1879,7 +1840,8 @@ static void maybe_reload_surface_zones(void) {
   }
   if (result.surface_zones_changed) {
     controller_runtime.surface_zones = result.surface_zones;
-    sync_surface_zone_nodes();
+    controller_webots_zone_sync_surface_zones(
+        &webots_zone_sync, &controller_runtime.surface_zones);
     set_status(controller_runtime.surface_zones.count > 0 ? "surfaces_synced" : "surfaces_cleared");
   }
 }
@@ -2650,6 +2612,21 @@ int main(int argc, char **argv) {
   controller_webots_sensors_init(&webots_sensors);
   init_sensors();
   init_pose_tracking();
+  webots_zone_sync = (ControllerWebotsZoneSyncContext){
+      webots_pose.root_children_field,
+      &zone_node_registry,
+      &surface_zone_registry,
+      &runtime_obstacle_registry,
+      MAX_ZONE_NODES,
+      MAX_SURFACE_ZONE_NODES,
+      MAX_RUNTIME_OBSTACLE_NODES,
+      WALL_THICKNESS,
+      WALL_HEIGHT,
+      -21.5,
+      21.5,
+      -16.5,
+      16.5,
+  };
   reset_robot_pose();
   controller_runtime_init(&controller_runtime);
   controller_mapping_store_init(&mapping_store);
@@ -2699,9 +2676,7 @@ int main(int argc, char **argv) {
 
   maybe_write_map();
   maybe_write_map();
-  remove_runtime_obstacle_nodes();
-  remove_surface_zone_nodes();
-  remove_zone_nodes();
+  controller_webots_zone_sync_remove_all(&webots_zone_sync);
   wb_robot_cleanup();
   return 0;
 }
