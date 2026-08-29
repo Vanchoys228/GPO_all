@@ -65,6 +65,7 @@
 #include "controller_webots_camera_adapter.h"
 #include "controller_webots_pose.h"
 #include "controller_webots_simulation.h"
+#include "controller_webots_motion_state.h"
 #include "controller_webots_zone_sync.h"
 #include "controller_webots_sensors.h"
 #include "controller_zone_geometry.h"
@@ -304,12 +305,16 @@ static int camera_virtual_mode = 0;
 static int step_counter = 0;
 static char navigation_status[64] = "booting";
 static char navigation_error[160] = "";
-static double configured_cruise_speed_mps = DEFAULT_CRUISE_SPEED_MPS;
-static double configured_payload_kg = DEFAULT_PAYLOAD_KG;
-static double configured_battery_range_units = DEFAULT_BATTERY_RANGE_UNITS;
-static double runtime_linear_speed_limit = DEFAULT_CRUISE_SPEED_MPS;
-static double runtime_angular_speed_limit = KINEMATIC_ANGULAR_SPEED;
-static double runtime_battery_speed_factor = 1.0;
+static ControllerWebotsMotionState motion_state = {
+    {DEFAULT_CRUISE_SPEED_MPS, DEFAULT_PAYLOAD_KG, DEFAULT_BATTERY_RANGE_UNITS},
+    {DEFAULT_CRUISE_SPEED_MPS, KINEMATIC_ANGULAR_SPEED, 1.0},
+};
+#define configured_cruise_speed_mps motion_state.profile.cruise_speed_mps
+#define configured_payload_kg motion_state.profile.payload_kg
+#define configured_battery_range_units motion_state.profile.battery_range_units
+#define runtime_linear_speed_limit motion_state.limits.linear_speed_mps
+#define runtime_angular_speed_limit motion_state.limits.angular_speed_rad_s
+#define runtime_battery_speed_factor motion_state.limits.battery_speed_factor
 static long long motion_profile_last_modified = -1;
 static long long runtime_command_last_modified = -1;
 static long long last_processed_runtime_command_id = -1;
@@ -356,35 +361,11 @@ static double scaled_linear_cap(double factor) {
 
 
 static void apply_motion_profile() {
-  ControllerMotionProfile profile = {
-      configured_cruise_speed_mps,
-      configured_payload_kg,
-      configured_battery_range_units,
-  };
-  ControllerMotionLimits limits = {0};
-  controller_motion_profile_apply(&profile, &limits);
-
-  configured_cruise_speed_mps = profile.cruise_speed_mps;
-  configured_payload_kg = profile.payload_kg;
-  configured_battery_range_units = profile.battery_range_units;
-  runtime_linear_speed_limit = limits.linear_speed_mps;
-  runtime_angular_speed_limit = limits.angular_speed_rad_s;
-  runtime_battery_speed_factor = limits.battery_speed_factor;
+  controller_webots_motion_state_apply(&motion_state);
 }
 
 static int load_motion_profile() {
-  ControllerMotionProfile profile = {
-      configured_cruise_speed_mps,
-      configured_payload_kg,
-      configured_battery_range_units,
-  };
-  controller_motion_profile_load_file(MOTION_PROFILE_PATH, &profile);
-
-  configured_cruise_speed_mps = profile.cruise_speed_mps;
-  configured_payload_kg = profile.payload_kg;
-  configured_battery_range_units = profile.battery_range_units;
-  apply_motion_profile();
-  return 1;
+  return controller_webots_motion_state_load(&motion_state, MOTION_PROFILE_PATH);
 }
 
 static void maybe_reload_motion_profile(void) {
