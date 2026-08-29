@@ -13,6 +13,7 @@
 #include "controller_camera_map_io.h"
 #include "controller_camera_render.h"
 #include "controller_camera_virtual.h"
+#include "controller_control_config.h"
 #include "controller_io.h"
 #include "controller_drive.h"
 #include "controller_lidar_math.h"
@@ -332,6 +333,7 @@ static double route_avoidance_time_sec = 0.0;
 static int route_avoidance_steps = 0;
 
 static ControllerPaths controller_paths;
+static ControllerControlConfig control_config;
 #define ROUTE_PATH controller_paths.route
 #define ZONE_PATH controller_paths.limit_zones
 #define SURFACE_ZONE_PATH controller_paths.surface_zones
@@ -1790,15 +1792,9 @@ static void run_navigation_step(void) {
 
   read_pose(&x, &z, &heading);
   const ControllerRuntimeSensorFrame sensor_frame = {x, z, heading, 0};
-  const ControllerRuntimeNavigationConfig navigation_config = {
-      POSITION_TOLERANCE,
-      HEADING_TOLERANCE_RAD,
-      ZONE_CLEARANCE,
-      POSE_RELOCATION_DISTANCE,
-      POSE_RELOCATION_HEADING_RAD};
   const ControllerRuntimeNavigationResult navigation_result =
       controller_runtime_process_navigation_frame(
-          &controller_runtime, &sensor_frame, &navigation_config);
+          &controller_runtime, &sensor_frame, &control_config.navigation.runtime);
 
   ControllerNavigationAdapterEffect terminal_effect;
   if (controller_navigation_adapter_terminal_effect(&navigation_result, &terminal_effect) &&
@@ -1888,32 +1884,6 @@ static void run_navigation_step(void) {
   compute_lidar_obstacle_context(
       &lidar_context, -heading_error_to_target, controller_runtime.avoidance.turn_sign);
   const int avoidance_was_active = controller_runtime.avoidance.active;
-  const ControllerNavigationPerceptionConfig perception_config = {
-      .camera_range_epsilon = EPS,
-      .camera_range_fallback = CAMERA_RANGE_FALLBACK_M,
-      .camera_min_fov = 0.8,
-      .camera_front_fov_factor = 0.46,
-      .camera_range_margin = 0.18,
-      .camera_min_score = CAMERA_OBSTACLE_MIN_SCORE,
-      .camera_min_detection_count = 3,
-      .camera_offset_deadband = CAMERA_OBSTACLE_OFFSET_DEADBAND,
-      .avoidance = {
-          .max_trace_range = LIDAR_MAX_TRACE_RANGE,
-          .track_caution_range = LIDAR_TRACK_CAUTION_RANGE,
-          .expected_wall_soft_stop_range = EXPECTED_WALL_SOFT_STOP_RANGE,
-          .expected_wall_slowdown_range = EXPECTED_WALL_SLOWDOWN_RANGE,
-          .pass_center_clear_range = LIDAR_PASS_CENTER_CLEAR_RANGE,
-          .pass_gap_max_angle_rad = LIDAR_PASS_GAP_MAX_ANGLE_RAD,
-          .pass_side_danger_range = LIDAR_PASS_SIDE_DANGER_RANGE,
-          .avoid_side_trigger_range = LIDAR_AVOID_SIDE_TRIGGER_RANGE,
-          .track_hard_priority_range = LIDAR_TRACK_HARD_PRIORITY_RANGE,
-          .reflex_side_release_range = LIDAR_REFLEX_SIDE_RELEASE_RANGE,
-          .avoid_recover_range = LIDAR_AVOID_RECOVER_RANGE,
-          .avoid_trigger_range = LIDAR_AVOID_TRIGGER_RANGE,
-          .avoid_stop_range = LIDAR_AVOID_STOP_RANGE,
-          .track_slow_range = LIDAR_TRACK_SLOW_RANGE,
-      },
-  };
   const ControllerNavigationPerceptionInput perception_input = {
       .lidar_context = &lidar_context,
       .lidar_available = lidar_available,
@@ -1927,7 +1897,7 @@ static void run_navigation_step(void) {
   };
   ControllerNavigationPerceptionOutput perception_output;
   controller_navigation_perception_prepare(
-      &perception_input, &perception_config, &perception_output);
+      &perception_input, &control_config.perception.navigation, &perception_output);
   const int camera_visual_front_obstacle =
       perception_output.camera_visual_front_obstacle;
   const double camera_preferred_turn_sign =
@@ -1962,16 +1932,6 @@ static void run_navigation_step(void) {
     return;
   }
 
-  const ControllerAvoidanceStartConfig avoidance_start_config = {
-      .switch_margin = LIDAR_REFLEX_SWITCH_MARGIN,
-      .initial_hold_steps = LIDAR_AVOID_MIN_CONTOUR_STEPS,
-      .priority_hold_steps = LIDAR_PRIORITY_HOLD_STEPS,
-      .detour = {
-          .forward_distance = LIDAR_DETOUR_FORWARD_M,
-          .max_distance = LIDAR_DETOUR_MAX_RANGE_M,
-          .side_distance = LIDAR_DETOUR_SIDE_M,
-      },
-  };
   const ControllerAvoidanceStartInput avoidance_start_input = {
       .lidar_context = &lidar_context,
       .detection = &avoidance_detection,
@@ -1987,7 +1947,7 @@ static void run_navigation_step(void) {
   if (controller_avoidance_start(
           &controller_runtime.avoidance,
           &avoidance_start_input,
-          &avoidance_start_config,
+          &control_config.avoidance.start,
           &avoidance_start_output)) {
     controller_runtime.lidar_priority_turn_sign = avoidance_start_output.priority_turn_sign;
     controller_runtime.lidar_priority_hold_steps = avoidance_start_output.priority_hold_steps;
@@ -2002,13 +1962,6 @@ static void run_navigation_step(void) {
         controller_runtime.avoidance.detour_active
             ? wrap_angle(atan2(detour_dz, detour_dx) - heading)
             : 0.0;
-    const ControllerAvoidanceProgressConfig progress_config = {
-        .stuck_pose_epsilon = LIDAR_AVOID_STUCK_POSE_EPS,
-        .stuck_progress_epsilon = LIDAR_AVOID_STUCK_PROGRESS_EPS,
-        .best_progress_epsilon = MAPPING_SURVEY_AVOID_PROGRESS_EPS,
-        .min_contour_steps = LIDAR_AVOID_MIN_CONTOUR_STEPS,
-        .detour_reached_distance = LIDAR_DETOUR_REACHED_M,
-    };
     const ControllerAvoidanceProgressInput progress_input = {
         .x = x,
         .z = z,
@@ -2016,19 +1969,6 @@ static void run_navigation_step(void) {
         .target_distance = target_distance_now,
         .obstacle_context_present = obstacle_context_present,
         .detour_distance = detour_distance,
-    };
-    const ControllerAvoidanceLifecycleConfig lifecycle_config = {
-        .min_contour_steps = LIDAR_AVOID_MIN_CONTOUR_STEPS,
-        .leave_progress = LIDAR_AVOID_LEAVE_PROGRESS,
-        .leave_heading_rad = LIDAR_AVOID_LEAVE_HEADING_RAD,
-        .avoid_stop_range = LIDAR_AVOID_STOP_RANGE,
-        .orbit_heading_rad = MAPPING_SURVEY_AVOID_ORBIT_HEADING_RAD,
-        .no_progress_steps = MAPPING_SURVEY_AVOID_NO_PROGRESS_STEPS,
-        .replan_steps = MAPPING_SURVEY_AVOID_REPLAN_STEPS,
-        .max_steps = MAPPING_SURVEY_AVOID_MAX_STEPS,
-        .loop_radius = MAPPING_SURVEY_AVOID_LOOP_RADIUS,
-        .free_space_recovery_steps = FREE_SPACE_RECOVERY_STEPS,
-        .clear_steps = LIDAR_AVOID_CLEAR_STEPS,
     };
     const ControllerAvoidanceLifecycleInput lifecycle_input = {
         .mapping_survey = controller_runtime.mapping_survey.route_active,
@@ -2039,21 +1979,6 @@ static void run_navigation_step(void) {
         .heading_error = heading_error_to_target,
         .near_front_range = near_front_range,
         .center_obstacle_range = center_obstacle_range,
-    };
-    const ControllerAvoidanceCommandConfig command_config = {
-        .avoid_recover_range = LIDAR_AVOID_RECOVER_RANGE,
-        .avoid_stop_range = LIDAR_AVOID_STOP_RANGE,
-        .avoid_reverse_range = LIDAR_AVOID_REVERSE_RANGE,
-        .gap_min_range = LIDAR_GAP_MIN_RANGE,
-        .track_caution_range = LIDAR_TRACK_CAUTION_RANGE,
-        .track_side_bias_range = LIDAR_TRACK_SIDE_BIAS_RANGE,
-        .pass_side_danger_range = LIDAR_PASS_SIDE_DANGER_RANGE,
-        .pass_center_clear_range = LIDAR_PASS_CENTER_CLEAR_RANGE,
-        .pass_cruise_speed_factor = LIDAR_PASS_CRUISE_SPEED_FACTOR,
-        .pass_steer_gain = LIDAR_PASS_STEER_GAIN,
-        .min_angular_command = MIN_ANGULAR_COMMAND,
-        .gap_switch_range_bonus = LIDAR_GAP_SWITCH_RANGE_BONUS,
-        .stuck_steps_limit = LIDAR_AVOID_STUCK_STEPS,
     };
     const ControllerAvoidanceCommandInput command_input = {
         .context = &lidar_context,
@@ -2069,12 +1994,12 @@ static void run_navigation_step(void) {
         .reverse_speed = scaled_linear_cap(0.16),
     };
     const ControllerAvoidanceServiceInput avoidance_service_input = {
-        .progress_config = &progress_config,
+        .progress_config = &control_config.avoidance.progress,
         .progress_input = progress_input,
-        .lifecycle_config = &lifecycle_config,
+        .lifecycle_config = &control_config.avoidance.lifecycle,
         .lifecycle_input = lifecycle_input,
         .has_next_waypoint = controller_runtime.current_waypoint_index + 1 < controller_runtime.route.count,
-        .command_config = &command_config,
+        .command_config = &control_config.avoidance.command,
         .command_input = command_input,
         .priority_hold_steps = LIDAR_PRIORITY_HOLD_STEPS,
         .avoidance_hold_steps = LIDAR_AVOID_HOLD_STEPS,
@@ -2160,20 +2085,6 @@ static void run_navigation_step(void) {
   controller_runtime.navigation_segment_start_x = x;
   controller_runtime.navigation_segment_start_z = z;
   const int route_relaxed_mode_base = 1;
-  const ControllerNavigationTrackingConfig tracking_config = {
-      .final_align_distance = FINAL_ALIGN_DISTANCE,
-      .heading_tolerance_rad = HEADING_TOLERANCE_RAD,
-      .track_slow_radius = TRACK_SLOW_RADIUS,
-      .turn_exit_error_rad = TURN_EXIT_ERROR_RAD,
-      .track_reenter_turn_rad = TRACK_REENTER_TURN_RAD,
-      .turn_enter_error_rad = TURN_ENTER_ERROR_RAD,
-      .turn_heading_gain = TURN_HEADING_GAIN,
-      .track_heading_gain = TRACK_HEADING_GAIN,
-      .final_align_gain = FINAL_ALIGN_GAIN,
-      .track_min_linear_speed = TRACK_MIN_LINEAR_SPEED,
-      .min_angular_command = MIN_ANGULAR_COMMAND,
-      .position_tolerance = POSITION_TOLERANCE,
-  };
   ControllerNavigationTrackingInput tracking_input = {
       .mode = controller_runtime.navigation_mode,
       .is_final_waypoint = is_final_waypoint,
@@ -2191,20 +2102,6 @@ static void run_navigation_step(void) {
       .expected_zone_wall_ahead = expected_zone_wall_ahead,
       .runtime_linear_speed_limit = active_linear_speed_limit,
       .runtime_angular_speed_limit = active_angular_speed_limit,
-  };
-  const ControllerNavigationLidarConfig navigation_lidar_config = {
-      .track_caution_range = LIDAR_TRACK_CAUTION_RANGE,
-      .avoid_stop_range = LIDAR_AVOID_STOP_RANGE,
-      .track_side_bias_range = LIDAR_TRACK_SIDE_BIAS_RANGE,
-      .avoid_side_danger_range = LIDAR_AVOID_SIDE_DANGER_RANGE,
-      .track_hard_priority_range = LIDAR_TRACK_HARD_PRIORITY_RANGE,
-      .avoid_side_trigger_range = LIDAR_AVOID_SIDE_TRIGGER_RANGE,
-      .max_heading_bias = LIDAR_TRACK_MAX_HEADING_BIAS,
-      .priority_switch_margin = LIDAR_PRIORITY_SWITCH_MARGIN,
-      .priority_center_margin = LIDAR_PRIORITY_CENTER_MARGIN,
-      .priority_hold_steps = LIDAR_PRIORITY_HOLD_STEPS,
-      .expected_wall_soft_stop_range = EXPECTED_WALL_SOFT_STOP_RANGE,
-      .expected_wall_slowdown_range = EXPECTED_WALL_SLOWDOWN_RANGE,
   };
   const ControllerNavigationLidarInput navigation_lidar_input = {
       .lidar_available = lidar_available,
@@ -2229,8 +2126,8 @@ static void run_navigation_step(void) {
   };
   ControllerNavigationServiceMotionOutput motion_output;
   const int final_alignment = controller_navigation_service_calculate_motion(
-      &tracking_config,
-      &navigation_lidar_config,
+      &control_config.navigation.tracking,
+      &control_config.navigation.lidar,
       &motion_input,
       &motion_output);
   controller_runtime.navigation_mode = motion_output.motion.tracking.mode;
@@ -2380,6 +2277,8 @@ int main(int argc, char **argv) {
   (void)argc;
   (void)argv;
 
+  control_config = controller_control_config_default();
+
   if (!controller_paths_init(&controller_paths, getenv("WEB_STATE_DIR"))) {
     fprintf(stderr, "Failed to initialize Webots state paths.\n");
     return 1;
@@ -2388,13 +2287,13 @@ int main(int argc, char **argv) {
   wb_robot_init();
   controller_webots_devices_init(&webots_devices);
   const ControllerDriveConfig drive_config = controller_webots_adapter_drive_config(
-      WHEEL_RADIUS,
-      WHEEL_BASE_LONGITUDINAL,
-      WHEEL_BASE_LATERAL,
-      MAX_WHEEL_SPEED_RAD_S,
-      WHEEL_ACCEL_LIMIT_RAD_S2,
-      WHEEL_DECEL_LIMIT_RAD_S2,
-      TIME_STEP / 1000.0);
+      control_config.drive.wheel_radius,
+      control_config.drive.wheel_base_longitudinal,
+      control_config.drive.wheel_base_lateral,
+      control_config.drive.max_wheel_speed_rad_s,
+      control_config.drive.acceleration_limit_rad_s2,
+      control_config.drive.deceleration_limit_rad_s2,
+      control_config.time_step_ms / 1000.0);
   controller_webots_adapter_init(
       &webots_adapter, &drive_config, drive_webots_base, &webots_devices);
   controller_webots_sensors_init(&webots_sensors);
@@ -2448,19 +2347,10 @@ int main(int argc, char **argv) {
     wait_for_fresh_route();
   }
 
-  const ControllerLifecycleScheduleConfig lifecycle_schedule = {
-      ZONE_RELOAD_INTERVAL,
-      ROUTE_RELOAD_INTERVAL,
-      MOTION_RELOAD_INTERVAL,
-      RUNTIME_COMMAND_RELOAD_INTERVAL,
-      MAP_WRITE_INTERVAL,
-      CAMERA_CAPTURE_INTERVAL,
-      CAMERA_WRITE_INTERVAL,
-  };
-
   while (wb_robot_step(TIME_STEP) != -1) {
     ++step_counter;
-    controller_step_run(step_counter, &lifecycle_schedule, &controller_step_callbacks);
+    controller_step_run(
+        step_counter, &control_config.schedule.lifecycle, &controller_step_callbacks);
   }
 
   maybe_write_map();
