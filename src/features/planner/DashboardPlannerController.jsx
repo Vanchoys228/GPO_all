@@ -17,15 +17,12 @@ import { useSolverHealth } from "./hooks/useSolverHealth";
 import { useTelemetrySocket } from "./hooks/useTelemetrySocket";
 import { usePlannerBridgeSync } from "./hooks/usePlannerBridgeSync";
 import { useRouteTiming } from "./hooks/useRouteTiming";
-import { usePlannerRouteOptimization } from "./hooks/usePlannerRouteOptimization";
-import { usePlannerRouteSender } from "./hooks/usePlannerRouteSender";
-import { usePlannerRouteRebuild } from "./hooks/usePlannerRouteRebuild";
-import { usePlannerGraphImport } from "./hooks/usePlannerGraphImport";
 import { usePlannerEnergySettings } from "./hooks/usePlannerEnergySettings";
 import { usePlannerRouteSelection } from "./hooks/usePlannerRouteSelection";
 import { usePlannerSidebarState } from "./hooks/usePlannerSidebarState";
 import { useDashboardPlannerRuntimeActions } from "./hooks/useDashboardPlannerRuntimeActions";
 import { useDashboardPlannerEditors } from "./hooks/useDashboardPlannerEditors";
+import { useDashboardPlannerRouteLifecycle } from "./hooks/useDashboardPlannerRouteLifecycle";
 import {
   DEFAULT_SURFACE_PROFILE_KEY,
   createInitialSurfaceZones,
@@ -171,7 +168,7 @@ export default function Dashboard() {
     ]
   );
 
-  const handleImportFile = usePlannerGraphImport({
+  const { handleImportFile, optimizeRoute, sendRoute } = useDashboardPlannerRouteLifecycle({
     resetRouteTiming,
     setActiveLimitZoneId,
     setActivePointKind,
@@ -182,6 +179,7 @@ export default function Dashboard() {
     setExpandedPoint,
     setHoveredPointIndex,
     setLimitZones,
+    setIsOptimizing,
     setNextSurfaceZoneNumber,
     setNextZoneNumber,
     setOptimizedRoute,
@@ -191,9 +189,6 @@ export default function Dashboard() {
     setRouteTaskKey,
     setStatus,
     setSurfaceZones,
-  });
-
-  usePlannerRouteRebuild({
     algorithmKey,
     batteryRangeMeters,
     chargePointsRoutingText,
@@ -205,13 +200,10 @@ export default function Dashboard() {
     routeSocketRef: routeWsRef,
     routeTaskKey,
     selectedAlgorithmParams,
-    setEnergyWarning,
-    setOptimizedRoute,
-    setRouteEnergyStats,
-    setStatus,
     startRouteTiming,
     surfaceSyncPayloadText,
     surfaceZones: plannerModel.surfaceZones,
+    telemetry,
     zoneSyncPayloadText,
   });
 
@@ -233,41 +225,6 @@ export default function Dashboard() {
     nextZoneNumber, plannerModel, points, setActiveLimitZoneId, setActivePointKind,
     setActiveSurfaceProfileKey, setActiveSurfaceZoneId, setLimitZones, setNextSurfaceZoneNumber,
     setNextZoneNumber, setPoints, setStatus, setSurfaceZones, surfaceZones,
-  });
-
-  const optimizeRoute = usePlannerRouteOptimization({
-    algorithmKey,
-    batteryRangeMeters,
-    energyOptions,
-    isOptimizing,
-    plannerModel,
-    routeTaskKey,
-    selectedAlgorithmParams,
-    setEnergyWarning,
-    setIsOptimizing,
-    setOptimizedRoute,
-    setRouteEnergyStats,
-    setRouteSeed,
-    setStatus,
-    telemetry,
-  });
-
-  const sendRoute = usePlannerRouteSender({
-    algorithmKey,
-    batteryRangeMeters,
-    cruiseSpeedMps,
-    energyOptions,
-    optimizedRoute,
-    payloadKg,
-    plannerModel,
-    routeSeed,
-    routeSocketRef: routeWsRef,
-    routeTaskKey,
-    selectedAlgorithmParams,
-    setEnergyWarning,
-    setRouteEnergyStats,
-    setStatus,
-    startRouteTiming,
   });
 
   const { addRandomObstacle, exportMapImage, requestMapExport, startMappingSurvey } =
