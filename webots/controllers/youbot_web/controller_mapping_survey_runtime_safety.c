@@ -60,6 +60,26 @@ int controller_mapping_survey_runtime_map_obstacle_near(
   return controller_mapping_obstacles_map_near(&obstacles, x, y, clearance);
 }
 
+int controller_mapping_survey_runtime_scan_point_allowed(
+    const ControllerMappingSurveySafetyContext *context,
+    double x, double y, int room_zone_index,
+    double boundary_clearance, double obstacle_clearance) {
+  if (!context || !context->zones) return 0;
+  if (room_zone_index >= 0 && room_zone_index < context->zones->count) {
+    const LimitZone *room = &context->zones->zones[room_zone_index];
+    if (!controller_zone_geometry_point_in(x, y, room) ||
+        controller_zone_geometry_point_near_boundary(
+            x, y, room, boundary_clearance * 0.72)) return 0;
+  } else if (x < -context->max_extent_x || x > context->max_extent_x ||
+             y < -context->max_extent_y || y > context->max_extent_y) return 0;
+  for (int index = 0; index < context->zones->count; ++index) {
+    if (index != room_zone_index && controller_zone_geometry_point_near(
+        x, y, &context->zones->zones[index], boundary_clearance)) return 0;
+  }
+  return !controller_mapping_survey_runtime_map_obstacle_near(
+      context, x, y, obstacle_clearance);
+}
+
 int controller_mapping_survey_runtime_segment_clear(
     const ControllerMappingSurveySafetyContext *context,
     double ax, double ay, double bx, double by, double clearance, double ignore_radius) {

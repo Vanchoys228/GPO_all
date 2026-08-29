@@ -28,6 +28,10 @@ int controller_mapping_survey_runtime_known_obstacle_near(
     const ControllerMappingSurveySafetyContext *context, double x, double y, double clearance);
 int controller_mapping_survey_runtime_map_obstacle_near(
     const ControllerMappingSurveySafetyContext *context, double x, double y, double clearance);
+int controller_mapping_survey_runtime_scan_point_allowed(
+    const ControllerMappingSurveySafetyContext *context,
+    double x, double y, int room_zone_index,
+    double boundary_clearance, double obstacle_clearance);
 int controller_mapping_survey_runtime_segment_clear(
     const ControllerMappingSurveySafetyContext *context,
     double ax, double ay, double bx, double by, double clearance, double ignore_radius);

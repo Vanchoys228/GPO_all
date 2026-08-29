@@ -1005,23 +1005,14 @@ static int mapping_survey_segment_clear_of_known_obstacles(
     double bx,
     double by,
     double clearance) {
-  const ControllerMappingObstacles obstacles = {
-      persistent_map,
-      persistent_map_count,
-      obstacle_trace,
-      obstacle_trace_count,
-      wb_robot_get_time(),
-      LIDAR_TRACE_TTL_SECONDS,
-      0.18,
-  };
-  return controller_mapping_obstacles_segment_clear(
-      &obstacles,
+  const ControllerMappingSurveySafetyContext context = mapping_survey_safety_context();
+  return controller_mapping_survey_runtime_segment_clear(
+      &context,
       ax,
       ay,
       bx,
       by,
       clearance,
-      MAPPING_SURVEY_GRID_CELL,
       LIDAR_NEAR_ROBOT_IGNORE_RADIUS);
 }
 
@@ -1789,21 +1780,14 @@ static void wait_for_fresh_route() {
 }
 
 static int mapping_survey_scan_point_allowed(double x, double y) {
-  if (controller_runtime.mapping_survey.room_zone_index >= 0) {
-    const LimitZone *room = &controller_runtime.limit_zones.zones[controller_runtime.mapping_survey.room_zone_index];
-    if (!point_in_zone(x, y, room)) return 0;
-    if (point_near_zone_boundary(x, y, room, ZONE_CLEARANCE * 0.72)) return 0;
-  } else if (x < -MAPPING_SURVEY_MAX_EXTENT_X || x > MAPPING_SURVEY_MAX_EXTENT_X ||
-             y < -MAPPING_SURVEY_MAX_EXTENT_Y || y > MAPPING_SURVEY_MAX_EXTENT_Y) {
-    return 0;
-  }
-
-  for (int zone_index = 0; zone_index < controller_runtime.limit_zones.count; ++zone_index) {
-    if (zone_index == controller_runtime.mapping_survey.room_zone_index) continue;
-    if (point_near_zone(x, y, &controller_runtime.limit_zones.zones[zone_index], ZONE_CLEARANCE)) return 0;
-  }
-
-  return !survey_map_obstacle_near(x, y, ZONE_CLEARANCE * 0.68);
+  const ControllerMappingSurveySafetyContext context = mapping_survey_safety_context();
+  return controller_mapping_survey_runtime_scan_point_allowed(
+      &context,
+      x,
+      y,
+      controller_runtime.mapping_survey.room_zone_index,
+      ZONE_CLEARANCE,
+      ZONE_CLEARANCE * 0.68);
 }
 
 static int mapping_survey_scan_point_allowed_callback(void *context, double x, double y) {
