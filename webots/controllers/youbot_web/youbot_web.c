@@ -69,6 +69,7 @@
 #include "controller_webots_motion_state.h"
 #include "controller_webots_navigation_state.h"
 #include "controller_webots_camera_range.h"
+#include "controller_webots_camera_perception.h"
 #include "controller_webots_zone_sync.h"
 #include "controller_webots_sensors.h"
 #include "controller_zone_geometry.h"
@@ -450,25 +451,6 @@ static void merge_camera_visible_frustum_into_map(double effective_fov, double d
   }
 }
 
-typedef struct {
-  const unsigned char *image;
-  int width;
-} WebotsCameraPixelContext;
-
-static ControllerCameraPixel read_webots_camera_pixel(void *context, int x, int y) {
-  const WebotsCameraPixelContext *pixel_context = (const WebotsCameraPixelContext *)context;
-  ControllerCameraPixel pixel = {0};
-  controller_webots_sensors_camera_pixel(
-      pixel_context->image,
-      pixel_context->width,
-      x,
-      y,
-      &pixel.red,
-      &pixel.green,
-      &pixel.blue);
-  return pixel;
-}
-
 static void update_camera_obstacle_hint(void) {
   camera_obstacle_update_step = step_counter;
   camera_obstacle_visible = 0;
@@ -487,29 +469,23 @@ static void update_camera_obstacle_hint(void) {
   const double effective_fov = camera_fov > EPS ? camera_fov : 1.05;
   merge_camera_visible_frustum_into_map(effective_fov, CAMERA_RANGE_FALLBACK_M);
 
-  ControllerCameraAnalysisConfig analysis_config =
-      controller_camera_default_config(camera_width, camera_height);
-  analysis_config.min_obstacle_score = CAMERA_OBSTACLE_MIN_SCORE;
-  const WebotsCameraPixelContext pixel_context = {image, camera_width};
-  ControllerCameraObservation observation;
-  controller_camera_analyze(
-      &analysis_config, read_webots_camera_pixel, (void *)&pixel_context, &observation);
-
-  const ControllerCameraObstacleHint hint =
-      controller_camera_observation_hint(&observation, effective_fov);
-  camera_obstacle_score = hint.score;
-  if (hint.visible) {
+  ControllerWebotsCameraPerception perception;
+  controller_webots_camera_perception_analyze(
+      image, camera_width, camera_height, effective_fov,
+      CAMERA_OBSTACLE_MIN_SCORE, &perception);
+  camera_obstacle_score = perception.score;
+  if (perception.visible) {
     camera_obstacle_visible = 1;
-    camera_obstacle_center_offset = hint.center_offset;
-    camera_obstacle_angle = hint.angle;
+    camera_obstacle_center_offset = perception.center_offset;
+    camera_obstacle_angle = perception.angle;
     camera_obstacle_range =
-        estimate_camera_range_from_lidar(camera_obstacle_angle, observation.fallback_range_m);
-    camera_detection_count = observation.hits;
+        estimate_camera_range_from_lidar(camera_obstacle_angle, perception.fallback_range_m);
+    camera_detection_count = perception.detection_count;
     merge_camera_free_ray_into_map(camera_obstacle_angle, camera_obstacle_range, 2);
     merge_camera_observation_into_map(
         camera_obstacle_angle,
         camera_obstacle_range,
-        hint.confidence_boost);
+        perception.confidence_boost);
   }
 }
 
