@@ -27,6 +27,7 @@
 #include "controller_mapping_scan_transition.h"
 #include "controller_mapping_survey_escape.h"
 #include "controller_mapping_survey_safety.h"
+#include "controller_mapping_survey_runtime_safety.h"
 #include "controller_mapping_store.h"
 #include "controller_motion_profile.h"
 #include "controller_navigation_context.h"
@@ -1053,65 +1054,35 @@ static void maybe_write_map(void) {
 #define survey_expand_bounds(x, y, min_x, max_x, min_y, max_y) \
   controller_survey_expand_bounds((x), (y), (min_x), (max_x), (min_y), (max_y))
 
+static ControllerMappingSurveySafetyContext mapping_survey_safety_context(void) {
+  return (ControllerMappingSurveySafetyContext){
+      &controller_runtime.limit_zones, persistent_map, persistent_map_count,
+      obstacle_trace, obstacle_trace_count, wb_robot_get_time(),
+      LIDAR_TRACE_TTL_SECONDS, 0.18, MAPPING_SURVEY_MAX_EXTENT_X,
+      MAPPING_SURVEY_MAX_EXTENT_Y, MAPPING_SURVEY_MAP_OBSTACLE_CLEARANCE,
+      MAPPING_SURVEY_GRID_CELL};
+}
+
 static int survey_map_obstacle_near(double x, double y, double clearance) {
-  const ControllerMappingObstacles obstacles = {
-      persistent_map,
-      persistent_map_count,
-      obstacle_trace,
-      obstacle_trace_count,
-      wb_robot_get_time(),
-      LIDAR_TRACE_TTL_SECONDS,
-      0.18,
-  };
-  return controller_mapping_obstacles_map_near(&obstacles, x, y, clearance);
+  const ControllerMappingSurveySafetyContext context = mapping_survey_safety_context();
+  return controller_mapping_survey_runtime_map_obstacle_near(&context, x, y, clearance);
 }
 
 static int survey_point_safe(double x, double y, int room_zone_index, double clearance) {
-  if (room_zone_index >= 0) {
-    const LimitZone *room = &controller_runtime.limit_zones.zones[room_zone_index];
-    if (!point_in_zone(x, y, room)) return 0;
-    if (point_near_zone_boundary(x, y, room, clearance * 0.72)) return 0;
-  } else if (x < -MAPPING_SURVEY_MAX_EXTENT_X || x > MAPPING_SURVEY_MAX_EXTENT_X ||
-             y < -MAPPING_SURVEY_MAX_EXTENT_Y || y > MAPPING_SURVEY_MAX_EXTENT_Y) {
-    return 0;
-  }
-
-  for (int i = 0; i < controller_runtime.limit_zones.count; ++i) {
-    if (i == room_zone_index) continue;
-    if (point_near_zone(x, y, &controller_runtime.limit_zones.zones[i], clearance)) return 0;
-  }
-
-  return !survey_map_obstacle_near(x, y, fmax(clearance, MAPPING_SURVEY_MAP_OBSTACLE_CLEARANCE));
+  const ControllerMappingSurveySafetyContext context = mapping_survey_safety_context();
+  return controller_mapping_survey_runtime_point_safe(
+      &context, x, y, room_zone_index, clearance);
 }
 
 static int survey_segment_safe(double ax, double ay, double bx, double by, int room_zone_index, double clearance) {
-  const double length = hypot2(bx - ax, by - ay);
-  const int steps = (int)ceil(length / fmax(MAPPING_SURVEY_GRID_CELL * 0.72, 0.05));
-  for (int i = 0; i <= steps; ++i) {
-    const double t = steps > 0 ? (double)i / (double)steps : 0.0;
-    const double x = ax + (bx - ax) * t;
-    const double y = ay + (by - ay) * t;
-    if (!survey_point_safe(x, y, room_zone_index, clearance)) return 0;
-  }
-  return 1;
-}
-
-static int survey_recent_trace_obstacle_near(double x, double y, double clearance) {
-  const ControllerMappingObstacles obstacles = {
-      persistent_map,
-      persistent_map_count,
-      obstacle_trace,
-      obstacle_trace_count,
-      wb_robot_get_time(),
-      LIDAR_TRACE_TTL_SECONDS,
-      0.18,
-  };
-  return controller_mapping_obstacles_recent_trace_near(&obstacles, x, y, clearance);
+  const ControllerMappingSurveySafetyContext context = mapping_survey_safety_context();
+  return controller_mapping_survey_runtime_segment_safe(
+      &context, ax, ay, bx, by, room_zone_index, clearance);
 }
 
 static int survey_known_obstacle_near(double x, double y, double clearance) {
-  return survey_map_obstacle_near(x, y, clearance) ||
-         survey_recent_trace_obstacle_near(x, y, clearance);
+  const ControllerMappingSurveySafetyContext context = mapping_survey_safety_context();
+  return controller_mapping_survey_runtime_known_obstacle_near(&context, x, y, clearance);
 }
 
 static int mapping_survey_segment_clear_of_known_obstacles(
