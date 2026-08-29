@@ -68,6 +68,7 @@
 #include "controller_webots_simulation.h"
 #include "controller_webots_motion_state.h"
 #include "controller_webots_navigation_state.h"
+#include "controller_webots_camera_range.h"
 #include "controller_webots_zone_sync.h"
 #include "controller_webots_sensors.h"
 #include "controller_zone_geometry.h"
@@ -430,22 +431,10 @@ static void init_sensors(void) {
 }
 
 static double estimate_camera_range_from_lidar(double relative_angle, double fallback_range) {
-  if (!lidar_available || !controller_webots_sensors_has_lidar(&webots_sensors) ||
-      lidar_resolution <= 1 || lidar_fov <= EPS) {
-    return fallback_range;
-  }
-
-  const float *ranges = controller_webots_sensors_lidar_ranges(&webots_sensors);
-  if (!ranges) return fallback_range;
-  return controller_camera_fusion_estimate_range(
-      ranges,
-      lidar_resolution,
-      lidar_fov,
-      relative_angle,
-      CAMERA_RANGE_SEARCH_WINDOW_RAD,
-      LIDAR_MIN_TRACE_RANGE,
-      LIDAR_MAX_TRACE_RANGE,
-      fallback_range);
+  return controller_webots_camera_range_from_lidar(
+      &webots_sensors, lidar_available, lidar_resolution, lidar_fov,
+      relative_angle, CAMERA_RANGE_SEARCH_WINDOW_RAD, LIDAR_MIN_TRACE_RANGE,
+      LIDAR_MAX_TRACE_RANGE, fallback_range);
 }
 
 static void merge_camera_visible_frustum_into_map(double effective_fov, double default_range) {
