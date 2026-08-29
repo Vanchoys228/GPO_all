@@ -1,34 +1,47 @@
-import { readFileSync, readdirSync } from "node:fs";
+import { existsSync, readFileSync, readdirSync } from "node:fs";
 import { describe, expect, it } from "vitest";
 import packageJson from "../package.json";
 
 const controllerDirectory = "webots/controllers/youbot_web";
 
 describe("Webots controller build configuration", () => {
-  it("links every production controller source", () => {
-    const makefile = readFileSync(`${controllerDirectory}/Makefile`, "utf8");
+  it("uses one canonical manifest for every production controller source", () => {
+    const manifestPath = `${controllerDirectory}/controller_sources.txt`;
+
+    expect(existsSync(manifestPath), "controller source manifest is missing").toBe(true);
+    if (!existsSync(manifestPath)) return;
+
+    const manifestSources = readFileSync(manifestPath, "utf8")
+      .split(/\r?\n/u)
+      .map((line) => line.trim())
+      .filter(Boolean)
+      .sort();
     const productionSources = readdirSync(controllerDirectory)
       .filter((file) => file.endsWith(".c") && !file.endsWith("_test.c"))
       .sort();
 
-    for (const source of productionSources) {
-      expect(makefile, `${source} is missing from C_SOURCES`).toMatch(
-        new RegExp(`(^|\\s)${source.replace(".", "\\.")}($|\\s)`),
+    expect(manifestSources).toEqual(productionSources);
+    for (const buildFile of ["Makefile", "build_youbot_web.bat", "run_controller_tests.bat"]) {
+      const buildSource = readFileSync(`${controllerDirectory}/${buildFile}`, "utf8");
+      expect(buildSource, `${buildFile} must consume controller_sources.txt`).toContain(
+        "controller_sources.txt",
       );
     }
   });
 
-  it("keeps every reusable production source in the Windows build and standalone test runner", () => {
-    const productionSources = readdirSync(controllerDirectory)
-      .filter((file) => file.endsWith(".c") && !file.endsWith("_test.c"))
-      .filter((file) => file !== "youbot_web.c");
+  it("loads the canonical source manifest from the Webots Makefile", () => {
+    const makefile = readFileSync(`${controllerDirectory}/Makefile`, "utf8");
+
+    expect(makefile).toContain("C_SOURCES := $(strip $(file <controller_sources.txt))");
+  });
+
+  it("loads the canonical source manifest from both Windows commands", () => {
     const windowsBuild = readFileSync(`${controllerDirectory}/build_youbot_web.bat`, "utf8");
     const testRunner = readFileSync(`${controllerDirectory}/run_controller_tests.bat`, "utf8");
 
-    for (const source of productionSources) {
-      expect(windowsBuild, `${source} is missing from build_youbot_web.bat`).toContain(source);
-      expect(testRunner, `${source} is missing from run_controller_tests.bat`).toContain(source);
-    }
+    expect(windowsBuild).toContain('in ("controller_sources.txt")');
+    expect(testRunner).toContain('in ("%CONTROLLER_DIR%controller_sources.txt")');
+    expect(testRunner).toContain('if /I not "%%S"=="youbot_web.c"');
   });
 
   it("uses strict void signatures for lifecycle callbacks", () => {
@@ -69,6 +82,7 @@ describe("Webots controller build configuration", () => {
 
   it("builds standalone tests with the Webots SDK and production adapters", () => {
     const testRunner = readFileSync(`${controllerDirectory}/run_controller_tests.bat`, "utf8");
+    const manifest = readFileSync(`${controllerDirectory}/controller_sources.txt`, "utf8");
 
     for (const source of [
       "controller_webots_devices.c",
@@ -76,7 +90,7 @@ describe("Webots controller build configuration", () => {
       "controller_webots_sensors.c",
       "controller_webots_simulation.c",
     ]) {
-      expect(testRunner, `${source} is missing from the standalone test runner`).toContain(source);
+      expect(manifest, `${source} is missing from the canonical manifest`).toContain(source);
     }
 
     expect(testRunner).toContain("if not defined WEBOTS_HOME (");
