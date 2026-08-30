@@ -28,6 +28,7 @@
 #include "controller_mapping_scan_transition.h"
 #include "controller_mapping_survey_contour_service.h"
 #include "controller_mapping_survey_coverage_service.h"
+#include "controller_mapping_survey_route_generation_service.h"
 #include "controller_mapping_survey_grid_adapter.h"
 #include "controller_mapping_survey_safety.h"
 #include "controller_mapping_survey_safety_service.h"
@@ -1204,21 +1205,14 @@ static int generate_mapping_survey_route(
       survey_generator_build_route,
       survey_generator_write_route,
   };
-  const ControllerSurveyGenerateResult result = controller_survey_generate(
+  const ControllerMappingSurveyRouteGenerationService service = {
+      &callbacks, &generator, set_error};
+  return controller_mapping_survey_route_generation_service_generate(
+      &service,
       clear_map_before_start,
       survey_mode,
       &controller_runtime.mapping_survey.room_zone_index,
-      &controller_runtime.mapping_survey.interior_start_index,
-      &callbacks,
-      &generator);
-  if (result == CONTROLLER_SURVEY_GENERATE_GRID_FAILED) {
-    set_error("Cannot build mapping survey occupancy grid");
-  } else if (result == CONTROLLER_SURVEY_GENERATE_NO_COMPONENT) {
-    set_error("Cannot find connected free room for mapping survey");
-  } else if (result == CONTROLLER_SURVEY_GENERATE_EMPTY_ROUTE) {
-    set_error("Mapping survey route is empty");
-  }
-  return result == CONTROLLER_SURVEY_GENERATE_OK;
+      &controller_runtime.mapping_survey.interior_start_index);
 }
 
 static void survey_integration_apply_speed(double speed_mps) {

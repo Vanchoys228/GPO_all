@@ -37,6 +37,7 @@ controller_mapping_survey_safety_service.c
 controller_mapping_survey_lifecycle_service.c
 controller_mapping_survey_contour_service.c
 controller_mapping_survey_coverage_service.c
+controller_mapping_survey_route_generation_service.c
 controller_math.c
 controller_motion_profile.c
 controller_motion_profile_reload_service.c
