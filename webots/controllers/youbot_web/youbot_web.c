@@ -29,6 +29,7 @@
 #include "controller_mapping_survey_grid_adapter.h"
 #include "controller_mapping_survey_safety.h"
 #include "controller_mapping_survey_safety_service.h"
+#include "controller_mapping_survey_lifecycle_service.h"
 #include "controller_mapping_survey_runtime_safety.h"
 #include "controller_mapping_runtime.h"
 #include "controller_motion_profile.h"
@@ -57,7 +58,6 @@
 #include "controller_survey_contour.h"
 #include "controller_survey_contour_adapter.h"
 #include "controller_survey_coverage.h"
-#include "controller_survey_default_route.h"
 #include "controller_survey_generator.h"
 #include "controller_survey_grid.h"
 #include "controller_survey_geometry.h"
@@ -878,14 +878,8 @@ static void merge_camera_observation_into_map(double relative_angle, double rang
   }
 }
 
-static void clear_persistent_map() {
+static void clear_persistent_map(void) {
   controller_mapping_runtime_clear(&mapping_runtime);
-}
-
-static void generate_survey_route(const char *path) {
-  const ControllerSurveyDefaultRouteConfig config = {
-      SURVEY_X_MIN, SURVEY_X_MAX, SURVEY_Y_MIN, SURVEY_Y_MAX, SURVEY_STRIP};
-  controller_survey_default_route_write(path, &config);
 }
 
 static void maybe_write_map(void) {
@@ -2136,11 +2130,13 @@ int main(int argc, char **argv) {
     set_status("error");
     set_error("Supervisor fields are not available");
   } else {
-    if (get_file_mtime(ROUTE_PATH) < 0) {
-      clear_persistent_map();
-      generate_survey_route(ROUTE_PATH);
-      set_status("survey_route_generated");
-    }
+    controller_mapping_survey_lifecycle_service_ensure_default_route(
+        ROUTE_PATH,
+        get_file_mtime(ROUTE_PATH),
+        &(ControllerSurveyDefaultRouteConfig){
+            SURVEY_X_MIN, SURVEY_X_MAX, SURVEY_Y_MIN, SURVEY_Y_MAX, SURVEY_STRIP},
+        clear_persistent_map,
+        set_status);
     wait_for_fresh_route();
   }
 
