@@ -2319,8 +2319,7 @@ int main(int argc, char **argv) {
         step_counter, &control_config.schedule.lifecycle, &controller_step_callbacks);
   }
 
-  maybe_write_map();
-  maybe_write_map();
+  controller_mapping_runtime_write(&mapping_runtime, 1);
   controller_webots_zone_sync_remove_all(&webots_zone_sync);
   wb_robot_cleanup();
   return 0;
