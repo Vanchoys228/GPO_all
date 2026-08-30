@@ -2226,7 +2226,7 @@ static const ControllerStepCallbacks controller_step_callbacks = {
     maybe_write_map,
     maybe_update_camera_perception,
     maybe_write_camera_frame,
-    maybe_write_map,
+    NULL,
     run_navigation_step,
     update_route_avoidance_metrics,
     write_state_snapshot,
