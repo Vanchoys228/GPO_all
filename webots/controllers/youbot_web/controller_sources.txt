@@ -74,6 +74,7 @@ controller_survey_route_builder.c
 controller_survey_route_primitives.c
 controller_survey_state.c
 controller_telemetry.c
+controller_telemetry_publisher.c
 controller_telemetry_service.c
 controller_types.c
 controller_webots_adapter.c

@@ -64,6 +64,7 @@
 #include "controller_survey_state.h"
 #include "controller_step.h"
 #include "controller_telemetry.h"
+#include "controller_telemetry_publisher.h"
 #include "controller_telemetry_service.h"
 #include "controller_types.h"
 #include "controller_webots_devices.h"
@@ -2114,7 +2115,8 @@ static void run_navigation_step(void) {
       motion_output.motion.tracking.angular_speed);
 }
 
-static void write_state_snapshot(void) {
+#if 0
+static void write_state_snapshot_legacy(void) {
   double x = 0.0;
   double y = 0.0;
   double heading = 0.0;
@@ -2209,6 +2211,36 @@ static void write_state_snapshot(void) {
   controller_telemetry_service_build_snapshot(&snapshot_input, &snapshot);
 
   controller_telemetry_write_snapshot(STATE_TEMP_PATH, STATE_PATH, &snapshot);
+}
+#endif
+
+static void write_state_snapshot(void) {
+  double x = 0.0;
+  double y = 0.0;
+  double heading = 0.0;
+  read_pose(&x, &y, &heading);
+  const ControllerTelemetryPublisherInput input = {
+      .simulation_time = wb_robot_get_time(), .pose_x = x, .pose_y = y,
+      .pose_z = START_HEIGHT, .pose_yaw = heading, .runtime = &controller_runtime,
+      .perception = &perception_runtime, .status = navigation_status,
+      .error = navigation_error, .off_route_active = route_off_route_active_now(),
+      .avoidance_time_sec = route_avoidance_time_sec, .avoidance_steps = route_avoidance_steps,
+      .cruise_speed_mps = configured_cruise_speed_mps, .payload_kg = configured_payload_kg,
+      .battery_range_units = configured_battery_range_units,
+      .battery_speed_factor = active_battery_speed_factor,
+      .linear_speed_limit = active_linear_speed_limit,
+      .angular_speed_limit = active_angular_speed_limit,
+      .dynamic_zone_wall_count = zone_node_registry.count,
+      .obstacle_map_cell_count = persistent_map_count, .obstacle_map_cell_size = MAP_CELL_SIZE,
+      .camera_map_obstacle_cell_count = camera_map_count,
+      .camera_map_free_cell_count = camera_free_map_count,
+      .camera_map_cell_size = CAMERA_MAP_CELL_SIZE,
+      .trace_ttl_seconds = LIDAR_TRACE_TTL_SECONDS,
+      .trace_min_confidence = LIDAR_TRACE_MIN_CONFIDENCE,
+  };
+  ControllerTelemetryPublisherOutput output = {0};
+  controller_telemetry_publisher_build(&input, &output);
+  controller_telemetry_write_snapshot(STATE_TEMP_PATH, STATE_PATH, &output.snapshot);
 }
 
 static void merge_trace_for_controller_step(void) {
