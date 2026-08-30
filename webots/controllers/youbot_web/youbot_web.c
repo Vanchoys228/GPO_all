@@ -33,6 +33,7 @@
 #include "controller_mapping_survey_runtime_safety.h"
 #include "controller_mapping_runtime.h"
 #include "controller_motion_profile.h"
+#include "controller_motion_profile_reload_service.h"
 #include "controller_navigation_context.h"
 #include "controller_navigation_adapter.h"
 #include "controller_navigation_state.h"
@@ -301,7 +302,7 @@ static ControllerWebotsMotionState motion_state = {
 #define active_linear_speed_limit motion_state.limits.linear_speed_mps
 #define active_angular_speed_limit motion_state.limits.angular_speed_rad_s
 #define active_battery_speed_factor motion_state.limits.battery_speed_factor
-static long long motion_profile_last_modified = -1;
+static ControllerMotionProfileReloadService motion_profile_reload_service;
 static long long runtime_command_last_modified = -1;
 static long long last_processed_runtime_command_id = -1;
 #define route_avoidance_time_sec application_state.route_avoidance_time_sec
@@ -346,37 +347,11 @@ static double scaled_linear_cap(double factor) {
 }
 
 
-static void apply_motion_profile() {
-  controller_webots_motion_state_apply(&motion_state);
-}
-
-static int load_motion_profile() {
-  return controller_webots_motion_state_load(&motion_state, MOTION_PROFILE_PATH);
-}
-
 static void maybe_reload_motion_profile(void) {
-  if ((step_counter % MOTION_RELOAD_INTERVAL) != 0) return;
-
-  const double previous_cruise_speed = configured_cruise_speed_mps;
-  const double previous_payload_kg = configured_payload_kg;
-  const double previous_battery_range = configured_battery_range_units;
-  const double previous_linear_limit = active_linear_speed_limit;
-  const double previous_angular_limit = active_angular_speed_limit;
-  const long long mtime = get_file_mtime(MOTION_PROFILE_PATH);
-  if (mtime < 0) return;
-
-  if (load_motion_profile()) {
-    const int profile_changed =
-        mtime != motion_profile_last_modified ||
-        fabs(configured_cruise_speed_mps - previous_cruise_speed) > 1e-6 ||
-        fabs(configured_payload_kg - previous_payload_kg) > 1e-6 ||
-        fabs(configured_battery_range_units - previous_battery_range) > 1e-6 ||
-        fabs(active_linear_speed_limit - previous_linear_limit) > 1e-6 ||
-        fabs(active_angular_speed_limit - previous_angular_limit) > 1e-6;
-    motion_profile_last_modified = mtime;
-    if (profile_changed) {
-      set_status("motion_profile_reloaded");
-    }
+  if (controller_motion_profile_reload_service_run(
+          &motion_profile_reload_service, step_counter, MOTION_RELOAD_INTERVAL) ==
+      CONTROLLER_MOTION_PROFILE_RELOAD_CHANGED) {
+    set_status("motion_profile_reloaded");
   }
 }
 
@@ -1501,7 +1476,7 @@ static int load_runtime_command(RuntimeCommand *command) {
 static void survey_integration_apply_speed(double speed_mps) {
   configured_cruise_speed_mps =
       clamp_value(speed_mps, MIN_CRUISE_SPEED_MPS, MAX_CRUISE_SPEED_MPS);
-  apply_motion_profile();
+  controller_webots_motion_state_apply(&motion_state);
 }
 
 static ControllerSurveyIntegrationOps survey_integration_ops(void) {
@@ -2225,11 +2200,10 @@ int main(int argc, char **argv) {
       CAMERA_FRAME_BMP_TEMP_PATH,
       CAMERA_FRAME_JPEG_PATH,
       CAMERA_FRAME_JPEG_TEMP_PATH);
-  apply_motion_profile();
-  motion_profile_last_modified = get_file_mtime(MOTION_PROFILE_PATH);
-  if (motion_profile_last_modified >= 0) {
-    load_motion_profile();
-  }
+  controller_motion_profile_reload_service_init(
+      &motion_profile_reload_service, &motion_state, MOTION_PROFILE_PATH);
+  controller_webots_motion_state_apply(&motion_state);
+  controller_motion_profile_reload_service_run(&motion_profile_reload_service, 0, 1);
   maybe_reload_zones();
   maybe_reload_surface_zones();
   runtime_command_last_modified = get_file_mtime(RUNTIME_COMMAND_PATH);
