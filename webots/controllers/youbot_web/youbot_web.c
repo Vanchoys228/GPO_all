@@ -18,7 +18,6 @@
 #include "controller_drive.h"
 #include "controller_lidar_math.h"
 #include "controller_lidar_scan.h"
-#include "controller_lidar_trace.h"
 #include "controller_lifecycle.h"
 #include "controller_math.h"
 #include "controller_mapping_route_io.h"
@@ -31,7 +30,7 @@
 #include "controller_mapping_survey_grid_adapter.h"
 #include "controller_mapping_survey_safety.h"
 #include "controller_mapping_survey_runtime_safety.h"
-#include "controller_mapping_store.h"
+#include "controller_mapping_runtime.h"
 #include "controller_motion_profile.h"
 #include "controller_navigation_context.h"
 #include "controller_navigation_adapter.h"
@@ -276,11 +275,12 @@ static ControllerWebotsSimulationNodeRegistry zone_node_registry = {0};
 static ControllerWebotsSimulationNodeRegistry surface_zone_registry = {0};
 static ControllerWebotsSimulationNodeRegistry runtime_obstacle_registry = {0};
 static ControllerWebotsZoneSyncContext webots_zone_sync = {0};
-static ControllerMappingStore mapping_store;
+static ControllerMappingRuntime mapping_runtime;
+#define mapping_store mapping_runtime.store
 #define persistent_map mapping_store.persistent_map
 #define persistent_map_count mapping_store.persistent_count
 #define map_dirty mapping_store.persistent_dirty
-static MapCell *camera_map = NULL;
+#define mapping_camera_map mapping_store.camera_map
 #define camera_map_count mapping_store.camera_count
 #define camera_free_map mapping_store.camera_free_map
 #define camera_free_map_count mapping_store.camera_free_count
@@ -845,18 +845,14 @@ static void capture_lidar_trace(void) {
 }
 
 static void merge_trace_into_map(double now_time) {
-  controller_lidar_trace_merge_into_map(
+  controller_mapping_runtime_merge_trace(
+      &mapping_runtime,
       perception_runtime.trace,
       perception_runtime.trace_count,
       now_time,
       MAP_MERGE_MAX_AGE_S,
       MAP_MERGE_MIN_HIT_COUNT,
-      persistent_map,
-      &persistent_map_count,
-      MAX_MAP_POINTS,
-      MAP_CELL_SIZE,
-      EPS,
-      &map_dirty);
+      EPS);
 }
 
 static ControllerWebotsCameraMapSyncContext camera_map_sync_context(void) {
@@ -866,7 +862,7 @@ static ControllerWebotsCameraMapSyncContext camera_map_sync_context(void) {
   read_pose(&robot_x, &robot_y, &heading);
 
   return (ControllerWebotsCameraMapSyncContext){
-      camera_map,
+      mapping_camera_map,
       &camera_map_count,
       MAX_CAMERA_MAP_POINTS,
       camera_free_map,
@@ -904,16 +900,8 @@ static void merge_camera_observation_into_map(double relative_angle, double rang
   }
 }
 
-static ControllerMappingStorePaths mapping_store_paths(void) {
-  return (ControllerMappingStorePaths){
-      MAP_PATH, MAP_TEMP_PATH, MAP_CSV_PATH, MAP_CSV_TEMP_PATH,
-      CAMERA_MAP_PATH, CAMERA_MAP_TEMP_PATH, CAMERA_MAP_CSV_PATH, CAMERA_MAP_CSV_TEMP_PATH};
-}
-
 static void clear_persistent_map() {
-  const ControllerMappingStorePaths paths = mapping_store_paths();
-  controller_mapping_store_clear(&mapping_store, &paths);
-  camera_map = mapping_store.camera_map;
+  controller_mapping_runtime_clear(&mapping_runtime);
 }
 
 static void generate_survey_route(const char *path) {
@@ -923,9 +911,8 @@ static void generate_survey_route(const char *path) {
 }
 
 static void maybe_write_map(void) {
-  if ((step_counter % MAP_WRITE_INTERVAL) != 0) return;
-  const ControllerMappingStorePaths paths = mapping_store_paths();
-  controller_mapping_store_write(&mapping_store, &paths, MAP_CELL_SIZE, CAMERA_MAP_CELL_SIZE);
+  controller_mapping_runtime_write(
+      &mapping_runtime, (step_counter % MAP_WRITE_INTERVAL) == 0);
 }
 
 
@@ -2290,9 +2277,15 @@ int main(int argc, char **argv) {
   };
   reset_robot_pose();
   controller_runtime_init(&controller_runtime);
-  controller_mapping_store_init(&mapping_store);
+  const ControllerMappingRuntimeConfig mapping_config = {
+      .paths = {MAP_PATH, MAP_TEMP_PATH, MAP_CSV_PATH, MAP_CSV_TEMP_PATH,
+                CAMERA_MAP_PATH, CAMERA_MAP_TEMP_PATH, CAMERA_MAP_CSV_PATH,
+                CAMERA_MAP_CSV_TEMP_PATH},
+      .map_cell_size = MAP_CELL_SIZE,
+      .camera_cell_size = CAMERA_MAP_CELL_SIZE,
+  };
+  controller_mapping_runtime_init(&mapping_runtime, &mapping_config);
   controller_route_zone_service_init(&route_zone_service);
-  camera_map = mapping_store.camera_map;
   clear_persistent_map();
   controller_webots_camera_adapter_remove_frames(
       CAMERA_FRAME_BMP_PATH,
