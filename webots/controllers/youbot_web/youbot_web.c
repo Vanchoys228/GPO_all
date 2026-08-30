@@ -26,10 +26,9 @@
 #include "controller_mapping_scan.h"
 #include "controller_mapping_scan_service.h"
 #include "controller_mapping_scan_transition.h"
-#include "controller_mapping_survey_escape.h"
-#include "controller_mapping_survey_escape_safety.h"
 #include "controller_mapping_survey_grid_adapter.h"
 #include "controller_mapping_survey_safety.h"
+#include "controller_mapping_survey_safety_service.h"
 #include "controller_mapping_survey_runtime_safety.h"
 #include "controller_mapping_runtime.h"
 #include "controller_motion_profile.h"
@@ -281,6 +280,7 @@ static ControllerWebotsSimulationNodeRegistry surface_zone_registry = {0};
 static ControllerWebotsSimulationNodeRegistry runtime_obstacle_registry = {0};
 static ControllerWebotsZoneSyncContext webots_zone_sync = {0};
 static ControllerMappingRuntime mapping_runtime;
+static ControllerMappingSurveySafetyService mapping_survey_safety_service;
 #define mapping_store mapping_runtime.store
 #define persistent_map mapping_store.persistent_map
 #define persistent_map_count mapping_store.persistent_count
@@ -895,12 +895,8 @@ static void maybe_write_map(void) {
 
 
 static ControllerMappingSurveySafetyContext mapping_survey_safety_context(void) {
-  return (ControllerMappingSurveySafetyContext){
-      &controller_runtime.limit_zones, persistent_map, persistent_map_count,
-      perception_runtime.trace, perception_runtime.trace_count, wb_robot_get_time(),
-      LIDAR_TRACE_TTL_SECONDS, 0.18, MAPPING_SURVEY_MAX_EXTENT_X,
-      MAPPING_SURVEY_MAX_EXTENT_Y, MAPPING_SURVEY_MAP_OBSTACLE_CLEARANCE,
-      MAPPING_SURVEY_GRID_CELL};
+  return controller_mapping_survey_safety_service_context(
+      &mapping_survey_safety_service, wb_robot_get_time());
 }
 
 static int survey_map_obstacle_near(double x, double y, double clearance) {
@@ -948,26 +944,18 @@ static int mapping_survey_segment_stays_in_room(double ax, double ay, double bx,
   return controller_mapping_survey_segment_stays_in_room(room, ax, ay, bx, by, MAPPING_SURVEY_GRID_CELL);
 }
 
-static int mapping_survey_escape_candidate_allowed(void *context, const Waypoint *candidate) {
-  const SurveyPoint *robot = context;
-  const ControllerMappingSurveyEscapeSafetyContext safety = {
-      mapping_survey_safety_context(),
-      controller_runtime.mapping_survey.room_zone_index,
-      MAPPING_SURVEY_GRID_CELL,
+static int find_mapping_survey_escape_waypoint(double x, double y, int start_index) {
+  return controller_mapping_survey_safety_service_find_escape_waypoint(
+      &mapping_survey_safety_service,
+      x,
+      y,
+      start_index,
+      MAPPING_SURVEY_ESCAPE_MIN_TARGET_DISTANCE,
+      MAPPING_SURVEY_ESCAPE_SCAN_AHEAD,
       MAPPING_SURVEY_ESCAPE_OBSTACLE_CLEARANCE,
       MAPPING_SURVEY_ESCAPE_SEGMENT_CLEARANCE,
       LIDAR_NEAR_ROBOT_IGNORE_RADIUS,
-  };
-  return controller_mapping_survey_escape_candidate_allowed(&safety, *robot, candidate);
-}
-
-static int find_mapping_survey_escape_waypoint(double x, double y, int start_index) {
-  const SurveyPoint robot = {x, y};
-  const ControllerMappingSurveyEscapeInput input = {
-      &controller_runtime.route, controller_runtime.mapping_survey.route_active, start_index,
-      x, y, MAPPING_SURVEY_ESCAPE_MIN_TARGET_DISTANCE, MAPPING_SURVEY_ESCAPE_SCAN_AHEAD};
-  return controller_mapping_survey_find_escape_waypoint(
-      &input, mapping_survey_escape_candidate_allowed, (void *)&robot);
+      wb_robot_get_time());
 }
 
 #define survey_route_add(route, count, x, y) \
@@ -1552,14 +1540,14 @@ static void wait_for_fresh_route() {
 }
 
 static int mapping_survey_scan_point_allowed(double x, double y) {
-  const ControllerMappingSurveySafetyContext context = mapping_survey_safety_context();
-  return controller_mapping_survey_runtime_scan_point_allowed(
-      &context,
+  return controller_mapping_survey_safety_service_scan_point_allowed(
+      &mapping_survey_safety_service,
       x,
       y,
       controller_runtime.mapping_survey.room_zone_index,
       ZONE_CLEARANCE,
-      ZONE_CLEARANCE * 0.68);
+      ZONE_CLEARANCE * 0.68,
+      wb_robot_get_time());
 }
 
 static int mapping_survey_scan_point_allowed_callback(void *context, double x, double y) {
@@ -2090,6 +2078,19 @@ int main(int argc, char **argv) {
       .camera_cell_size = CAMERA_MAP_CELL_SIZE,
   };
   controller_mapping_runtime_init(&mapping_runtime, &mapping_config);
+  controller_mapping_survey_safety_service_init(
+      &mapping_survey_safety_service,
+      &controller_runtime,
+      &mapping_runtime,
+      &perception_runtime,
+      (ControllerMappingSurveySafetyServiceConfig){
+          LIDAR_TRACE_TTL_SECONDS,
+          0.18,
+          MAPPING_SURVEY_MAX_EXTENT_X,
+          MAPPING_SURVEY_MAX_EXTENT_Y,
+          MAPPING_SURVEY_MAP_OBSTACLE_CLEARANCE,
+          MAPPING_SURVEY_GRID_CELL,
+      });
   controller_route_zone_service_init(&route_zone_service);
   controller_route_zone_reload_service_init(
       &route_zone_reload_service,
