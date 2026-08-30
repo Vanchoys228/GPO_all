@@ -1,12 +1,9 @@
 #ifndef YOUBOT_WEB_CONTROLLER_WEBOTS_CAMERA_ADAPTER_H
 #define YOUBOT_WEB_CONTROLLER_WEBOTS_CAMERA_ADAPTER_H
 
-typedef struct {
-  char file_name[64];
-  char mime_type[32];
-  int sequence;
-  double time;
-} ControllerWebotsCameraFrameMetadata;
+#include "controller_perception_runtime.h"
+
+typedef ControllerCameraFrameMetadata ControllerWebotsCameraFrameMetadata;
 
 int controller_webots_camera_adapter_publish_frame(
     const char *temp_path,

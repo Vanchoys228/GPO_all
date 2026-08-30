@@ -47,6 +47,7 @@
 #include "controller_navigation_zone_guard.h"
 #include "controller_obstacle_map.h"
 #include "controller_paths.h"
+#include "controller_perception_runtime.h"
 #include "controller_route.h"
 #include "controller_route_zone_service.h"
 #include "controller_runtime.h"
@@ -275,8 +276,6 @@ static ControllerWebotsSimulationNodeRegistry zone_node_registry = {0};
 static ControllerWebotsSimulationNodeRegistry surface_zone_registry = {0};
 static ControllerWebotsSimulationNodeRegistry runtime_obstacle_registry = {0};
 static ControllerWebotsZoneSyncContext webots_zone_sync = {0};
-static ObstacleTracePoint obstacle_trace[MAX_OBSTACLE_TRACE_POINTS];
-static int obstacle_trace_count = 0;
 static ControllerMappingStore mapping_store;
 #define persistent_map mapping_store.persistent_map
 #define persistent_map_count mapping_store.persistent_count
@@ -286,32 +285,7 @@ static MapCell *camera_map = NULL;
 #define camera_free_map mapping_store.camera_free_map
 #define camera_free_map_count mapping_store.camera_free_count
 #define camera_map_dirty mapping_store.camera_dirty
-static int lidar_available = 0;
-static int lidar_resolution = 0;
-static double lidar_fov = 0.0;
-static double lidar_max_range = 0.0;
-static int lidar_last_hit_count = 0;
-static int lidar_front_hit_count = 0;
-static double lidar_front_min_range = 0.0;
-static double lidar_center_min_range = 0.0;
-static double lidar_left_front_min_range = 0.0;
-static double lidar_right_front_min_range = 0.0;
-static double lidar_left_min_range = 0.0;
-static double lidar_right_min_range = 0.0;
-static int camera_available = 0;
-static int camera_width = 0;
-static int camera_height = 0;
-static double camera_fov = 0.0;
-static ControllerWebotsCameraFrameMetadata camera_frame_metadata = {
-    "camera_frame.bmp", "image/bmp", 0, 0.0};
-static int camera_obstacle_visible = 0;
-static double camera_obstacle_score = 0.0;
-static double camera_obstacle_center_offset = 0.0;
-static double camera_obstacle_angle = 0.0;
-static double camera_obstacle_range = 0.0;
-static int camera_detection_count = 0;
-static int camera_obstacle_update_step = -1;
-static int camera_virtual_mode = 0;
+static ControllerPerceptionRuntime perception_runtime;
 static int step_counter = 0;
 static ControllerWebotsNavigationState navigation_state;
 #define navigation_status navigation_state.status
@@ -427,26 +401,32 @@ static void init_sensors(void) {
           CAMERA_FRAME_WIDTH,
           CAMERA_FRAME_HEIGHT,
           1.05);
-  lidar_available = sensor_state.lidar_available;
-  lidar_resolution = sensor_state.lidar_resolution;
-  lidar_fov = sensor_state.lidar_fov;
-  lidar_max_range = sensor_state.lidar_max_range;
-  camera_available = sensor_state.camera_available;
-  camera_virtual_mode = sensor_state.camera_virtual_mode;
-  camera_width = sensor_state.camera_width;
-  camera_height = sensor_state.camera_height;
-  camera_fov = sensor_state.camera_fov;
+  const ControllerPerceptionSensorMetadata metadata = {
+      sensor_state.lidar_available,
+      sensor_state.lidar_resolution,
+      sensor_state.lidar_fov,
+      sensor_state.lidar_max_range,
+      sensor_state.camera_available,
+      sensor_state.camera_virtual_mode,
+      sensor_state.camera_width,
+      sensor_state.camera_height,
+      sensor_state.camera_fov,
+  };
+  controller_perception_runtime_configure(&perception_runtime, &metadata);
 }
 
 static double estimate_camera_range_from_lidar(double relative_angle, double fallback_range) {
   return controller_webots_camera_range_from_lidar(
-      &webots_sensors, lidar_available, lidar_resolution, lidar_fov,
+      &webots_sensors,
+      perception_runtime.lidar.available,
+      perception_runtime.lidar.resolution,
+      perception_runtime.lidar.fov,
       relative_angle, CAMERA_RANGE_SEARCH_WINDOW_RAD, LIDAR_MIN_TRACE_RANGE,
       LIDAR_MAX_TRACE_RANGE, fallback_range);
 }
 
 static void merge_camera_visible_frustum_into_map(double effective_fov, double default_range) {
-  if (!camera_available) return;
+  if (!perception_runtime.camera.available) return;
 
   const double half_fov = fmax(effective_fov, 0.8) * 0.5;
   for (int i = 0; i <= 8; ++i) {
@@ -459,41 +439,45 @@ static void merge_camera_visible_frustum_into_map(double effective_fov, double d
 }
 
 static void update_camera_obstacle_hint(void) {
-  camera_obstacle_update_step = step_counter;
-  camera_obstacle_visible = 0;
-  camera_obstacle_score = 0.0;
-  camera_obstacle_center_offset = 0.0;
-  camera_obstacle_angle = 0.0;
-  camera_obstacle_range = 0.0;
-  camera_detection_count = 0;
+  controller_perception_runtime_reset_camera_observation(
+      &perception_runtime, step_counter);
 
-  if (!camera_available || !controller_webots_sensors_has_camera(&webots_sensors) ||
-      camera_width <= 0 || camera_height <= 0) return;
+  if (!perception_runtime.camera.available ||
+      !controller_webots_sensors_has_camera(&webots_sensors) ||
+      perception_runtime.camera.width <= 0 || perception_runtime.camera.height <= 0) return;
 
   const unsigned char *image = controller_webots_sensors_camera_image(&webots_sensors);
   if (!image) return;
 
-  const double effective_fov = camera_fov > EPS ? camera_fov : 1.05;
+  const double effective_fov =
+      perception_runtime.camera.fov > EPS ? perception_runtime.camera.fov : 1.05;
   merge_camera_visible_frustum_into_map(effective_fov, CAMERA_RANGE_FALLBACK_M);
 
   ControllerWebotsCameraPerception perception;
   controller_webots_camera_perception_analyze(
-      image, camera_width, camera_height, effective_fov,
+      image,
+      perception_runtime.camera.width,
+      perception_runtime.camera.height,
+      effective_fov,
       CAMERA_OBSTACLE_MIN_SCORE, &perception);
-  camera_obstacle_score = perception.score;
+  ControllerPerceptionCameraObservation observation = {
+      .score = perception.score,
+      .update_step = step_counter,
+  };
   if (perception.visible) {
-    camera_obstacle_visible = 1;
-    camera_obstacle_center_offset = perception.center_offset;
-    camera_obstacle_angle = perception.angle;
-    camera_obstacle_range =
-        estimate_camera_range_from_lidar(camera_obstacle_angle, perception.fallback_range_m);
-    camera_detection_count = perception.detection_count;
-    merge_camera_free_ray_into_map(camera_obstacle_angle, camera_obstacle_range, 2);
+    observation.visible = 1;
+    observation.center_offset = perception.center_offset;
+    observation.angle = perception.angle;
+    observation.range =
+        estimate_camera_range_from_lidar(observation.angle, perception.fallback_range_m);
+    observation.detection_count = perception.detection_count;
+    merge_camera_free_ray_into_map(observation.angle, observation.range, 2);
     merge_camera_observation_into_map(
-        camera_obstacle_angle,
-        camera_obstacle_range,
+        observation.angle,
+        observation.range,
         perception.confidence_boost);
   }
+  controller_perception_runtime_update_camera(&perception_runtime, &observation);
 }
 
 static void draw_virtual_camera_overlay(unsigned char *pixels, double effective_fov) {
@@ -522,13 +506,13 @@ static int write_virtual_camera_frame() {
   ControllerCameraVirtualSummary cluster_summary = {0};
   controller_camera_render_background(pixels, CAMERA_FRAME_WIDTH, CAMERA_FRAME_HEIGHT);
 
-  camera_obstacle_visible = 0;
-  camera_obstacle_score = 0.0;
-  camera_obstacle_center_offset = 0.0;
+  controller_perception_runtime_reset_camera_observation(
+      &perception_runtime, step_counter);
 
-  const double effective_fov = camera_fov > EPS ? camera_fov : 1.05;
+  const double effective_fov =
+      perception_runtime.camera.fov > EPS ? perception_runtime.camera.fov : 1.05;
   const ControllerCameraVirtualConfig virtual_config = {
-      lidar_fov,
+      perception_runtime.lidar.fov,
       effective_fov,
       LIDAR_MIN_TRACE_RANGE,
       LIDAR_MAX_TRACE_RANGE,
@@ -536,16 +520,23 @@ static int write_virtual_camera_frame() {
       LIDAR_AVOID_STOP_RANGE,
       0.42,
   };
-  if (lidar_available && controller_webots_sensors_has_lidar(&webots_sensors) &&
-      lidar_resolution > 1 && lidar_fov > EPS) {
+  if (perception_runtime.lidar.available &&
+      controller_webots_sensors_has_lidar(&webots_sensors) &&
+      perception_runtime.lidar.resolution > 1 && perception_runtime.lidar.fov > EPS) {
     const float *ranges = controller_webots_sensors_lidar_ranges(&webots_sensors);
     controller_camera_virtual_collect(
-        ranges, lidar_resolution, &virtual_config, clusters, CAMERA_MAX_VIRTUAL_CLUSTERS,
+        ranges,
+        perception_runtime.lidar.resolution,
+        &virtual_config,
+        clusters,
+        CAMERA_MAX_VIRTUAL_CLUSTERS,
         &cluster_summary);
 
-    for (int i = 0; ranges && i < lidar_resolution; ++i) {
-      const double alpha = (double)i / (double)(lidar_resolution - 1);
-      const double beam_angle = -0.5 * lidar_fov + alpha * lidar_fov;
+    for (int i = 0; ranges && i < perception_runtime.lidar.resolution; ++i) {
+      const double alpha =
+          (double)i / (double)(perception_runtime.lidar.resolution - 1);
+      const double beam_angle =
+          -0.5 * perception_runtime.lidar.fov + alpha * perception_runtime.lidar.fov;
       const double range = ranges[i];
       const int valid = fabs(beam_angle) <= effective_fov * 0.5 &&
                         controller_math_is_finite(range) && range > LIDAR_MIN_TRACE_RANGE;
@@ -578,35 +569,41 @@ static int write_virtual_camera_frame() {
 
   const ControllerCameraVirtualObservation virtual_observation =
       controller_camera_virtual_observation(&cluster_summary, CAMERA_OBSTACLE_MIN_SCORE);
-  camera_obstacle_score = virtual_observation.score;
+  ControllerPerceptionCameraObservation observation = {
+      .score = virtual_observation.score,
+      .update_step = step_counter,
+  };
   if (virtual_observation.visible) {
-      camera_obstacle_visible = 1;
-      camera_obstacle_center_offset = virtual_observation.center_offset;
-      camera_obstacle_angle = camera_obstacle_center_offset * effective_fov * 0.5;
-      camera_obstacle_range =
-          estimate_camera_range_from_lidar(camera_obstacle_angle, CAMERA_RANGE_FALLBACK_M);
-      camera_detection_count = virtual_observation.detection_count;
+      observation.visible = 1;
+      observation.center_offset = virtual_observation.center_offset;
+      observation.angle = observation.center_offset * effective_fov * 0.5;
+      observation.range =
+          estimate_camera_range_from_lidar(observation.angle, CAMERA_RANGE_FALLBACK_M);
+      observation.detection_count = virtual_observation.detection_count;
   }
+  controller_perception_runtime_update_camera(&perception_runtime, &observation);
 
   draw_virtual_camera_overlay(pixels, effective_fov);
   return write_bmp24(CAMERA_FRAME_BMP_TEMP_PATH, pixels, CAMERA_FRAME_WIDTH, CAMERA_FRAME_HEIGHT);
 }
 
 static void maybe_write_camera_frame(void) {
-  if (!camera_available) return;
-  if ((step_counter % CAMERA_WRITE_INTERVAL) != 0) return;
+  const ControllerCameraPublicationRequest request =
+      controller_perception_runtime_camera_publication_request(
+          &perception_runtime, (step_counter % CAMERA_WRITE_INTERVAL) == 0);
+  if (!request.requested) return;
 
-  if (camera_virtual_mode) {
+  if (request.virtual_mode) {
     if (write_virtual_camera_frame() == 0) {
       controller_webots_camera_adapter_publish_frame(
           CAMERA_FRAME_BMP_TEMP_PATH, CAMERA_FRAME_BMP_PATH, "camera_frame.bmp", "image/bmp",
-          wb_robot_get_time(), &camera_frame_metadata);
+          wb_robot_get_time(), &perception_runtime.camera.frame);
     }
     return;
   }
 
   if (!controller_webots_sensors_has_camera(&webots_sensors)) return;
-  if (camera_obstacle_update_step != step_counter) {
+  if (perception_runtime.camera.obstacle_update_step != step_counter) {
     update_camera_obstacle_hint();
   }
 
@@ -614,12 +611,12 @@ static void maybe_write_camera_frame(void) {
           &webots_sensors, CAMERA_FRAME_JPEG_TEMP_PATH, 70) == 0) {
     controller_webots_camera_adapter_publish_frame(
         CAMERA_FRAME_JPEG_TEMP_PATH, CAMERA_FRAME_JPEG_PATH, "camera_frame.jpg", "image/jpeg",
-        wb_robot_get_time(), &camera_frame_metadata);
+        wb_robot_get_time(), &perception_runtime.camera.frame);
   }
 }
 
 static void maybe_update_camera_perception(void) {
-  if (!camera_available || camera_virtual_mode ||
+  if (!perception_runtime.camera.available || perception_runtime.camera.virtual_mode ||
       !controller_webots_sensors_has_camera(&webots_sensors)) return;
   if ((step_counter % CAMERA_CAPTURE_INTERVAL) != 0) return;
   update_camera_obstacle_hint();
@@ -727,11 +724,14 @@ static void compute_lidar_obstacle_context(LidarObstacleContext *context,
   if (!context) return;
 
   const double effective_max_range =
-      lidar_max_range > EPS ? fmin(lidar_max_range, LIDAR_MAX_TRACE_RANGE) : LIDAR_MAX_TRACE_RANGE;
+      perception_runtime.lidar.max_range > EPS
+          ? fmin(perception_runtime.lidar.max_range, LIDAR_MAX_TRACE_RANGE)
+          : LIDAR_MAX_TRACE_RANGE;
   controller_lidar_context_init(context, effective_max_range);
 
-  if (!lidar_available || !controller_webots_sensors_has_lidar(&webots_sensors) ||
-      lidar_resolution <= 1 || lidar_fov <= EPS) return;
+  if (!perception_runtime.lidar.available ||
+      !controller_webots_sensors_has_lidar(&webots_sensors) ||
+      perception_runtime.lidar.resolution <= 1 || perception_runtime.lidar.fov <= EPS) return;
 
   const float *ranges = controller_webots_sensors_lidar_ranges(&webots_sensors);
   if (!ranges) return;
@@ -745,7 +745,7 @@ static void compute_lidar_obstacle_context(LidarObstacleContext *context,
       robot_x + cos(heading) * LIDAR_LOCAL_X - sin(heading) * LIDAR_LOCAL_Y;
   const double sensor_origin_y =
       robot_y + sin(heading) * LIDAR_LOCAL_X + cos(heading) * LIDAR_LOCAL_Y;
-  const double sigma = fmax(lidar_fov * 0.22, 0.22);
+  const double sigma = fmax(perception_runtime.lidar.fov * 0.22, 0.22);
   const ControllerLidarContextConfig context_config = {
       effective_max_range,
       LIDAR_TRACK_CAUTION_RANGE,
@@ -758,7 +758,7 @@ static void compute_lidar_obstacle_context(LidarObstacleContext *context,
       sigma,
   };
 
-  for (int i = 0; i < lidar_resolution; i += LIDAR_SAMPLE_STRIDE) {
+  for (int i = 0; i < perception_runtime.lidar.resolution; i += LIDAR_SAMPLE_STRIDE) {
     const double raw_range = (double)ranges[i];
     const int range_is_finite = controller_math_is_finite(raw_range);
     const double sensed_range = range_is_finite
@@ -770,7 +770,7 @@ static void compute_lidar_obstacle_context(LidarObstacleContext *context,
         raw_range < effective_max_range - 0.02 &&
         controller_lidar_hit_is_consistent(
             ranges,
-            lidar_resolution,
+            perception_runtime.lidar.resolution,
             i,
             raw_range,
             effective_max_range,
@@ -778,8 +778,11 @@ static void compute_lidar_obstacle_context(LidarObstacleContext *context,
             LIDAR_MIN_TRACE_RANGE,
             LIDAR_RANGE_JUMP_TOLERANCE);
 
-    const double alpha = lidar_resolution > 1 ? (double)i / (double)(lidar_resolution - 1) : 0.5;
-    const double beam_angle = -0.5 * lidar_fov + alpha * lidar_fov;
+    const double alpha = perception_runtime.lidar.resolution > 1
+                             ? (double)i / (double)(perception_runtime.lidar.resolution - 1)
+                             : 0.5;
+    const double beam_angle =
+        -0.5 * perception_runtime.lidar.fov + alpha * perception_runtime.lidar.fov;
     int expected_zone_wall = 0;
 
     if (obstacle_hit) {
@@ -811,27 +814,10 @@ static void compute_lidar_obstacle_context(LidarObstacleContext *context,
 }
 
 static void capture_lidar_trace(void) {
-  lidar_last_hit_count = 0;
-  lidar_front_hit_count = 0;
-  lidar_front_min_range = LIDAR_MAX_TRACE_RANGE;
-  lidar_center_min_range = LIDAR_MAX_TRACE_RANGE;
-  lidar_left_front_min_range = LIDAR_MAX_TRACE_RANGE;
-  lidar_right_front_min_range = LIDAR_MAX_TRACE_RANGE;
-  lidar_left_min_range = LIDAR_MAX_TRACE_RANGE;
-  lidar_right_min_range = LIDAR_MAX_TRACE_RANGE;
-  if (!lidar_available || !controller_webots_sensors_has_lidar(&webots_sensors) ||
-      lidar_resolution <= 1 || lidar_fov <= EPS) return;
-
-  const float *ranges = controller_webots_sensors_lidar_ranges(&webots_sensors);
-  if (!ranges) return;
-
   double robot_x = 0.0;
   double robot_y = 0.0;
   double heading = 0.0;
   read_pose(&robot_x, &robot_y, &heading);
-  const double now_time = wb_robot_get_time();
-  controller_lidar_trace_prune(
-      obstacle_trace, &obstacle_trace_count, now_time, LIDAR_TRACE_TTL_SECONDS);
   const ControllerLidarScanConfig scan_config = {
       LIDAR_SAMPLE_STRIDE,
       LIDAR_MIN_TRACE_RANGE,
@@ -847,35 +833,21 @@ static void capture_lidar_trace(void) {
       LIDAR_SNAP_STEP,
       LIDAR_TRACE_SPACING,
   };
-  ControllerLidarScanStats stats;
-  controller_lidar_scan_capture(
+  controller_perception_runtime_capture_lidar(
+      &perception_runtime,
       &scan_config,
-      ranges,
-      lidar_resolution,
-      lidar_fov,
-      lidar_max_range,
+      controller_webots_sensors_lidar_ranges(&webots_sensors),
       robot_x,
       robot_y,
       heading,
-      now_time,
-      obstacle_trace,
-      &obstacle_trace_count,
-      MAX_OBSTACLE_TRACE_POINTS,
-      &stats);
-  lidar_last_hit_count = stats.hit_count;
-  lidar_front_hit_count = stats.front_hit_count;
-  lidar_front_min_range = stats.front_min_range;
-  lidar_center_min_range = stats.center_min_range;
-  lidar_left_front_min_range = stats.left_front_min_range;
-  lidar_right_front_min_range = stats.right_front_min_range;
-  lidar_left_min_range = stats.left_min_range;
-  lidar_right_min_range = stats.right_min_range;
+      wb_robot_get_time(),
+      LIDAR_TRACE_TTL_SECONDS);
 }
 
 static void merge_trace_into_map(double now_time) {
   controller_lidar_trace_merge_into_map(
-      obstacle_trace,
-      obstacle_trace_count,
+      perception_runtime.trace,
+      perception_runtime.trace_count,
       now_time,
       MAP_MERGE_MAX_AGE_S,
       MAP_MERGE_MIN_HIT_COUNT,
@@ -960,7 +932,7 @@ static void maybe_write_map(void) {
 static ControllerMappingSurveySafetyContext mapping_survey_safety_context(void) {
   return (ControllerMappingSurveySafetyContext){
       &controller_runtime.limit_zones, persistent_map, persistent_map_count,
-      obstacle_trace, obstacle_trace_count, wb_robot_get_time(),
+      perception_runtime.trace, perception_runtime.trace_count, wb_robot_get_time(),
       LIDAR_TRACE_TTL_SECONDS, 0.18, MAPPING_SURVEY_MAX_EXTENT_X,
       MAPPING_SURVEY_MAX_EXTENT_Y, MAPPING_SURVEY_MAP_OBSTACLE_CLEARANCE,
       MAPPING_SURVEY_GRID_CELL};
@@ -1886,14 +1858,14 @@ static void run_navigation_step(void) {
   const int avoidance_was_active = controller_runtime.avoidance.active;
   const ControllerNavigationPerceptionInput perception_input = {
       .lidar_context = &lidar_context,
-      .lidar_available = lidar_available,
-      .camera_visible = camera_obstacle_visible,
-      .camera_angle = camera_obstacle_angle,
-      .camera_fov = camera_fov,
-      .camera_range = camera_obstacle_range,
-      .camera_score = camera_obstacle_score,
-      .camera_detection_count = camera_detection_count,
-      .camera_center_offset = camera_obstacle_center_offset,
+      .lidar_available = perception_runtime.lidar.available,
+      .camera_visible = perception_runtime.camera.obstacle_visible,
+      .camera_angle = perception_runtime.camera.obstacle_angle,
+      .camera_fov = perception_runtime.camera.fov,
+      .camera_range = perception_runtime.camera.obstacle_range,
+      .camera_score = perception_runtime.camera.obstacle_score,
+      .camera_detection_count = perception_runtime.camera.detection_count,
+      .camera_center_offset = perception_runtime.camera.obstacle_center_offset,
   };
   ControllerNavigationPerceptionOutput perception_output;
   controller_navigation_perception_prepare(
@@ -2104,7 +2076,7 @@ static void run_navigation_step(void) {
       .runtime_angular_speed_limit = active_angular_speed_limit,
   };
   const ControllerNavigationLidarInput navigation_lidar_input = {
-      .lidar_available = lidar_available,
+      .lidar_available = perception_runtime.lidar.available,
       .center_passage_available = center_passage_available,
       .center_obstacle_range = center_obstacle_range,
       .near_front_range = near_front_range,
@@ -2113,7 +2085,7 @@ static void run_navigation_step(void) {
       .best_gap_beam_angle = lidar_context.best_gap_beam_angle,
       .heading_error = heading_error_to_target,
       .camera_visual_front_obstacle = camera_visual_front_obstacle,
-      .camera_obstacle_center_offset = camera_obstacle_center_offset,
+      .camera_obstacle_center_offset = perception_runtime.camera.obstacle_center_offset,
       .expected_zone_wall_close = expected_zone_wall_close,
       .expected_zone_wall_slowdown = expected_zone_wall_slowdown,
       .expected_front_range = expected_front_range,
@@ -2164,8 +2136,8 @@ static void write_state_snapshot(void) {
 
   ControllerTelemetryPoint trace_points[MAX_OBSTACLE_TRACE_POINTS];
   const int trace_point_count = controller_telemetry_service_collect_trace(
-      obstacle_trace,
-      obstacle_trace_count,
+      perception_runtime.trace,
+      perception_runtime.trace_count,
       simulation_now,
       LIDAR_TRACE_TTL_SECONDS,
       LIDAR_TRACE_MIN_CONFIDENCE,
@@ -2194,34 +2166,34 @@ static void write_state_snapshot(void) {
       active_angular_speed_limit,
   };
   const ControllerTelemetryLidar lidar = {
-      lidar_available,
-      lidar_resolution,
-      lidar_max_range,
-      lidar_last_hit_count,
-      lidar_front_hit_count,
-      lidar_front_min_range,
-      lidar_center_min_range,
-      lidar_left_front_min_range,
-      lidar_right_front_min_range,
-      lidar_left_min_range,
-      lidar_right_min_range,
+      perception_runtime.lidar.available,
+      perception_runtime.lidar.resolution,
+      perception_runtime.lidar.max_range,
+      perception_runtime.lidar.stats.hit_count,
+      perception_runtime.lidar.stats.front_hit_count,
+      perception_runtime.lidar.stats.front_min_range,
+      perception_runtime.lidar.stats.center_min_range,
+      perception_runtime.lidar.stats.left_front_min_range,
+      perception_runtime.lidar.stats.right_front_min_range,
+      perception_runtime.lidar.stats.left_min_range,
+      perception_runtime.lidar.stats.right_min_range,
   };
   const ControllerTelemetryCamera camera = {
-      camera_available,
-      camera_width,
-      camera_height,
-      camera_fov,
-      camera_virtual_mode ? "virtual_lidar" : "webots_camera",
-      camera_frame_metadata.file_name,
-      camera_frame_metadata.mime_type,
-      camera_frame_metadata.sequence,
-      camera_frame_metadata.time,
-      camera_obstacle_visible,
-      camera_obstacle_score,
-      camera_obstacle_center_offset,
-      camera_obstacle_angle,
-      camera_obstacle_range,
-      camera_detection_count,
+      perception_runtime.camera.available,
+      perception_runtime.camera.width,
+      perception_runtime.camera.height,
+      perception_runtime.camera.fov,
+      perception_runtime.camera.virtual_mode ? "virtual_lidar" : "webots_camera",
+      perception_runtime.camera.frame.file_name,
+      perception_runtime.camera.frame.mime_type,
+      perception_runtime.camera.frame.sequence,
+      perception_runtime.camera.frame.time,
+      perception_runtime.camera.obstacle_visible,
+      perception_runtime.camera.obstacle_score,
+      perception_runtime.camera.obstacle_center_offset,
+      perception_runtime.camera.obstacle_angle,
+      perception_runtime.camera.obstacle_range,
+      perception_runtime.camera.detection_count,
   };
   const ControllerTelemetryServiceSnapshotInput snapshot_input = {
       simulation_now,
@@ -2278,6 +2250,7 @@ int main(int argc, char **argv) {
   (void)argv;
 
   control_config = controller_control_config_default();
+  controller_perception_runtime_init(&perception_runtime);
 
   if (!controller_paths_init(&controller_paths, getenv("WEB_STATE_DIR"))) {
     fprintf(stderr, "Failed to initialize Webots state paths.\n");
