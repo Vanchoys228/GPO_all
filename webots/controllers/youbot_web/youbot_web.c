@@ -54,6 +54,7 @@
 #include "controller_route_zone_reload_service.h"
 #include "controller_runtime.h"
 #include "controller_runtime_command.h"
+#include "controller_runtime_command_reload_service.h"
 #include "controller_survey_contour.h"
 #include "controller_survey_contour_adapter.h"
 #include "controller_survey_coverage.h"
@@ -305,8 +306,7 @@ static ControllerWebotsMotionState motion_state = {
 #define active_angular_speed_limit motion_state.limits.angular_speed_rad_s
 #define active_battery_speed_factor motion_state.limits.battery_speed_factor
 static ControllerMotionProfileReloadService motion_profile_reload_service;
-static long long runtime_command_last_modified = -1;
-static long long last_processed_runtime_command_id = -1;
+static ControllerRuntimeCommandReloadService runtime_command_reload_service;
 #define route_avoidance_time_sec application_state.route_avoidance_time_sec
 #define route_avoidance_steps application_state.route_avoidance_steps
 
@@ -1460,21 +1460,6 @@ static int generate_mapping_survey_route(
   return result == CONTROLLER_SURVEY_GENERATE_OK;
 }
 
-static int load_runtime_command(RuntimeCommand *command) {
-  const ControllerRuntimeCommandLimits limits = {
-      SURVEY_X_MIN,
-      SURVEY_X_MAX,
-      SURVEY_Y_MIN,
-      SURVEY_Y_MAX,
-      MAPPING_SURVEY_MAX_EXTENT_X,
-      MAPPING_SURVEY_MAX_EXTENT_Y,
-  };
-  return controller_runtime_command_load_file(
-      RUNTIME_COMMAND_PATH,
-      &limits,
-      command);
-}
-
 static void survey_integration_apply_speed(double speed_mps) {
   configured_cruise_speed_mps =
       clamp_value(speed_mps, MIN_CRUISE_SPEED_MPS, MAX_CRUISE_SPEED_MPS);
@@ -1499,39 +1484,13 @@ static ControllerSurveyIntegrationOps survey_integration_ops(void) {
   return ops;
 }
 
+static void spawn_runtime_obstacle(const RuntimeCommand *command) {
+  controller_webots_zone_sync_spawn_obstacle(&webots_zone_sync, command);
+}
+
 static void maybe_reload_runtime_command(void) {
-  if ((step_counter % RUNTIME_COMMAND_RELOAD_INTERVAL) != 0) return;
-
-  const long long mtime = get_file_mtime(RUNTIME_COMMAND_PATH);
-  if (mtime < 0) return;
-  if (mtime == runtime_command_last_modified) return;
-
-  RuntimeCommand command = {0};
-  if (!load_runtime_command(&command)) {
-    runtime_command_last_modified = mtime;
-    return;
-  }
-
-  runtime_command_last_modified = mtime;
-  if (command.id <= last_processed_runtime_command_id) return;
-  last_processed_runtime_command_id = command.id;
-
-  if (command.has_start_mapping_survey) {
-    const ControllerSurveyIntegrationOps ops = survey_integration_ops();
-    controller_survey_integration_start(
-        ROUTE_PATH,
-        &command,
-        &controller_runtime.route,
-        &controller_runtime.current_waypoint_index,
-        &controller_runtime.route_finished,
-        &controller_runtime.mapping_survey,
-        &ops);
-    return;
-  }
-
-  controller_webots_zone_sync_spawn_obstacle(&webots_zone_sync, &command);
-  clear_error();
-  set_status("runtime_obstacle_spawned");
+  controller_runtime_command_reload_service_run(
+      &runtime_command_reload_service, step_counter, RUNTIME_COMMAND_RELOAD_INTERVAL);
 }
 
 static void maybe_reload_zones(void) {
@@ -2154,7 +2113,23 @@ int main(int argc, char **argv) {
   controller_motion_profile_reload_service_run(&motion_profile_reload_service, 0, 1);
   maybe_reload_zones();
   maybe_reload_surface_zones();
-  runtime_command_last_modified = get_file_mtime(RUNTIME_COMMAND_PATH);
+  const ControllerSurveyIntegrationOps runtime_command_survey_ops = survey_integration_ops();
+  controller_runtime_command_reload_service_init(
+      &runtime_command_reload_service,
+      RUNTIME_COMMAND_PATH,
+      ROUTE_PATH,
+      (ControllerRuntimeCommandLimits){
+          SURVEY_X_MIN,
+          SURVEY_X_MAX,
+          SURVEY_Y_MIN,
+          SURVEY_Y_MAX,
+          MAPPING_SURVEY_MAX_EXTENT_X,
+          MAPPING_SURVEY_MAX_EXTENT_Y,
+      },
+      &controller_runtime,
+      &runtime_command_survey_ops,
+      spawn_runtime_obstacle);
+  runtime_command_reload_service.last_modified = get_file_mtime(RUNTIME_COMMAND_PATH);
 
   if (!controller_webots_pose_is_ready(&webots_pose) || !webots_pose.root_children_field) {
     set_status("error");

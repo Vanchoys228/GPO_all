@@ -57,6 +57,7 @@ controller_route_zone_service.c
 controller_route_zone_reload_service.c
 controller_runtime.c
 controller_runtime_command.c
+controller_runtime_command_reload_service.c
 controller_step.c
 controller_survey_contour.c
 controller_survey_contour_adapter.c
