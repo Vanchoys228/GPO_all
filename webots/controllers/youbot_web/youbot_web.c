@@ -27,6 +27,7 @@
 #include "controller_mapping_scan_service.h"
 #include "controller_mapping_scan_transition.h"
 #include "controller_mapping_survey_contour_service.h"
+#include "controller_mapping_survey_coverage_service.h"
 #include "controller_mapping_survey_grid_adapter.h"
 #include "controller_mapping_survey_safety.h"
 #include "controller_mapping_survey_safety_service.h"
@@ -56,7 +57,6 @@
 #include "controller_runtime.h"
 #include "controller_runtime_command.h"
 #include "controller_runtime_command_reload_service.h"
-#include "controller_survey_coverage.h"
 #include "controller_survey_generator.h"
 #include "controller_survey_grid.h"
 #include "controller_survey_geometry.h"
@@ -903,12 +903,6 @@ static int survey_point_safe(double x, double y, int room_zone_index, double cle
       &context, x, y, room_zone_index, clearance);
 }
 
-static int survey_segment_safe(double ax, double ay, double bx, double by, int room_zone_index, double clearance) {
-  const ControllerMappingSurveySafetyContext context = mapping_survey_safety_context();
-  return controller_mapping_survey_runtime_segment_safe(
-      &context, ax, ay, bx, by, room_zone_index, clearance);
-}
-
 static int survey_known_obstacle_near(double x, double y, double clearance) {
   const ControllerMappingSurveySafetyContext context = mapping_survey_safety_context();
   return controller_mapping_survey_runtime_known_obstacle_near(&context, x, y, clearance);
@@ -953,10 +947,6 @@ static int find_mapping_survey_escape_waypoint(double x, double y, int start_ind
 
 #define survey_route_add(route, count, x, y) \
   controller_survey_route_add((route), (count), MAX_WAYPOINTS, 0.18, (x), (y))
-#define survey_route_add_segment(route, count, from, to) \
-  controller_survey_route_add_segment( \
-      (route), (count), MAX_WAYPOINTS, 0.18, MAPPING_SURVEY_MAX_CONTOUR_STEP, (from), (to))
-
 static int mapping_survey_contour_point_is_safe(
     void *context,
     double x,
@@ -1010,155 +1000,20 @@ static int survey_build_grid(
       &adapter, grid, room_zone_index, (SurveyPoint){robot_x, robot_y}, clearance);
 }
 
-#define survey_flood_component(grid, robot_x, robot_y) \
-  controller_survey_flood_component((grid), (robot_x), (robot_y))
-
 #define append_grid_boundary_contour_phase(grid, route, route_count, robot_x, robot_y) \
   controller_survey_append_boundary_contour( \
       (grid), (route), (route_count), MAX_WAYPOINTS, MAPPING_SURVEY_MAX_BOUNDARY_POINTS, \
       (robot_x), (robot_y), 0.18, MAPPING_SURVEY_MAX_CONTOUR_STEP, 3.2, MAPPING_SURVEY_RDP_EPS)
 
-static int build_scanline_intervals(
-    double y,
-    int room_zone_index,
-    const SurveyGrid *grid,
-    SurveyInterval *intervals,
-    int max_intervals) {
-  return controller_survey_build_horizontal_intervals(
-      y,
-      room_zone_index,
-      grid,
-      &controller_runtime.limit_zones,
-      persistent_map,
-      persistent_map_count,
+static ControllerMappingSurveyCoverageService mapping_survey_coverage_service(void) {
+  return (ControllerMappingSurveyCoverageService){
+      mapping_survey_safety_context(),
       MAPPING_SURVEY_INTERIOR_OFFSET,
       MAPPING_SURVEY_MIN_STRIP_LENGTH,
+      MAPPING_SURVEY_STRIP,
+      0.18,
       EPS,
-      intervals,
-      max_intervals);
-}
-
-#define survey_find_grid_path(grid, from, to, path, path_count, max_path_count) \
-  controller_survey_find_grid_path((grid), (from), (to), (path), (path_count), (max_path_count))
-
-static void append_safe_transition(
-    SurveyGrid *grid,
-    SurveyPoint *route,
-    int *route_count,
-    SurveyPoint target,
-    int room_zone_index) {
-  if (*route_count <= 0) {
-    survey_route_add(route, route_count, target.x, target.y);
-    return;
-  }
-
-  const SurveyPoint from = route[*route_count - 1];
-  if (survey_segment_safe(from.x, from.y, target.x, target.y, room_zone_index, MAPPING_SURVEY_INTERIOR_OFFSET)) {
-    survey_route_add(route, route_count, target.x, target.y);
-    return;
-  }
-
-  SurveyPoint path[256];
-  int path_count = 0;
-  if (grid && survey_find_grid_path(grid, from, target, path, &path_count, 256)) {
-    for (int i = 1; i < path_count; ++i) {
-      survey_route_add(route, route_count, path[i].x, path[i].y);
-    }
-    return;
-  }
-}
-
-static void append_survey_coverage_segment(
-    SurveyGrid *grid,
-    SurveyPoint *route,
-    int *route_count,
-    int room_zone_index,
-    SurveyPoint a,
-    SurveyPoint b) {
-  if (!survey_point_safe(a.x, a.y, room_zone_index, MAPPING_SURVEY_INTERIOR_OFFSET) ||
-      !survey_point_safe(b.x, b.y, room_zone_index, MAPPING_SURVEY_INTERIOR_OFFSET)) {
-    return;
-  }
-  append_safe_transition(grid, route, route_count, a, room_zone_index);
-  if (survey_segment_safe(a.x, a.y, b.x, b.y, room_zone_index, MAPPING_SURVEY_INTERIOR_OFFSET)) {
-    survey_route_add(route, route_count, b.x, b.y);
-  } else {
-    append_safe_transition(grid, route, route_count, b, room_zone_index);
-  }
-}
-
-static int build_clipped_horizontal_intervals(
-    SurveyGrid *grid,
-    int room_zone_index,
-    double y,
-    double min_x,
-    double max_x,
-    SurveyInterval *intervals,
-    int max_intervals) {
-  SurveyInterval raw[64];
-  const int raw_count = build_scanline_intervals(y, room_zone_index, grid, raw, 64);
-  return controller_survey_clip_intervals(
-      raw, raw_count, min_x, max_x, MAPPING_SURVEY_MIN_STRIP_LENGTH,
-      intervals, max_intervals);
-}
-
-static int build_clipped_vertical_intervals(
-    SurveyGrid *grid,
-    int room_zone_index,
-    double x,
-    double min_y,
-    double max_y,
-    SurveyInterval *intervals,
-    int max_intervals);
-
-typedef struct {
-  SurveyGrid *grid;
-  SurveyPoint *route;
-  int *route_count;
-  int room_zone_index;
-  double interval_min;
-  double interval_max;
-  int vertical;
-} SurveyCoverageContext;
-
-static int build_coverage_intervals(
-    void *context,
-    double coordinate,
-    SurveyInterval *intervals,
-    int capacity) {
-  SurveyCoverageContext *coverage = context;
-  if (coverage->vertical) {
-    return build_clipped_vertical_intervals(
-        coverage->grid,
-        coverage->room_zone_index,
-        coordinate,
-        coverage->interval_min,
-        coverage->interval_max,
-        intervals,
-        capacity);
-  }
-  return build_clipped_horizontal_intervals(
-      coverage->grid,
-      coverage->room_zone_index,
-      coordinate,
-      coverage->interval_min,
-      coverage->interval_max,
-      intervals,
-      capacity);
-}
-
-static void append_coverage_segment(
-    void *context,
-    SurveyPoint start,
-    SurveyPoint end) {
-  SurveyCoverageContext *coverage = context;
-  append_survey_coverage_segment(
-      coverage->grid,
-      coverage->route,
-      coverage->route_count,
-      coverage->room_zone_index,
-      start,
-      end);
+      MAX_WAYPOINTS};
 }
 
 static void append_scanline_coverage_phase(
@@ -1166,57 +1021,9 @@ static void append_scanline_coverage_phase(
     SurveyPoint *route,
     int *route_count,
     int room_zone_index) {
-  double min_x = 0.0;
-  double max_x = 0.0;
-  double min_y = 0.0;
-  double max_y = 0.0;
-  controller_survey_get_coverage_bounds(
-      grid, &controller_runtime.limit_zones, room_zone_index, MAPPING_SURVEY_INTERIOR_OFFSET,
-      &min_x, &max_x, &min_y, &max_y);
-
-  const SurveyPoint current =
-      *route_count > 0 ? route[*route_count - 1] : (SurveyPoint){min_x, min_y};
-  SurveyCoverageContext context = {
-      grid, route, route_count, room_zone_index, min_x, max_x, 0};
-  controller_survey_append_best_axis_coverage(
-      min_y, max_y, MAPPING_SURVEY_STRIP, 0, current,
-      route_count, MAX_WAYPOINTS, 64,
-      build_coverage_intervals, append_coverage_segment, &context);
-}
-
-static int build_vertical_intervals(
-    double x,
-    int room_zone_index,
-    const SurveyGrid *grid,
-    SurveyInterval *intervals,
-    int max_intervals) {
-  return controller_survey_build_vertical_intervals(
-      x,
-      room_zone_index,
-      grid,
-      &controller_runtime.limit_zones,
-      persistent_map,
-      persistent_map_count,
-      MAPPING_SURVEY_INTERIOR_OFFSET,
-      MAPPING_SURVEY_MIN_STRIP_LENGTH,
-      EPS,
-      intervals,
-      max_intervals);
-}
-
-static int build_clipped_vertical_intervals(
-    SurveyGrid *grid,
-    int room_zone_index,
-    double x,
-    double min_y,
-    double max_y,
-    SurveyInterval *intervals,
-    int max_intervals) {
-  SurveyInterval raw[64];
-  const int raw_count = build_vertical_intervals(x, room_zone_index, grid, raw, 64);
-  return controller_survey_clip_intervals(
-      raw, raw_count, min_y, max_y, MAPPING_SURVEY_MIN_STRIP_LENGTH,
-      intervals, max_intervals);
+  const ControllerMappingSurveyCoverageService service = mapping_survey_coverage_service();
+  controller_mapping_survey_coverage_service_append_horizontal(
+      &service, grid, route, route_count, room_zone_index);
 }
 
 static void append_vertical_coverage_phase(
@@ -1224,22 +1031,9 @@ static void append_vertical_coverage_phase(
     SurveyPoint *route,
     int *route_count,
     int room_zone_index) {
-  double min_x = 0.0;
-  double max_x = 0.0;
-  double min_y = 0.0;
-  double max_y = 0.0;
-  controller_survey_get_coverage_bounds(
-      grid, &controller_runtime.limit_zones, room_zone_index, MAPPING_SURVEY_INTERIOR_OFFSET,
-      &min_x, &max_x, &min_y, &max_y);
-
-  const SurveyPoint current =
-      *route_count > 0 ? route[*route_count - 1] : (SurveyPoint){min_x, min_y};
-  SurveyCoverageContext context = {
-      grid, route, route_count, room_zone_index, min_y, max_y, 1};
-  controller_survey_append_best_axis_coverage(
-      min_x, max_x, MAPPING_SURVEY_STRIP, 1, current,
-      route_count, MAX_WAYPOINTS, 64,
-      build_coverage_intervals, append_coverage_segment, &context);
+  const ControllerMappingSurveyCoverageService service = mapping_survey_coverage_service();
+  controller_mapping_survey_coverage_service_append_vertical(
+      &service, grid, route, route_count, room_zone_index);
 }
 
 static void write_mapping_survey_route_file(const char *path, const SurveyPoint *route, int route_count) {
@@ -1349,7 +1143,7 @@ static int survey_generator_build_grid(
 
 static int survey_generator_flood_grid(void *context, SurveyPoint robot) {
   SurveyGeneratorContext *generator = context;
-  return survey_flood_component(&generator->grid, robot.x, robot.y);
+  return controller_survey_flood_component(&generator->grid, robot.x, robot.y);
 }
 
 static int survey_generator_build_route(
