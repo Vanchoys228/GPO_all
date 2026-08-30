@@ -26,6 +26,7 @@
 #include "controller_mapping_scan.h"
 #include "controller_mapping_scan_service.h"
 #include "controller_mapping_scan_transition.h"
+#include "controller_mapping_survey_contour_service.h"
 #include "controller_mapping_survey_grid_adapter.h"
 #include "controller_mapping_survey_safety.h"
 #include "controller_mapping_survey_safety_service.h"
@@ -55,8 +56,6 @@
 #include "controller_runtime.h"
 #include "controller_runtime_command.h"
 #include "controller_runtime_command_reload_service.h"
-#include "controller_survey_contour.h"
-#include "controller_survey_contour_adapter.h"
 #include "controller_survey_coverage.h"
 #include "controller_survey_generator.h"
 #include "controller_survey_grid.h"
@@ -958,32 +957,15 @@ static int find_mapping_survey_escape_waypoint(double x, double y, int start_ind
   controller_survey_route_add_segment( \
       (route), (count), MAX_WAYPOINTS, 0.18, MAPPING_SURVEY_MAX_CONTOUR_STEP, (from), (to))
 
-typedef struct {
-  SurveyPoint *route;
-  int *route_count;
-  int room_zone_index;
-} SurveyContourContext;
-
-static int survey_contour_point_is_safe(void *context, SurveyPoint point) {
-  const SurveyContourContext *contour = context;
-  return survey_point_safe(
-      point.x,
-      point.y,
-      contour->room_zone_index,
-      MAPPING_SURVEY_CONTOUR_OFFSET * 0.72);
-}
-
-static void survey_contour_add_point(void *context, SurveyPoint point) {
-  SurveyContourContext *contour = context;
-  survey_route_add(contour->route, contour->route_count, point.x, point.y);
-}
-
-static void survey_contour_add_segment(
+static int mapping_survey_contour_point_is_safe(
     void *context,
-    SurveyPoint from,
-    SurveyPoint to) {
-  SurveyContourContext *contour = context;
-  survey_route_add_segment(contour->route, contour->route_count, from, to);
+    double x,
+    double y,
+    int room_zone_index,
+    double clearance) {
+  (void)context;
+  return survey_point_safe(
+      x, y, room_zone_index, clearance);
 }
 
 static int append_room_contour_phase(
@@ -992,13 +974,16 @@ static int append_room_contour_phase(
     int room_zone_index,
     double robot_x,
     double robot_y) {
-  if (room_zone_index < 0) return 0;
-  SurveyContourContext context = {route, route_count, room_zone_index};
-  return controller_survey_contour_adapter_append(
-      &controller_runtime.limit_zones.zones[room_zone_index], route, route_count,
-      MAX_WAYPOINTS, 0.18, MAPPING_SURVEY_MAX_CONTOUR_STEP,
-      MAPPING_SURVEY_CONTOUR_OFFSET, robot_x, robot_y,
-      survey_contour_point_is_safe, &context);
+  const ControllerMappingSurveyContourService contour_service = {
+      &controller_runtime.limit_zones,
+      mapping_survey_contour_point_is_safe,
+      NULL,
+      MAPPING_SURVEY_CONTOUR_OFFSET,
+      0.72,
+      0.18,
+      MAPPING_SURVEY_MAX_CONTOUR_STEP};
+  return controller_mapping_survey_contour_service_append(
+      &contour_service, route, route_count, room_zone_index, robot_x, robot_y);
 }
 
 static int survey_build_grid(
