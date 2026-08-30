@@ -6,6 +6,7 @@ controller_avoidance_recovery.c
 controller_avoidance_service.c
 controller_avoidance_start.c
 controller_avoidance_state.c
+controller_application_state.c
 controller_camera.c
 controller_camera_fusion.c
 controller_camera_geometry.c

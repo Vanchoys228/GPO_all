@@ -2,6 +2,7 @@
 #include <webots/supervisor.h>
 
 #include "controller_avoidance.h"
+#include "controller_application_state.h"
 #include "controller_avoidance_start.h"
 #include "controller_avoidance_lifecycle.h"
 #include "controller_avoidance_recovery.h"
@@ -73,7 +74,6 @@
 #include "controller_webots_pose.h"
 #include "controller_webots_simulation.h"
 #include "controller_webots_motion_state.h"
-#include "controller_webots_navigation_state.h"
 #include "controller_webots_camera_range.h"
 #include "controller_webots_camera_perception.h"
 #include "controller_webots_camera_map_sync.h"
@@ -287,10 +287,10 @@ static ControllerMappingRuntime mapping_runtime;
 #define camera_free_map_count mapping_store.camera_free_count
 #define camera_map_dirty mapping_store.camera_dirty
 static ControllerPerceptionRuntime perception_runtime;
-static int step_counter = 0;
-static ControllerWebotsNavigationState navigation_state;
-#define navigation_status navigation_state.status
-#define navigation_error navigation_state.error
+static ControllerApplicationState application_state;
+#define step_counter application_state.step_counter
+#define navigation_status application_state.status
+#define navigation_error application_state.error
 static ControllerWebotsMotionState motion_state = {
     {DEFAULT_CRUISE_SPEED_MPS, DEFAULT_PAYLOAD_KG, DEFAULT_BATTERY_RANGE_UNITS},
     {DEFAULT_CRUISE_SPEED_MPS, KINEMATIC_ANGULAR_SPEED, 1.0},
@@ -304,8 +304,8 @@ static ControllerWebotsMotionState motion_state = {
 static long long motion_profile_last_modified = -1;
 static long long runtime_command_last_modified = -1;
 static long long last_processed_runtime_command_id = -1;
-static double route_avoidance_time_sec = 0.0;
-static int route_avoidance_steps = 0;
+#define route_avoidance_time_sec application_state.route_avoidance_time_sec
+#define route_avoidance_steps application_state.route_avoidance_steps
 
 static ControllerPaths controller_paths;
 static ControllerControlConfig control_config;
@@ -382,15 +382,15 @@ static void maybe_reload_motion_profile(void) {
 
 
 static void set_error(const char *message) {
-  controller_webots_navigation_state_set_error(&navigation_state, message);
+  controller_application_state_set_error(&application_state, message);
 }
 
 static void clear_error(void) {
-  controller_webots_navigation_state_clear_error(&navigation_state);
+  controller_application_state_clear_error(&application_state);
 }
 
 static void set_status(const char *status) {
-  controller_webots_navigation_state_set_status(&navigation_state, status);
+  controller_application_state_set_status(&application_state, status);
 }
 
 static void init_sensors(void) {
@@ -705,8 +705,7 @@ static void clear_local_navigation_state(void) {
 }
 
 static void reset_route_avoidance_metrics(void) {
-  route_avoidance_time_sec = 0.0;
-  route_avoidance_steps = 0;
+  controller_application_state_reset_route_avoidance(&application_state);
 }
 
 static int route_off_route_active_now() {
@@ -715,7 +714,8 @@ static int route_off_route_active_now() {
 
 static void update_route_avoidance_metrics(void) {
   if (route_off_route_active_now()) {
-    controller_navigation_metrics_tick(1, (double)TIME_STEP / 1000.0, &route_avoidance_time_sec, &route_avoidance_steps);
+    controller_application_state_tick_route_avoidance(
+        &application_state, 1, (double)TIME_STEP / 1000.0);
   }
 }
 
@@ -2289,7 +2289,7 @@ int main(int argc, char **argv) {
   controller_webots_adapter_init(
       &webots_adapter, &drive_config, drive_webots_base, &webots_devices);
   controller_webots_sensors_init(&webots_sensors);
-  controller_webots_navigation_state_init(&navigation_state);
+  controller_application_state_init(&application_state);
   init_sensors();
   init_pose_tracking();
   webots_zone_sync = (ControllerWebotsZoneSyncContext){
