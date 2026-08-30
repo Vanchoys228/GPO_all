@@ -134,9 +134,14 @@ describe("Webots controller build configuration", () => {
 
   it("delegates limit-zone rendering to the Simulation Adapter", () => {
     const source = readFileSync(`${controllerDirectory}/youbot_web.c`, "utf8");
+    const reloadService = readFileSync(
+      `${controllerDirectory}/controller_route_zone_reload_service.c`,
+      "utf8",
+    );
     const adapter = readFileSync(`${controllerDirectory}/controller_webots_zone_sync.c`, "utf8");
 
-    expect(source).toContain("controller_webots_zone_sync_limit_zones(");
+    expect(source).toContain("controller_route_zone_reload_service_reload_limit(");
+    expect(reloadService).toContain("controller_webots_zone_sync_limit_zones(");
     expect(adapter).toContain("controller_webots_simulation_sync_limit_zones(");
     expect(source).not.toContain("name \"dynamic_zone_wall\"");
     expect(source).not.toContain("controller_webots_simulation_format_limit_wall(");
@@ -144,18 +149,28 @@ describe("Webots controller build configuration", () => {
 
   it("delegates limit-zone node synchronization to the Simulation Adapter", () => {
     const source = readFileSync(`${controllerDirectory}/youbot_web.c`, "utf8");
+    const reloadService = readFileSync(
+      `${controllerDirectory}/controller_route_zone_reload_service.c`,
+      "utf8",
+    );
     const adapter = readFileSync(`${controllerDirectory}/controller_webots_zone_sync.c`, "utf8");
 
-    expect(source).toContain("controller_webots_zone_sync_limit_zones(");
+    expect(source).toContain("controller_route_zone_reload_service_reload_limit(");
+    expect(reloadService).toContain("controller_webots_zone_sync_limit_zones(");
     expect(adapter).toContain("controller_webots_simulation_sync_limit_zones(");
     expect(source).not.toContain('"WEB_LIMIT_%d_%d"');
   });
 
   it("delegates surface-zone presentation to the Simulation Adapter", () => {
     const source = readFileSync(`${controllerDirectory}/youbot_web.c`, "utf8");
+    const reloadService = readFileSync(
+      `${controllerDirectory}/controller_route_zone_reload_service.c`,
+      "utf8",
+    );
     const adapter = readFileSync(`${controllerDirectory}/controller_webots_zone_sync.c`, "utf8");
 
-    expect(source).toContain("controller_webots_zone_sync_surface_zones(");
+    expect(source).toContain("controller_route_zone_reload_service_reload_surface(");
+    expect(reloadService).toContain("controller_webots_zone_sync_surface_zones(");
     expect(adapter).toContain("controller_webots_simulation_sync_surface_zones(");
     expect(source).not.toContain("geometry IndexedFaceSet {");
     expect(source).not.toContain("controller_webots_simulation_format_surface_zone(");

@@ -51,6 +51,7 @@
 #include "controller_perception_runtime.h"
 #include "controller_route.h"
 #include "controller_route_zone_service.h"
+#include "controller_route_zone_reload_service.h"
 #include "controller_runtime.h"
 #include "controller_runtime_command.h"
 #include "controller_survey_contour.h"
@@ -273,6 +274,7 @@ static ControllerWebotsSensors webots_sensors = {0};
 static ControllerRuntime controller_runtime;
 
 static ControllerRouteZoneService route_zone_service;
+static ControllerRouteZoneReloadService route_zone_reload_service;
 static ControllerWebotsSimulationNodeRegistry zone_node_registry = {0};
 static ControllerWebotsSimulationNodeRegistry surface_zone_registry = {0};
 static ControllerWebotsSimulationNodeRegistry runtime_obstacle_registry = {0};
@@ -1534,48 +1536,12 @@ static void maybe_reload_runtime_command(void) {
 
 static void maybe_reload_zones(void) {
   if ((step_counter % ZONE_RELOAD_INTERVAL) != 0) return;
-
-  const ControllerRouteZoneServicePaths paths = {
-      ROUTE_PATH, ZONE_PATH, SURFACE_ZONE_PATH};
-  const ControllerRouteZoneServiceReloadRequest request = {0, 1, 0};
-  const ControllerRouteZoneServiceResult result =
-      controller_route_zone_service_reload(
-          &route_zone_service, &paths, &request,
-          &controller_runtime.route, &controller_runtime.limit_zones, &controller_runtime.surface_zones);
-  if (result.limit_zones_status != CONTROLLER_ROUTE_ZONE_STATUS_OK &&
-      result.limit_zones_status != CONTROLLER_ROUTE_ZONE_STATUS_UNCHANGED) {
-    set_error("Cannot parse limit_zones.txt");
-    return;
-  }
-  if (result.limit_zones_changed) {
-    controller_runtime.limit_zones = result.limit_zones;
-    controller_webots_zone_sync_limit_zones(
-        &webots_zone_sync, &controller_runtime.limit_zones);
-    set_status(controller_runtime.limit_zones.count > 0 ? "zones_synced" : "zones_cleared");
-  }
+  controller_route_zone_reload_service_reload_limit(&route_zone_reload_service);
 }
 
 static void maybe_reload_surface_zones(void) {
   if ((step_counter % ZONE_RELOAD_INTERVAL) != 0) return;
-
-  const ControllerRouteZoneServicePaths paths = {
-      ROUTE_PATH, ZONE_PATH, SURFACE_ZONE_PATH};
-  const ControllerRouteZoneServiceReloadRequest request = {0, 0, 1};
-  const ControllerRouteZoneServiceResult result =
-      controller_route_zone_service_reload(
-          &route_zone_service, &paths, &request,
-          &controller_runtime.route, &controller_runtime.limit_zones, &controller_runtime.surface_zones);
-  if (result.surface_zones_status != CONTROLLER_ROUTE_ZONE_STATUS_OK &&
-      result.surface_zones_status != CONTROLLER_ROUTE_ZONE_STATUS_UNCHANGED) {
-    set_error("Cannot parse surface_zones.txt");
-    return;
-  }
-  if (result.surface_zones_changed) {
-    controller_runtime.surface_zones = result.surface_zones;
-    controller_webots_zone_sync_surface_zones(
-        &webots_zone_sync, &controller_runtime.surface_zones);
-    set_status(controller_runtime.surface_zones.count > 0 ? "surfaces_synced" : "surfaces_cleared");
-  }
+  controller_route_zone_reload_service_reload_surface(&route_zone_reload_service);
 }
 
 static int load_route(RouteData *route) {
@@ -1595,35 +1561,7 @@ static int load_route(RouteData *route) {
 
 static void maybe_reload_route(void) {
   if ((step_counter % ROUTE_RELOAD_INTERVAL) != 0) return;
-
-  const ControllerRouteZoneServicePaths paths = {
-      ROUTE_PATH, ZONE_PATH, SURFACE_ZONE_PATH};
-  const ControllerRouteZoneServiceReloadRequest request = {1, 0, 0};
-  const ControllerRouteZoneServiceResult result =
-      controller_route_zone_service_reload(
-          &route_zone_service, &paths, &request,
-          &controller_runtime.route, &controller_runtime.limit_zones, &controller_runtime.surface_zones);
-  if (result.route_status == CONTROLLER_ROUTE_ZONE_STATUS_ROUTE_CANNOT_OPEN) {
-    set_error("Cannot open route.csv");
-    return;
-  }
-  if (result.route_status == CONTROLLER_ROUTE_ZONE_STATUS_ROUTE_EMPTY) {
-    set_error("Route file is empty");
-    return;
-  }
-  if (result.route_changed) {
-    controller_survey_lifecycle_accept_route(
-        &controller_runtime.route,
-        &result.route,
-        &controller_runtime.current_waypoint_index,
-        &controller_runtime.route_finished,
-        &controller_runtime.mapping_survey,
-        0,
-        controller_runtime.mapping_survey.mode);
-    reset_route_avoidance_metrics();
-    reset_navigation_mode();
-    set_status("route_reloaded");
-  }
+  controller_route_zone_reload_service_reload_route(&route_zone_reload_service);
 }
 
 static int escape_mapping_survey_orbit(double x, double y) {
@@ -2194,6 +2132,16 @@ int main(int argc, char **argv) {
   };
   controller_mapping_runtime_init(&mapping_runtime, &mapping_config);
   controller_route_zone_service_init(&route_zone_service);
+  controller_route_zone_reload_service_init(
+      &route_zone_reload_service,
+      &route_zone_service,
+      &controller_runtime,
+      &webots_zone_sync,
+      (ControllerRouteZoneServicePaths){ROUTE_PATH, ZONE_PATH, SURFACE_ZONE_PATH},
+      set_status,
+      set_error,
+      reset_route_avoidance_metrics,
+      reset_navigation_mode);
   clear_persistent_map();
   controller_webots_camera_adapter_remove_frames(
       CAMERA_FRAME_BMP_PATH,
