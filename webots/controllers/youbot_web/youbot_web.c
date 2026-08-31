@@ -1784,21 +1784,41 @@ static void merge_trace_for_controller_step(void) {
   merge_trace_into_map(wb_robot_get_time());
 }
 
+#define STEP_CALLBACK(callback) \
+  static void callback##_step(void *context) { \
+    (void)context; \
+    callback(); \
+  }
+STEP_CALLBACK(maybe_reload_zones)
+STEP_CALLBACK(maybe_reload_surface_zones)
+STEP_CALLBACK(maybe_reload_route)
+STEP_CALLBACK(maybe_reload_motion_profile)
+STEP_CALLBACK(maybe_reload_runtime_command)
+STEP_CALLBACK(capture_lidar_trace)
+STEP_CALLBACK(merge_trace_for_controller_step)
+STEP_CALLBACK(maybe_write_map)
+STEP_CALLBACK(maybe_update_camera_perception)
+STEP_CALLBACK(maybe_write_camera_frame)
+STEP_CALLBACK(run_navigation_step)
+STEP_CALLBACK(update_route_avoidance_metrics)
+STEP_CALLBACK(write_state_snapshot)
+#undef STEP_CALLBACK
+
 static const ControllerStepCallbacks controller_step_callbacks = {
-    maybe_reload_zones,
-    maybe_reload_surface_zones,
-    maybe_reload_route,
-    maybe_reload_motion_profile,
-    maybe_reload_runtime_command,
-    capture_lidar_trace,
-    merge_trace_for_controller_step,
-    maybe_write_map,
-    maybe_update_camera_perception,
-    maybe_write_camera_frame,
+    maybe_reload_zones_step,
+    maybe_reload_surface_zones_step,
+    maybe_reload_route_step,
+    maybe_reload_motion_profile_step,
+    maybe_reload_runtime_command_step,
+    capture_lidar_trace_step,
+    merge_trace_for_controller_step_step,
+    maybe_write_map_step,
+    maybe_update_camera_perception_step,
+    maybe_write_camera_frame_step,
     NULL,
-    run_navigation_step,
-    update_route_avoidance_metrics,
-    write_state_snapshot,
+    run_navigation_step_step,
+    update_route_avoidance_metrics_step,
+    write_state_snapshot_step,
 };
 
 int main(int argc, char **argv) {
@@ -1940,7 +1960,7 @@ int main(int argc, char **argv) {
   while (wb_robot_step(TIME_STEP) != -1) {
     ++step_counter;
     controller_step_run(
-        step_counter, &control_config.schedule.lifecycle, &controller_step_callbacks);
+        step_counter, &control_config.schedule.lifecycle, &controller_step_callbacks, NULL);
   }
 
   controller_mapping_runtime_write(&mapping_runtime, 1);

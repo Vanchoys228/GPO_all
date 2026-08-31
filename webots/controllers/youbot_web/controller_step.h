@@ -3,7 +3,7 @@
 
 #include "controller_lifecycle.h"
 
-typedef void (*ControllerStepCallback)(void);
+typedef void (*ControllerStepCallback)(void *context);
 
 typedef struct {
   ControllerStepCallback reload_zones;
@@ -25,6 +25,7 @@ typedef struct {
 void controller_step_run(
     int step,
     const ControllerLifecycleScheduleConfig *schedule,
-    const ControllerStepCallbacks *callbacks);
+    const ControllerStepCallbacks *callbacks,
+    void *context);
 
 #endif
