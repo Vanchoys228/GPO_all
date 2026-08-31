@@ -16,6 +16,7 @@
 #include "controller_camera_virtual.h"
 #include "controller_control_config.h"
 #include "controller_io.h"
+#include "controller_input_orchestration.h"
 #include "controller_drive.h"
 #include "controller_lidar_math.h"
 #include "controller_lidar_scan.h"
@@ -306,6 +307,7 @@ static ControllerWebotsMotionState motion_state = {
 #define active_battery_speed_factor motion_state.limits.battery_speed_factor
 static ControllerMotionProfileReloadService motion_profile_reload_service;
 static ControllerRuntimeCommandReloadService runtime_command_reload_service;
+static ControllerInputOrchestration input_orchestration;
 #define route_avoidance_time_sec application_state.route_avoidance_time_sec
 #define route_avoidance_steps application_state.route_avoidance_steps
 
@@ -349,11 +351,7 @@ static double scaled_linear_cap(double factor) {
 
 
 static void maybe_reload_motion_profile(void) {
-  if (controller_motion_profile_reload_service_run(
-          &motion_profile_reload_service, step_counter, MOTION_RELOAD_INTERVAL) ==
-      CONTROLLER_MOTION_PROFILE_RELOAD_CHANGED) {
-    set_status("motion_profile_reloaded");
-  }
+  controller_input_orchestration_reload_motion(&input_orchestration, step_counter);
 }
 
 
@@ -1223,19 +1221,51 @@ static void spawn_runtime_obstacle(const RuntimeCommand *command) {
   controller_webots_zone_sync_spawn_obstacle(&webots_zone_sync, command);
 }
 
-static void maybe_reload_runtime_command(void) {
+static ControllerInputMotionReloadResult reload_motion_profile_input(void *context) {
+  (void)context;
+  return controller_motion_profile_reload_service_run(
+             &motion_profile_reload_service, step_counter, MOTION_RELOAD_INTERVAL) ==
+                 CONTROLLER_MOTION_PROFILE_RELOAD_CHANGED
+             ? CONTROLLER_INPUT_MOTION_RELOAD_CHANGED
+             : CONTROLLER_INPUT_MOTION_RELOAD_UNCHANGED;
+}
+
+static void reload_runtime_command_input(void *context) {
+  (void)context;
   controller_runtime_command_reload_service_run(
       &runtime_command_reload_service, step_counter, RUNTIME_COMMAND_RELOAD_INTERVAL);
 }
 
-static void maybe_reload_zones(void) {
-  if ((step_counter % ZONE_RELOAD_INTERVAL) != 0) return;
+static void reload_limit_zones_input(void *context) {
+  (void)context;
   controller_route_zone_reload_service_reload_limit(&route_zone_reload_service);
 }
 
-static void maybe_reload_surface_zones(void) {
-  if ((step_counter % ZONE_RELOAD_INTERVAL) != 0) return;
+static void reload_surface_zones_input(void *context) {
+  (void)context;
   controller_route_zone_reload_service_reload_surface(&route_zone_reload_service);
+}
+
+static void reload_route_input(void *context) {
+  (void)context;
+  controller_route_zone_reload_service_reload_route(&route_zone_reload_service);
+}
+
+static void set_input_status(void *context, const char *status) {
+  (void)context;
+  set_status(status);
+}
+
+static void maybe_reload_runtime_command(void) {
+  controller_input_orchestration_reload_runtime_command(&input_orchestration, step_counter);
+}
+
+static void maybe_reload_zones(void) {
+  controller_input_orchestration_reload_zones(&input_orchestration, step_counter);
+}
+
+static void maybe_reload_surface_zones(void) {
+  controller_input_orchestration_reload_surface_zones(&input_orchestration, step_counter);
 }
 
 static int load_route(RouteData *route) {
@@ -1254,8 +1284,7 @@ static int load_route(RouteData *route) {
 }
 
 static void maybe_reload_route(void) {
-  if ((step_counter % ROUTE_RELOAD_INTERVAL) != 0) return;
-  controller_route_zone_reload_service_reload_route(&route_zone_reload_service);
+  controller_input_orchestration_reload_route(&input_orchestration, step_counter);
 }
 
 static int escape_mapping_survey_orbit(double x, double y) {
@@ -1849,6 +1878,21 @@ int main(int argc, char **argv) {
       set_error,
       reset_route_avoidance_metrics,
       reset_navigation_mode);
+  static const ControllerInputOrchestrationOperations input_operations = {
+      reload_motion_profile_input,
+      reload_runtime_command_input,
+      reload_limit_zones_input,
+      reload_surface_zones_input,
+      reload_route_input,
+      set_input_status,
+  };
+  controller_input_orchestration_init(
+      &input_orchestration,
+      &input_operations,
+      NULL,
+      ZONE_RELOAD_INTERVAL,
+      ROUTE_RELOAD_INTERVAL,
+      RUNTIME_COMMAND_RELOAD_INTERVAL);
   clear_persistent_map();
   controller_webots_camera_adapter_remove_frames(
       CAMERA_FRAME_BMP_PATH,

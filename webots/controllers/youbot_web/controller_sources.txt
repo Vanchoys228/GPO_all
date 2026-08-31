@@ -17,6 +17,7 @@ controller_camera_virtual.c
 controller_control_config.c
 controller_drive.c
 controller_io.c
+controller_input_orchestration.c
 controller_lidar_math.c
 controller_lidar_scan.c
 controller_lidar_trace.c
