@@ -28,6 +28,7 @@
 #include "controller_mapping_scan_transition.h"
 #include "controller_mapping_survey_contour_service.h"
 #include "controller_mapping_survey_coverage_service.h"
+#include "controller_mapping_survey_generator_callbacks.h"
 #include "controller_mapping_survey_route_generation_service.h"
 #include "controller_mapping_survey_grid_adapter.h"
 #include "controller_mapping_survey_safety.h"
@@ -58,12 +59,10 @@
 #include "controller_runtime.h"
 #include "controller_runtime_command.h"
 #include "controller_runtime_command_reload_service.h"
-#include "controller_survey_generator.h"
 #include "controller_survey_grid.h"
 #include "controller_survey_geometry.h"
 #include "controller_survey_integration.h"
 #include "controller_survey_lifecycle.h"
-#include "controller_survey_route_builder.h"
 #include "controller_survey_state.h"
 #include "controller_step.h"
 #include "controller_telemetry.h"
@@ -1043,78 +1042,17 @@ static void write_mapping_survey_route_file(const char *path, const SurveyPoint 
   }
 }
 
-typedef struct {
-  SurveyGrid *grid;
-  SurveyPoint *route;
-  int *route_count;
-  int room_zone_index;
-  double robot_x;
-  double robot_y;
-} SurveyRouteBuilderContext;
-
-static int survey_route_start_is_safe(void *context, SurveyPoint start) {
-  const SurveyRouteBuilderContext *builder = context;
-  return survey_point_safe(
-      start.x,
-      start.y,
-      builder->room_zone_index,
-      MAPPING_SURVEY_INTERIOR_OFFSET * 0.45);
-}
-
-static void survey_route_add_start(void *context, SurveyPoint start) {
-  SurveyRouteBuilderContext *builder = context;
-  survey_route_add(builder->route, builder->route_count, start.x, start.y);
-}
-
-static int survey_route_append_room_contour(void *context) {
-  SurveyRouteBuilderContext *builder = context;
-  return append_room_contour_phase(
-      builder->route,
-      builder->route_count,
-      builder->room_zone_index,
-      builder->robot_x,
-      builder->robot_y);
-}
-
-static void survey_route_append_grid_boundary(void *context) {
-  SurveyRouteBuilderContext *builder = context;
-  append_grid_boundary_contour_phase(
-      builder->grid,
-      builder->route,
-      builder->route_count,
-      builder->robot_x,
-      builder->robot_y);
-}
-
-static void survey_route_append_horizontal(void *context) {
-  SurveyRouteBuilderContext *builder = context;
-  append_scanline_coverage_phase(
-      builder->grid, builder->route, builder->route_count, builder->room_zone_index);
-}
-
-static void survey_route_append_vertical(void *context) {
-  SurveyRouteBuilderContext *builder = context;
-  append_vertical_coverage_phase(
-      builder->grid, builder->route, builder->route_count, builder->room_zone_index);
-}
-
-typedef struct {
-  const char *path;
-  const RuntimeCommand *command;
-  SurveyGrid grid;
-} SurveyGeneratorContext;
-
-static void survey_generator_clear_map(void *context) {
+static void mapping_survey_generator_clear_map(void *context) {
   (void)context;
   clear_persistent_map();
 }
 
-static void survey_generator_prepare(void *context, MappingSurveyMode mode) {
+static void mapping_survey_generator_prepare(void *context, MappingSurveyMode mode) {
   (void)context;
   controller_mapping_survey_state_prepare(&controller_runtime.mapping_survey, mode);
 }
 
-static SurveyPoint survey_generator_read_robot(void *context) {
+static SurveyPoint mapping_survey_generator_read_robot(void *context) {
   (void)context;
   double x = 0.0;
   double y = 0.0;
@@ -1123,67 +1061,99 @@ static SurveyPoint survey_generator_read_robot(void *context) {
   return (SurveyPoint){x, y};
 }
 
-static int survey_generator_find_room(void *context, SurveyPoint robot) {
+static int mapping_survey_generator_find_room(void *context, SurveyPoint robot) {
   (void)context;
   return find_room_zone_index(robot.x, robot.y);
 }
 
-static int survey_generator_build_grid(
+static int mapping_survey_generator_build_grid(
     void *context,
-    SurveyPoint robot,
-    int room_zone_index) {
-  SurveyGeneratorContext *generator = context;
-  return survey_build_grid(
-      &generator->grid,
-      room_zone_index,
-      robot.x,
-      robot.y,
-      MAPPING_SURVEY_INTERIOR_OFFSET,
-      generator->command);
-}
-
-static int survey_generator_flood_grid(void *context, SurveyPoint robot) {
-  SurveyGeneratorContext *generator = context;
-  return controller_survey_flood_component(&generator->grid, robot.x, robot.y);
-}
-
-static int survey_generator_build_route(
-    void *context,
-    MappingSurveyMode mode,
+    SurveyGrid *grid,
     SurveyPoint robot,
     int room_zone_index,
-    SurveyPoint *route,
-    int *route_count,
-    int *interior_start_index) {
-  (void)mode;
-  SurveyGeneratorContext *generator = context;
-  SurveyRouteBuilderContext builder = {
-      &generator->grid, route, route_count, room_zone_index, robot.x, robot.y};
-  const ControllerSurveyRouteCallbacks callbacks = {
-      survey_route_start_is_safe,
-      survey_route_add_start,
-      survey_route_append_room_contour,
-      survey_route_append_grid_boundary,
-      survey_route_append_horizontal,
-      survey_route_append_vertical,
-  };
-  return controller_survey_build_route_phases(
-      controller_runtime.mapping_survey.mode,
-      robot,
-      route_count,
-      interior_start_index,
-      &callbacks,
-      &builder);
+    const RuntimeCommand *command) {
+  (void)context;
+  return survey_build_grid(
+      grid, room_zone_index, robot.x, robot.y, MAPPING_SURVEY_INTERIOR_OFFSET, command);
 }
 
-static void survey_generator_write_route(
+static int mapping_survey_generator_flood_grid(
     void *context,
+    SurveyGrid *grid,
+    SurveyPoint robot) {
+  (void)context;
+  return controller_survey_flood_component(grid, robot.x, robot.y);
+}
+
+static int mapping_survey_generator_start_is_safe(
+    void *context,
+    SurveyPoint start,
+    int room_zone_index,
+    double clearance) {
+  (void)context;
+  return survey_point_safe(start.x, start.y, room_zone_index, clearance);
+}
+
+static void mapping_survey_generator_add_route_point(
+    void *context,
+    SurveyPoint *route,
+    int *route_count,
+    SurveyPoint point) {
+  (void)context;
+  survey_route_add(route, route_count, point.x, point.y);
+}
+
+static int mapping_survey_generator_append_room_contour(
+    void *context,
+    SurveyGrid *grid,
+    SurveyPoint *route,
+    int *route_count,
+    int room_zone_index,
+    SurveyPoint robot) {
+  (void)context;
+  (void)grid;
+  return append_room_contour_phase(route, route_count, room_zone_index, robot.x, robot.y);
+}
+
+static void mapping_survey_generator_append_grid_boundary(
+    void *context,
+    SurveyGrid *grid,
+    SurveyPoint *route,
+    int *route_count,
+    SurveyPoint robot) {
+  (void)context;
+  append_grid_boundary_contour_phase(grid, route, route_count, robot.x, robot.y);
+}
+
+static void mapping_survey_generator_append_horizontal_coverage(
+    void *context,
+    SurveyGrid *grid,
+    SurveyPoint *route,
+    int *route_count,
+    int room_zone_index) {
+  (void)context;
+  append_scanline_coverage_phase(grid, route, route_count, room_zone_index);
+}
+
+static void mapping_survey_generator_append_vertical_coverage(
+    void *context,
+    SurveyGrid *grid,
+    SurveyPoint *route,
+    int *route_count,
+    int room_zone_index) {
+  (void)context;
+  append_vertical_coverage_phase(grid, route, route_count, room_zone_index);
+}
+
+static void mapping_survey_generator_write_route(
+    void *context,
+    const char *path,
     MappingSurveyMode mode,
     const SurveyPoint *route,
     int route_count) {
+  (void)context;
   (void)mode;
-  SurveyGeneratorContext *generator = context;
-  write_mapping_survey_route_file(generator->path, route, route_count);
+  write_mapping_survey_route_file(path, route, route_count);
 }
 
 static int generate_mapping_survey_route(
@@ -1192,21 +1162,31 @@ static int generate_mapping_survey_route(
     const RuntimeCommand *command) {
   const MappingSurveyMode survey_mode =
       command ? command->survey_mode : controller_runtime.mapping_survey.mode;
-  static SurveyGeneratorContext generator;
-  generator.path = path;
-  generator.command = command;
-  const ControllerSurveyGeneratorCallbacks callbacks = {
-      survey_generator_clear_map,
-      survey_generator_prepare,
-      survey_generator_read_robot,
-      survey_generator_find_room,
-      survey_generator_build_grid,
-      survey_generator_flood_grid,
-      survey_generator_build_route,
-      survey_generator_write_route,
+  const ControllerMappingSurveyGeneratorCallbackOperations operations = {
+      mapping_survey_generator_clear_map,
+      mapping_survey_generator_prepare,
+      mapping_survey_generator_read_robot,
+      mapping_survey_generator_find_room,
+      mapping_survey_generator_build_grid,
+      mapping_survey_generator_flood_grid,
+      mapping_survey_generator_start_is_safe,
+      mapping_survey_generator_add_route_point,
+      mapping_survey_generator_append_room_contour,
+      mapping_survey_generator_append_grid_boundary,
+      mapping_survey_generator_append_horizontal_coverage,
+      mapping_survey_generator_append_vertical_coverage,
+      mapping_survey_generator_write_route,
   };
+  ControllerMappingSurveyGeneratorCallbacksAdapter adapter;
+  controller_mapping_survey_generator_callbacks_adapter_init(
+      &adapter,
+      &operations,
+      NULL,
+      path,
+      command,
+      MAPPING_SURVEY_INTERIOR_OFFSET * 0.45);
   const ControllerMappingSurveyRouteGenerationService service = {
-      &callbacks, &generator, set_error};
+      controller_mapping_survey_generator_callbacks_adapter_callbacks(&adapter), &adapter, set_error};
   return controller_mapping_survey_route_generation_service_generate(
       &service,
       clear_map_before_start,
