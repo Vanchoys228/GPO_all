@@ -168,6 +168,7 @@ npm run dev
 npm run bridge
 npm run telemetry:mock
 npm run native:build
+npm run native:test
 npm run webots:build
 npm run lint
 npm run build
@@ -217,6 +218,7 @@ npm run test:bridge
 - unit- и компонентные тесты для planner model, hooks, services, геометрии,
   телеметрии и sidebar-секций.
 - smoke-test bridge + solver HTTP API.
+- автономные C++-тесты native protocol/problem/service через `npm run native:test`.
 - автономные C-тесты модулей Webots-контроллера через `npm run test:webots`.
 
 ## Координатный контракт

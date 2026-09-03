@@ -5,8 +5,11 @@
 ## Что здесь лежит
 
 - `include/tsp` — общие заголовки и интерфейсы алгоритмов
-- `src` — реализации `GA + Tabu`, `Simulated Annealing`, `Scatter Search`, `Cuckoo Search`
-- `apps/gpo_route_solver.cpp` — CLI solver, который вызывает `ws-bridge.cjs`
+- `include/gpo` — публичные типы и интерфейсы route-solver service layer
+- `src` — алгоритмы, построение задачи, solver service и текстовый протокол
+- `apps/gpo_route_solver.cpp` — тонкая CLI-точка композиции
+- `tests` — автономные C++-тесты service layer
+- `route_solver_sources.txt` — единый список исходников core для сборочных систем
 - `build_msvc.bat` — сборка под MSVC
 - `CMakeLists.txt` — переносимая сборка для Linux и Docker
 
@@ -43,6 +46,16 @@ native/build/gpo_route_solver
 2. `ws-bridge.cjs` маппит UI-параметры на нативные параметры solver
 3. `gpo_route_solver.exe` возвращает оптимальный порядок обхода
 4. `Dashboard.jsx` поверх этого строит безопасный маршрут с обходом forbidden zones через `zonePlanner.js`
+
+## Тесты
+
+На Windows тесты собирают core, CLI и три независимых test executable:
+
+```powershell
+npm run native:test
+```
+
+Для CMake используйте `ctest` после сборки с `BUILD_TESTING=ON`.
 
 ## Запуск полного контура
 
