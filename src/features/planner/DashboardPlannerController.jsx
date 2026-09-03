@@ -1,211 +1,28 @@
-﻿import { useRef, useState } from "react";
-import {
-  DEFAULT_SURFACE_ZONES,
-} from "../../lib/zonePlanner";
-import { useMemo } from "react";
-import {
-  buildPlannerModel,
-  INITIAL_ZONE,
-} from "../../lib/plannerModel";
 import DashboardPlannerWorkspace from "./DashboardPlannerWorkspace";
-import { useRouteSocket } from "./hooks/useRouteSocket";
-import { useSolverHealth } from "./hooks/useSolverHealth";
-import { useTelemetrySocket } from "./hooks/useTelemetrySocket";
-import { usePlannerBridgeSync } from "./hooks/usePlannerBridgeSync";
-import { useRouteTiming } from "./hooks/useRouteTiming";
-import { usePlannerEnergySettings } from "./hooks/usePlannerEnergySettings";
-import { usePlannerRouteSelection } from "./hooks/usePlannerRouteSelection";
-import { usePlannerSidebarState } from "./hooks/usePlannerSidebarState";
-import { useDashboardPlannerRuntimeActions } from "./hooks/useDashboardPlannerRuntimeActions";
-import { useDashboardPlannerEditors } from "./hooks/useDashboardPlannerEditors";
-import { useDashboardPlannerRouteLifecycle } from "./hooks/useDashboardPlannerRouteLifecycle";
-import { useDashboardPlannerPresentation } from "./hooks/useDashboardPlannerPresentation";
+import { useDashboardPlannerActions } from "./hooks/useDashboardPlannerActions";
+import { useDashboardPlannerDerivedState } from "./hooks/useDashboardPlannerDerivedState";
+import { useDashboardPlannerRuntime } from "./hooks/useDashboardPlannerRuntime";
+import { useDashboardPlannerState } from "./hooks/useDashboardPlannerState";
 import {
-  DEFAULT_SURFACE_PROFILE_KEY,
-  createInitialSurfaceZones,
-} from "./model/surfaceZones";
-import {
-  createEmptyRouteEnergyStats,
-} from "./model/routeEnergy";
-import { MAPPING_SURVEY_MODES } from "./model/runtimeCommands";
-import { buildPlannerSyncPayloads } from "./model/plannerSync";
-import { createDashboardAlgorithmParams } from "./model/dashboardAlgorithmParams";
-import { createDashboardPlannerViewModel } from "./model/dashboardPlannerViewModel";
+  createCanvasProps,
+  createLeftSidebarProps,
+  createRightSidebarProps,
+} from "./model/dashboardPlannerWorkspaceProps";
 
-export default function Dashboard() {
-  const canvasRef = useRef(null);
-  const { connected: telemetryWsUp, telemetry } = useTelemetrySocket();
-  const { connected: routeWsUp, socketRef: routeWsRef } = useRouteSocket();
-  const solverApiUp = useSolverHealth();
-  const {
-    avoidanceTimeSec: routeAvoidanceTimeSec,
-    display: routeTimingDisplay,
-    offRouteActive: routeOffRouteActive,
-    reset: resetRouteTiming,
-    start: startRouteTiming,
-  } = useRouteTiming(telemetry.navigation);
+export default function DashboardPlannerController() {
+  const state = useDashboardPlannerState();
+  const runtime = useDashboardPlannerRuntime();
+  const derived = useDashboardPlannerDerivedState(state, runtime);
+  const actions = useDashboardPlannerActions(state, runtime, derived);
+  const workspaceContext = { state, runtime, derived, actions };
 
-  const [points, setPoints] = useState([]);
-  const [routeSeed, setRouteSeed] = useState([]);
-  const [optimizedRoute, setOptimizedRoute] = useState([]);
-  const [status, setStatus] = useState("");
-  const [energyWarning, setEnergyWarning] = useState("");
-  const [expandedPoint, setExpandedPoint] = useState(null);
-  const [hoveredPointIndex, setHoveredPointIndex] = useState(null);
-  const [isOptimizing, setIsOptimizing] = useState(false);
-  const [routeTaskKey, setRouteTaskKey] = useState("tsp");
-  const [algorithmKey, setAlgorithmKey] = useState("ga_tabu");
-  const [activePointKind, setActivePointKind] = useState("visit");
-  const [surfaceZones, setSurfaceZones] = useState(createInitialSurfaceZones);
-  const [activeSurfaceZoneId, setActiveSurfaceZoneId] = useState(
-    () => `surface-zone-${DEFAULT_SURFACE_ZONES.length + 1}`
+  return (
+    <DashboardPlannerWorkspace
+      plannerUiState={state.sidebar.plannerUiState}
+      setSidebarCollapsed={state.sidebar.setSidebarCollapsed}
+      canvasProps={createCanvasProps(workspaceContext)}
+      leftSidebarProps={createLeftSidebarProps(workspaceContext)}
+      rightSidebarProps={createRightSidebarProps(workspaceContext)}
+    />
   );
-  const [activeSurfaceProfileKey, setActiveSurfaceProfileKey] = useState(
-    DEFAULT_SURFACE_PROFILE_KEY
-  );
-  const [nextSurfaceZoneNumber, setNextSurfaceZoneNumber] = useState(
-    () => DEFAULT_SURFACE_ZONES.length + 2
-  );
-  const [mapExportPromptOpen, setMapExportPromptOpen] = useState(false);
-  const [routeEnergyStats, setRouteEnergyStats] = useState(createEmptyRouteEnergyStats);
-  const {
-    batteryRangeInput,
-    batteryRangeMeters,
-    cruiseSpeedInput,
-    cruiseSpeedMps,
-    handleBatteryRangeBlur,
-    handleBatteryRangeChange,
-    handleCruiseSpeedBlur,
-    handleCruiseSpeedChange,
-    handlePayloadBlur,
-    handlePayloadChange,
-    payloadInput,
-    payloadKg,
-  } = usePlannerEnergySettings({
-    setEnergyWarning,
-    setExpandedPoint,
-    setHoveredPointIndex,
-    setRouteEnergyStats,
-  });
-  const { plannerUiState, setSidebarCollapsed } = usePlannerSidebarState();
-  const [limitZones, setLimitZones] = useState([INITIAL_ZONE]);
-  const [activeLimitZoneId, setActiveLimitZoneId] = useState(INITIAL_ZONE.id);
-  const [nextZoneNumber, setNextZoneNumber] = useState(2);
-  const [mappingSurveyMode, setMappingSurveyMode] = useState(
-    MAPPING_SURVEY_MODES[0].key
-  );
-  const [algorithmParams, setAlgorithmParams] = useState(createDashboardAlgorithmParams);
-
-  const plannerModel = buildPlannerModel({
-    points,
-    limitZones,
-    optimizedRoute,
-    activeLimitZoneId,
-    surfaceZones,
-  });
-  const { activeSurfaceZone, algorithmFields, selectedAlgorithmParams } =
-    createDashboardPlannerViewModel({
-      algorithmKey,
-      algorithmParams,
-      activeSurfaceZoneId,
-      surfaceZones,
-    });
-  const {
-    chargePointsRoutingText,
-    previewPolygonRoutingText,
-    surfaceSyncPayloadText,
-    zoneSyncPayloadText,
-  } = buildPlannerSyncPayloads(plannerModel);
-  usePlannerBridgeSync({
-    batteryRangeMeters,
-    cruiseSpeedMps,
-    payloadKg,
-    routeSocketRef: routeWsRef,
-    surfaceSyncPayloadText,
-    zoneSyncPayloadText,
-  });
-  const energyOptions = useMemo(
-    () => ({
-      speedMps: cruiseSpeedMps,
-      payloadKg,
-    }),
-    [cruiseSpeedMps, payloadKg]
-  );
-  const { routeInfluenceRows, telemetryForSidebar } = useDashboardPlannerPresentation({
-    optimizedRoute, plannerModel, payloadKg, cruiseSpeedMps, routeEnergyStats,
-    routeTimingDisplay, routeAvoidanceTimeSec, routeOffRouteActive, telemetry,
-  });
-
-  const { handleImportFile, optimizeRoute, sendRoute } = useDashboardPlannerRouteLifecycle({
-    resetRouteTiming,
-    setActiveLimitZoneId,
-    setActivePointKind,
-    setActiveSurfaceProfileKey,
-    setActiveSurfaceZoneId,
-    setAlgorithmKey,
-    setEnergyWarning,
-    setExpandedPoint,
-    setHoveredPointIndex,
-    setLimitZones,
-    setIsOptimizing,
-    setNextSurfaceZoneNumber,
-    setNextZoneNumber,
-    setOptimizedRoute,
-    setPoints,
-    setRouteEnergyStats,
-    setRouteSeed,
-    setRouteTaskKey,
-    setStatus,
-    setSurfaceZones,
-    algorithmKey,
-    batteryRangeMeters,
-    chargePointsRoutingText,
-    cruiseSpeedMps,
-    energyOptions,
-    payloadKg,
-    previewPolygonRoutingText,
-    routeSeed,
-    routeSocketRef: routeWsRef,
-    routeTaskKey,
-    selectedAlgorithmParams,
-    startRouteTiming,
-    surfaceSyncPayloadText,
-    surfaceZones: plannerModel.surfaceZones,
-    telemetry,
-    zoneSyncPayloadText,
-  });
-
-  const { clearRouteState, handleAlgorithmChange, handleRouteTaskChange, updateAlgorithmParam } =
-    usePlannerRouteSelection({
-      algorithmKey, resetRouteTiming, setAlgorithmKey, setAlgorithmParams, setEnergyWarning,
-      setExpandedPoint, setHoveredPointIndex, setOptimizedRoute, setRouteEnergyStats,
-      setRouteSeed, setRouteTaskKey, setStatus,
-    });
-
-  const {
-    addPointFromCanvas, clearAllSurfaceZones, clearPoints, clearSurfaceZone, clearZone,
-    createSurfaceZone, createZone, deletePoint, finishDragging, handleCanvasMouseDown,
-    handleCanvasMouseMove, removeSurfaceZone, removeZone, selectSurfaceZone, selectZone,
-    toggleSurfaceZoneClosed, toggleZoneClosed, updateActiveSurfaceProfile, updatePointTask,
-  } = useDashboardPlannerEditors({
-    activeLimitZoneId, activePointKind, activeSurfaceProfileKey, activeSurfaceZone,
-    activeSurfaceZoneId, canvasRef, clearRouteState, limitZones, nextSurfaceZoneNumber,
-    nextZoneNumber, plannerModel, points, setActiveLimitZoneId, setActivePointKind,
-    setActiveSurfaceProfileKey, setActiveSurfaceZoneId, setLimitZones, setNextSurfaceZoneNumber,
-    setNextZoneNumber, setPoints, setStatus, setSurfaceZones, surfaceZones,
-  });
-
-  const { addRandomObstacle, exportMapImage, requestMapExport, startMappingSurvey } =
-    useDashboardPlannerRuntimeActions({
-      batteryRangeMeters, mappingSurveyMode, optimizedRoute, payloadKg, plannerModel, points,
-      routeSocketRef: routeWsRef, setMapExportPromptOpen, setStatus, telemetry,
-    });
-
-  return <DashboardPlannerWorkspace
-    plannerUiState={plannerUiState}
-    setSidebarCollapsed={setSidebarCollapsed}
-    canvasProps={{ canvasRef, plannerModel, optimizedRoute, hoveredPointIndex, telemetry, onCanvasClick: addPointFromCanvas, onCanvasMouseDown: handleCanvasMouseDown, onCanvasMouseMove: handleCanvasMouseMove, onCanvasMouseUp: finishDragging, onCanvasMouseLeave: finishDragging }}
-    leftSidebarProps={{ onImportFile: handleImportFile, activePointKind, onActivePointKindChange: setActivePointKind, onClearVisitPoints: () => clearPoints("visit"), onClearChargePoints: () => clearPoints("charge"), onClearLimitPoints: () => clearPoints("limit"), routeTaskKey, onRouteTaskChange: handleRouteTaskChange, algorithmKey, onAlgorithmChange: handleAlgorithmChange, status, energyWarning, routeBlocked: plannerModel.routeBlocked, algorithmFields, selectedAlgorithmParams, onAlgorithmParamChange: updateAlgorithmParam, isOptimizing, onOptimizeRoute: optimizeRoute, onSendRoute: sendRoute, onAddRandomObstacle: addRandomObstacle, onClearAll: () => clearPoints(), hasRoute: optimizedRoute.length > 0, routeLength: plannerModel.routeLength, visitCount: plannerModel.visitEntries.length, chargeCount: plannerModel.chargeEntries.length, zoneCount: plannerModel.zoneEntries.length, polygonCount: plannerModel.polygons.length, adjustedVisitCount: plannerModel.adjustedVisits.length, activeZoneName: plannerModel.activeZoneName, batteryRangeInput, onBatteryRangeChange: handleBatteryRangeChange, onBatteryRangeBlur: handleBatteryRangeBlur, cruiseSpeedMps, cruiseSpeedInput, onCruiseSpeedChange: handleCruiseSpeedChange, onCruiseSpeedBlur: handleCruiseSpeedBlur, payloadKg, payloadInput, onPayloadChange: handlePayloadChange, onPayloadBlur: handlePayloadBlur, routeEnergyStats, routeInfluenceRows, routeTiming: routeTimingDisplay, surfaceZones, activeSurfaceZoneId, activeSurfaceZone, activeSurfaceProfileKey, onActiveSurfaceProfileChange: updateActiveSurfaceProfile, onCreateSurfaceZone: createSurfaceZone, onSelectSurfaceZone: selectSurfaceZone, onToggleSurfaceZoneClosed: toggleSurfaceZoneClosed, onClearSurfaceZone: clearSurfaceZone, onRemoveSurfaceZone: removeSurfaceZone, onClearAllSurfaceZones: clearAllSurfaceZones }}
-    rightSidebarProps={{ activeZone: plannerModel.activeZone, activeZoneName: plannerModel.activeZoneName, activeLimitZoneId, zoneEntries: plannerModel.zoneEntries, visitEntries: plannerModel.visitEntries, chargeEntries: plannerModel.chargeEntries, plannedVisitEntries: plannerModel.plannedVisitEntries, expandedPoint, hoveredPointIndex, visitsInsideLimitCount: plannerModel.visitsInsideLimit.length, polygonCount: plannerModel.polygons.length, adjustedVisitCount: plannerModel.adjustedVisits.length, routeBlocked: plannerModel.routeBlocked, telemetry: telemetryForSidebar, telemetryWsUp, routeWsUp, solverApiUp, mappingSurveyMode, mappingSurveyModes: MAPPING_SURVEY_MODES, onMappingSurveyModeChange: setMappingSurveyMode, mapExportPromptOpen, onStartMappingSurvey: startMappingSurvey, onRequestMapExport: requestMapExport, onExportMapVariant: exportMapImage, onCancelMapExport: () => setMapExportPromptOpen(false), onCreateZone: createZone, onSelectZone: selectZone, onToggleZoneClosed: toggleZoneClosed, onClearZone: clearZone, onRemoveZone: removeZone, onToggleExpandedPoint: setExpandedPoint, onHoverPoint: setHoveredPointIndex, onDeletePoint: deletePoint, onUpdatePointTask: updatePointTask }}
-  />;
 }
