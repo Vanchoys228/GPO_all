@@ -1,4 +1,4 @@
-import { ROUTE_WS_URL } from "../../../lib/dashboardTelemetry";
+import { ROUTE_WS_URL } from "../../../lib/runtimeConfig";
 import { sanitizeRouteForController } from "../../../lib/zonePlanner";
 import {
   buildRouteEnergyStats,

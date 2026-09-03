@@ -1,10 +1,8 @@
 import { useEffect, useState } from "react";
-import {
-  decodeWsData,
-  INITIAL_TELEMETRY,
-  normalizeTelemetry,
-  TELEMETRY_WS_URL,
-} from "../../../lib/dashboardTelemetry";
+import { TELEMETRY_WS_URL } from "../../../lib/runtimeConfig";
+import { INITIAL_TELEMETRY } from "../../../lib/telemetry/dashboardTelemetryState";
+import { normalizeTelemetry } from "../../../lib/telemetry/normalizeDashboardTelemetry";
+import { decodeWsData } from "../../../lib/telemetry/telemetryTransport";
 
 export const useTelemetrySocket = ({ reconnectDelayMs = 1000 } = {}) => {
   const [connected, setConnected] = useState(false);

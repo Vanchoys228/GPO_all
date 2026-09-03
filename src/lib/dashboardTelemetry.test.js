@@ -1,8 +1,23 @@
 import { describe, expect, it } from "vitest";
 import { createTelemetryEvent } from "../../shared/contracts/index.js";
-import { normalizeTelemetry } from "./dashboardTelemetry";
+import {
+  decodeWsData,
+  INITIAL_TELEMETRY,
+  normalizeAngle,
+  normalizeTelemetry,
+  ROUTE_WS_URL,
+  TELEMETRY_WS_URL,
+} from "./dashboardTelemetry";
 
 describe("normalizeTelemetry", () => {
+  it("preserves the compatibility facade API", () => {
+    expect(INITIAL_TELEMETRY).toBeDefined();
+    expect(normalizeAngle).toBeTypeOf("function");
+    expect(decodeWsData).toBeTypeOf("function");
+    expect(ROUTE_WS_URL).toMatch(/^ws:\/\//);
+    expect(TELEMETRY_WS_URL).toMatch(/^ws:\/\//);
+  });
+
   it("normalizes pose payloads from the shared coordinate contract", () => {
     const result = normalizeTelemetry({
       type: "telemetry",

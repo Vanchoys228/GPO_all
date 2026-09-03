@@ -1,6 +1,6 @@
 import { useEffect, useRef } from "react";
 import { CANVAS_HEIGHT, CANVAS_WIDTH } from "../../lib/zonePlanner";
-import { INITIAL_TELEMETRY } from "../../lib/dashboardTelemetry";
+import { INITIAL_TELEMETRY } from "../../lib/telemetry/dashboardTelemetryState";
 import { createPlannerCanvasDrawState } from "../../features/planner/model/plannerCanvasDrawState";
 import { startPlannerCanvasRenderLoop } from "../../features/planner/services/plannerCanvasRenderLoop";
 

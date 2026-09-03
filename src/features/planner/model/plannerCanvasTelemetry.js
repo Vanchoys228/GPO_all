@@ -1,4 +1,4 @@
-import { normalizeAngle } from "../../../lib/dashboardTelemetry";
+import { normalizeAngle } from "../../../lib/telemetry/telemetryNumbers";
 
 export const interpolateCanvasTelemetry = (current, target, alpha) => ({
   x: current.x + (target.x - current.x) * alpha,

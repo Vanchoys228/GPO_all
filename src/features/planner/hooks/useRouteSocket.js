@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { ROUTE_WS_URL } from "../../../lib/dashboardTelemetry";
+import { ROUTE_WS_URL } from "../../../lib/runtimeConfig";
 
 export const useRouteSocket = ({ reconnectDelayMs = 1000 } = {}) => {
   const socketRef = useRef(null);
