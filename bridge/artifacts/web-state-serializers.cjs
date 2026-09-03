@@ -1,8 +1,10 @@
 const {
   clamp,
   normalizeNumber,
+} = require("../protocol/number-normalization.cjs");
+const {
   sanitizeMappingSurveyMode,
-} = require("../protocol/validation.cjs");
+} = require("../protocol/mapping-validation.cjs");
 
 const DEFAULT_MOTION_PROFILE = {
   cruiseSpeedMps: 0.22,

@@ -1,11 +1,13 @@
 const {
   clampInt,
   normalizeNumber,
+} = require("../protocol/number-normalization.cjs");
+const {
   resolveAlgorithmKey,
   resolveTaskKey,
   sanitizeNativeParams,
-  validatePoints,
-} = require("../protocol/validation.cjs");
+} = require("../protocol/solver-validation.cjs");
+const { validatePoints } = require("../protocol/route-validation.cjs");
 
 const createPlanningService = ({ nativeSolver, maxConcurrentRuns = 2 }) => {
   let activeRuns = 0;

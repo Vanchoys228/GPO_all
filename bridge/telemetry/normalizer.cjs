@@ -1,5 +1,5 @@
 const path = require("path");
-const { clamp } = require("../protocol/validation.cjs");
+const { clamp } = require("../protocol/number-normalization.cjs");
 
 const resolveCameraFrameMimeType = (frameFile, rawMimeType) => {
   if (typeof rawMimeType === "string" && rawMimeType.startsWith("image/")) {

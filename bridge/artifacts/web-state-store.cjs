@@ -9,10 +9,12 @@ const {
 const {
   resolveAlgorithmKey,
   resolveTaskKey,
+} = require("../protocol/solver-validation.cjs");
+const {
   validatePoints,
   validatePolygons,
   validateSurfaceZones,
-} = require("../protocol/validation.cjs");
+} = require("../protocol/route-validation.cjs");
 
 const toDegrees = (radians) => (radians * 180) / Math.PI;
 
