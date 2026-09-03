@@ -1,4 +1,4 @@
-import { existsSync, readFileSync } from "node:fs";
+import { existsSync, readFileSync, readdirSync } from "node:fs";
 import { describe, expect, it } from "vitest";
 
 describe("architecture cleanup", () => {
@@ -36,8 +36,7 @@ describe("architecture cleanup", () => {
     expect(gitignore).toContain("webots/controllers/youbot_web/*.exe");
   });
 
-  it("does not track generated Webots UI metadata or runtime camera frames", () => {
-    expect(existsSync("webots/worlds/.youbot_only.wbproj")).toBe(false);
+  it("ignores generated Webots UI metadata and removes runtime camera frames", () => {
     expect(existsSync("webots/worlds/.youbot_only.jpg")).toBe(false);
     expect(existsSync("web_state/camera_frame.jpg")).toBe(false);
 
@@ -47,12 +46,19 @@ describe("architecture cleanup", () => {
   });
 
   it("does not keep temporary implementation plan artifacts", () => {
-    expect(existsSync("docs/superpowers")).toBe(false);
+    const artifacts = existsSync("docs/superpowers")
+      ? readdirSync("docs/superpowers", { recursive: true, withFileTypes: true })
+        .filter((entry) => entry.isFile())
+      : [];
+    expect(artifacts).toHaveLength(0);
   });
 
-  it("keeps the editable architecture source without a stale rendered duplicate", () => {
-    expect(existsSync("PROJECT_MODULARITY.drawio")).toBe(true);
+  it("does not keep obsolete architecture and refactoring artifacts", () => {
+    expect(existsSync("PROJECT_MODULARITY.drawio")).toBe(false);
     expect(existsSync("PROJECT_MODULARITY.png")).toBe(false);
+    expect(existsSync("PROJECT_SCHEME.md")).toBe(false);
+    expect(existsSync("REFACTORING_PLAN.md")).toBe(false);
+    expect(existsSync("LIDAR_FLOWCHART.md")).toBe(false);
   });
 
   it("does not keep Vite starter styles and branding", () => {

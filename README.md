@@ -17,8 +17,6 @@
 - WebSocket bridge между UI, solver и контроллером робота.
 - Контроллер `Webots` для `KUKA youBot`.
 
-Подробная схема модулей лежит в [PROJECT_SCHEME.md](./PROJECT_SCHEME.md).
-
 ## Что умеет проект
 
 - Ставить точки посещения на координатной карте.
@@ -74,12 +72,10 @@
 |   `-- worlds/youbot_only.wbt
 |-- web_state/
 |   `-- .gitkeep
-|-- docs/
 |-- bridge-config.cjs
 |-- ws-bridge.cjs
 |-- telemetry-server.cjs
-|-- COORDINATE_CONTRACT.md
-`-- PROJECT_SCHEME.md
+`-- COORDINATE_CONTRACT.md
 ```
 
 ## Требования
@@ -203,8 +199,6 @@ docker compose --profile simulation up --build
 - `http://127.0.0.1:9003/health` — состояние bridge и solver.
 - `http://127.0.0.1:8080` — frontend.
 
-Пошаговая декомпозиция описана в [REFACTORING_PLAN.md](./REFACTORING_PLAN.md).
-
 ## Проверки качества
 
 Перед изменениями и перед выдачей результата полезно прогонять:
@@ -241,11 +235,10 @@ npm run test:bridge
 
 ## Что еще важно
 
-- `npm audit --omit=dev` сейчас сообщает о проблемах в `react-router`, `ws` и
-  `xlsx`; для `xlsx` автоматического исправления нет. Обновляйте зависимости
-  отдельным изменением и повторяйте полный набор регрессионных проверок.
-- Dev-аудит после обновления зависимостей тоже должен быть чистым или близким к
-  этому, но основной критерий безопасности здесь — production runtime.
+- Проверяйте runtime- и dev-зависимости командой `npm audit` после каждого
+  обновления lock-файла.
+- Обновляйте зависимости отдельным изменением и повторяйте полный набор
+  регрессионных проверок.
 - Build artifacts (`dist`, `native/build`, Webots `.exe`) и runtime state не
   хранятся в Git и создаются локально командами сборки.
 
