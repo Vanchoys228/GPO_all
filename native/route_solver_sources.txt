@@ -1,4 +1,7 @@
-src/common.cpp
+src/random.cpp
+src/tour_operations.cpp
+src/local_search.cpp
+src/population.cpp
 src/ga_tabu.cpp
 src/annealing.cpp
 src/scatter.cpp

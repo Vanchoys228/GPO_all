@@ -4,7 +4,7 @@
 
 ## Что здесь лежит
 
-- `include/tsp` — общие заголовки и интерфейсы алгоритмов
+- `include/tsp` — типы, RNG, операции над турами, local search и population API
 - `include/gpo` — публичные типы и интерфейсы route-solver service layer
 - `src` — алгоритмы, построение задачи, solver service и текстовый протокол
 - `apps/gpo_route_solver.cpp` — тонкая CLI-точка композиции
@@ -49,7 +49,7 @@ native/build/gpo_route_solver
 
 ## Тесты
 
-На Windows тесты собирают core, CLI и три независимых test executable:
+На Windows тесты собирают core, CLI и семь независимых test executable:
 
 ```powershell
 npm run native:test

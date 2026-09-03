@@ -218,7 +218,8 @@ npm run test:bridge
 - unit- и компонентные тесты для planner model, hooks, services, геометрии,
   телеметрии и sidebar-секций.
 - smoke-test bridge + solver HTTP API.
-- автономные C++-тесты native protocol/problem/service через `npm run native:test`.
+- автономные C++-тесты native protocol/problem/service и TSP-модулей через
+  `npm run native:test`.
 - автономные C-тесты модулей Webots-контроллера через `npm run test:webots`.
 
 ## Координатный контракт
