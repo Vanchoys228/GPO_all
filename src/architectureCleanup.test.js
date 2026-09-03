@@ -71,4 +71,16 @@ describe("architecture cleanup", () => {
     expect(indexHtml).toContain("<title>GPO — планировщик маршрута</title>");
     expect(indexHtml).not.toContain("vite.svg");
   });
+
+  it("loads the dashboard and spreadsheet parser only when they are needed", () => {
+    const app = readFileSync("src/App.jsx", "utf8");
+    const plannerFileImport = readFileSync(
+      "src/features/planner/services/plannerFileImport.js",
+      "utf8"
+    );
+
+    expect(app).toContain('lazy(() => import("./pages/Dashboard"))');
+    expect(plannerFileImport).not.toContain('import * as XLSX from "xlsx"');
+    expect(plannerFileImport).toContain('await import("xlsx")');
+  });
 });

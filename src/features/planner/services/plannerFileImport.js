@@ -1,4 +1,3 @@
-import * as XLSX from "xlsx";
 import { INITIAL_ZONE } from "../../../lib/plannerModel";
 import { DEFAULT_POINT_TASK } from "../../../lib/zonePlanner";
 
@@ -82,6 +81,7 @@ export const readPlannerImportFile = async (file) => {
     throw new Error("Поддерживаются JSON, Excel и CSV.");
   }
 
+  const XLSX = await import("xlsx");
   const workbook = XLSX.read(await file.arrayBuffer(), {
     type: "array",
     raw: false,
