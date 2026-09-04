@@ -46,14 +46,12 @@ for %%F in (!TEST_PATTERN!) do (
   cl /nologo /std:c11 /O2 /I"%WEBOTS_INCLUDE%" "%%F" !SOURCES! /Fe:"%OUTPUT_DIR%\%%~nF.exe" /Fo:"%OUTPUT_DIR%\\" /link /LIBPATH:"%WEBOTS_LIBRARY%" Controller.lib >nul
   if errorlevel 1 (
     echo [webots-test] compile failed: %%F
-    popd
-    exit /b 1
+    goto :test_failed
   )
   "%OUTPUT_DIR%\%%~nF.exe"
   if errorlevel 1 (
     echo [webots-test] failed: %%F
-    popd
-    exit /b 1
+    goto :test_failed
   )
   set /a PASSED+=1
 )
@@ -61,3 +59,7 @@ popd
 
 echo [webots-test] !PASSED! tests passed
 exit /b 0
+
+:test_failed
+popd
+exit /b 1

@@ -1,4 +1,6 @@
 controller_avoidance_command.c
+controller_app_context.c
+controller_app_lifecycle.c
 controller_avoidance_detection.c
 controller_avoidance_lifecycle.c
 controller_avoidance_presentation.c
@@ -13,12 +15,15 @@ controller_camera_geometry.c
 controller_camera_map.c
 controller_camera_map_io.c
 controller_camera_render.c
+controller_camera_runtime.c
 controller_camera_virtual.c
 controller_control_config.c
 controller_drive.c
 controller_io.c
 controller_input_orchestration.c
+controller_input_runtime.c
 controller_lidar_math.c
+controller_lidar_runtime.c
 controller_lidar_scan.c
 controller_lidar_trace.c
 controller_lifecycle.c
@@ -47,6 +52,7 @@ controller_navigation_adapter.c
 controller_navigation_context.c
 controller_navigation_lidar.c
 controller_navigation_metrics.c
+controller_navigation_runtime.c
 controller_navigation_motion_service.c
 controller_navigation_perception.c
 controller_navigation_presentation.c
@@ -84,6 +90,7 @@ controller_survey_offset_contour.c
 controller_survey_route_builder.c
 controller_survey_route_primitives.c
 controller_survey_state.c
+controller_survey_runtime.c
 controller_telemetry.c
 controller_telemetry_publisher.c
 controller_telemetry_service.c
