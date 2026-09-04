@@ -122,7 +122,6 @@ int controller_webots_simulation_format_surface_zone(
       "geometry IndexedFaceSet { "
       "coord Coordinate { point [ %s ] } "
       "coordIndex [ %s ] "
-      "solid FALSE "
       "} "
       "} "
       "] "

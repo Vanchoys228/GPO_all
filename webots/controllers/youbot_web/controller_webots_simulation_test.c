@@ -56,6 +56,7 @@ int main(void) {
   assert(strstr(node_string, "baseColor 0.9300 0.5400 0.0800") != NULL);
   assert(strstr(node_string, "point [ 0.000000 0.000000 0.016000, 1.000000 0.000000 0.016000, 0.000000 1.000000 0.016000,  ]") != NULL);
   assert(strstr(node_string, "coordIndex [ 0 1 2 -1 ]") != NULL);
+  if (strstr(node_string, "solid FALSE") != NULL) return 1;
 
   RuntimeCommand obstacle = {0};
   obstacle.id = 37;

@@ -51,6 +51,15 @@ void controller_route_zone_service_init(ControllerRouteZoneService *service) {
   service->surface_zones_last_checked = -2;
 }
 
+void controller_route_zone_service_ignore_existing(
+    ControllerRouteZoneService *service,
+    const ControllerRouteZoneServicePaths *paths) {
+  if (!service || !paths) return;
+  service->route_last_checked = get_file_mtime(paths->route_path);
+  service->limit_zones_last_checked = get_file_mtime(paths->limit_zones_path);
+  service->surface_zones_last_checked = get_file_mtime(paths->surface_zones_path);
+}
+
 ControllerRouteZoneServiceResult controller_route_zone_service_reload(
     ControllerRouteZoneService *service,
     const ControllerRouteZoneServicePaths *paths,

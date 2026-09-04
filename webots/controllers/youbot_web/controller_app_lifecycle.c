@@ -266,6 +266,9 @@ int controller_app_lifecycle_run(int argc, char **argv) {
           MAPPING_SURVEY_GRID_CELL,
       });
   controller_route_zone_service_init(&route_zone_service);
+  controller_route_zone_service_ignore_existing(
+      &route_zone_service,
+      &(ControllerRouteZoneServicePaths){ROUTE_PATH, ZONE_PATH, SURFACE_ZONE_PATH});
   controller_route_zone_reload_service_init(
       &route_zone_reload_service,
       &route_zone_service,
@@ -301,8 +304,6 @@ int controller_app_lifecycle_run(int argc, char **argv) {
       &motion_profile_reload_service, &motion_state, MOTION_PROFILE_PATH);
   controller_webots_motion_state_apply(&motion_state);
   controller_motion_profile_reload_service_run(&motion_profile_reload_service, 0, 1);
-  maybe_reload_zones();
-  maybe_reload_surface_zones();
   const ControllerSurveyIntegrationOps runtime_command_survey_ops = survey_integration_ops();
   controller_runtime_command_reload_service_init(
       &runtime_command_reload_service,

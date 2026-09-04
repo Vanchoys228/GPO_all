@@ -110,10 +110,17 @@ describe("Webots controller build configuration", () => {
     expect(testRunner).toContain("CONTROLLER_TEST_FILTER");
   });
 
+  it("does not persist negative zero-like youBot finger positions", () => {
+    const world = readFileSync("webots/worlds/youbot_only.wbt", "utf8");
+
+    expect(world).not.toMatch(/hidden position_8_[01] -\d+(?:\.\d+)?e-\d+/u);
+  });
+
   it("propagates controller compile and runtime failures to npm", () => {
     const testRunner = readFileSync(`${controllerDirectory}/run_controller_tests.bat`, "utf8");
 
     expect(testRunner).toContain("goto :test_failed");
+    expect(testRunner).toContain('if not "!TEST_EXIT!"=="0"');
     expect(testRunner).toMatch(/:test_failed[\s\S]*exit \/b 1/u);
   });
 

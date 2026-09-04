@@ -28,6 +28,7 @@ if not exist "%WEBOTS_HOME%\include\controller\c\webots\robot.h" (
 
 set "WEBOTS_INCLUDE=%WEBOTS_HOME%\include\controller\c"
 set "WEBOTS_LIBRARY=%WEBOTS_HOME%\lib\controller"
+set "PATH=%WEBOTS_LIBRARY%;%PATH%"
 set "CONTROLLER_DIR=%~dp0"
 set "OUTPUT_DIR=%CONTROLLER_DIR%build\tests"
 if not exist "%OUTPUT_DIR%" mkdir "%OUTPUT_DIR%"
@@ -49,7 +50,8 @@ for %%F in (!TEST_PATTERN!) do (
     goto :test_failed
   )
   "%OUTPUT_DIR%\%%~nF.exe"
-  if errorlevel 1 (
+  set "TEST_EXIT=!ERRORLEVEL!"
+  if not "!TEST_EXIT!"=="0" (
     echo [webots-test] failed: %%F
     goto :test_failed
   )

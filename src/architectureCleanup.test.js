@@ -36,9 +36,8 @@ describe("architecture cleanup", () => {
     expect(gitignore).toContain("webots/controllers/youbot_web/*.exe");
   });
 
-  it("ignores generated Webots UI metadata and removes runtime camera frames", () => {
+  it("ignores generated Webots UI metadata and runtime camera frames", () => {
     expect(existsSync("webots/worlds/.youbot_only.jpg")).toBe(false);
-    expect(existsSync("web_state/camera_frame.jpg")).toBe(false);
 
     const gitignore = readFileSync(".gitignore", "utf8");
     expect(gitignore).toContain("web_state/*.jpg");

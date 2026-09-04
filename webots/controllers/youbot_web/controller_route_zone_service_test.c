@@ -33,6 +33,19 @@ int main(void) {
   }
 
   controller_route_zone_service_init(&service);
+  controller_route_zone_service_ignore_existing(&service, &paths);
+  const ControllerRouteZoneServiceResult ignored_result =
+      controller_route_zone_service_reload(
+          &service, &paths, &request, &route, &limit_zones, &surface_zones);
+  if (ignored_result.route_status != CONTROLLER_ROUTE_ZONE_STATUS_UNCHANGED ||
+      ignored_result.limit_zones_status != CONTROLLER_ROUTE_ZONE_STATUS_UNCHANGED ||
+      ignored_result.surface_zones_status != CONTROLLER_ROUTE_ZONE_STATUS_UNCHANGED ||
+      ignored_result.route_changed || ignored_result.limit_zones_changed ||
+      ignored_result.surface_zones_changed) {
+    return 4;
+  }
+
+  controller_route_zone_service_init(&service);
   const ControllerRouteZoneServiceResult result =
       controller_route_zone_service_reload(
           &service, &paths, &request, &route, &limit_zones, &surface_zones);
@@ -44,16 +57,16 @@ int main(void) {
   if (result.route_status != CONTROLLER_ROUTE_ZONE_STATUS_OK ||
       result.limit_zones_status != CONTROLLER_ROUTE_ZONE_STATUS_OK ||
       result.surface_zones_status != CONTROLLER_ROUTE_ZONE_STATUS_OK) {
-    return 4;
+    return 5;
   }
   if (!result.route_changed || !result.limit_zones_changed ||
       !result.surface_zones_changed) {
-    return 5;
+    return 6;
   }
   if (result.route.count != 1 || result.limit_zones.count != 1 ||
       result.surface_zones.count != 1 ||
       strcmp(result.surface_zones.zones[0].surface_key, "grass") != 0) {
-    return 6;
+    return 7;
   }
   return 0;
 }

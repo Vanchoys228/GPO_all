@@ -47,6 +47,9 @@ typedef struct {
 } ControllerRouteZoneServiceResult;
 
 void controller_route_zone_service_init(ControllerRouteZoneService *service);
+void controller_route_zone_service_ignore_existing(
+    ControllerRouteZoneService *service,
+    const ControllerRouteZoneServicePaths *paths);
 ControllerRouteZoneServiceResult controller_route_zone_service_reload(
     ControllerRouteZoneService *service,
     const ControllerRouteZoneServicePaths *paths,
