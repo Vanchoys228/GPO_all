@@ -1,3 +1,4 @@
+const {createPlanningService} = require("../services/planning-service.cjs");
 const defaultConfig = require("../config/runtime-config.cjs");
 const defaultCoordinateContract = require("../../shared/coordinate-contract.json");
 const { createNativeSolver: defaultCreateNativeSolver } = require("../solver/native-solver.cjs");
@@ -14,6 +15,7 @@ const startPlanningProcess = ({
     coordinateContract,
     host: config.BRIDGE_HOST,
     nativeSolver,
+    planningService:createPlanningService({nativeSolver}),
     port: config.SOLVER_PORT,
     solverPath: config.SOLVER_PATH,
   });

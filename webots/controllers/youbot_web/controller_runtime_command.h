@@ -17,4 +17,8 @@ int controller_runtime_command_load_file(
     const ControllerRuntimeCommandLimits *limits,
     RuntimeCommand *command);
 
+int controller_runtime_command_load_next_file(const char *path,
+    const ControllerRuntimeCommandLimits *limits, long long after_id, RuntimeCommand *command);
+long long controller_runtime_command_latest_id(const char *path);
+
 #endif

@@ -18,7 +18,7 @@ int main(void) {
   fprintf(file, "# comment\n");
   fprintf(file, "1.5,2.5,90\n");
   fprintf(file, "3.5,4.5\n");
-  fprintf(file, "invalid line\n");
+  fprintf(file, "# command launch-1\n");
   fclose(file);
 
   RouteData route = {0};
@@ -42,5 +42,11 @@ int main(void) {
   if (controller_route_load_file(path, &route) != CONTROLLER_ROUTE_LOAD_EMPTY) return 12;
   remove(path);
 
+  file = fopen(path, "w");
+  if (!file) return 13;
+  for (int i = 0; i <= MAX_WAYPOINTS; ++i) fprintf(file, "%d,0\n", i);
+  fclose(file);
+  if (controller_route_load_file(path, &route) == CONTROLLER_ROUTE_LOAD_OK) return 14;
+  remove(path);
   return 0;
 }

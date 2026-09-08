@@ -1,7 +1,8 @@
+const {createTelemetryService} = require("../services/telemetry-service.cjs");
 const defaultConfig = require("../config/runtime-config.cjs");
 const defaultCoordinateContract = require("../../shared/coordinate-contract.json");
 const { createTelemetryServer: defaultCreateTelemetryServer } = require("../servers/telemetry-server.cjs");
-const { createFileTelemetrySource: defaultCreateFileTelemetrySource } = require("../telemetry/file-source.cjs");
+const { createFileTelemetrySource: defaultCreateFileTelemetrySource } = require("../adapters/webots-telemetry-source.cjs");
 const { createTelemetryNormalizer: defaultCreateTelemetryNormalizer } = require("../telemetry/normalizer.cjs");
 
 const startTelemetryProcess = ({
@@ -22,6 +23,7 @@ const startTelemetryProcess = ({
     coordinateContract,
     enableMockTelemetry,
     fileSource,
+    telemetryService:createTelemetryService(),
     host: config.BRIDGE_HOST,
     port: config.TELEMETRY_PORT,
   });

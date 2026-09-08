@@ -38,6 +38,15 @@ const solveRequest = (baseUrl, points = [{ x: 0, y: 0 }, { x: 1, y: 0 }]) =>
   });
 
 describe("solver HTTP server", () => {
+  it("rejects untrusted browser origins and reflects only allowed origins", async () => {
+    const baseUrl = await listenForTest({ solverExists: async () => true });
+    const rejected = await fetch(`${baseUrl}/health`, { headers: { Origin: "https://untrusted.example" } });
+    expect(rejected.status).toBe(403);
+    expect(rejected.headers.get("access-control-allow-origin")).toBeNull();
+    const allowed = await fetch(`${baseUrl}/health`, { headers: { Origin: "http://127.0.0.1:5173" } });
+    expect(allowed.status).toBe(200);
+    expect(allowed.headers.get("access-control-allow-origin")).toBe("http://127.0.0.1:5173");
+  });
   it("reports health without requiring a solver run", async () => {
     const baseUrl = await listenForTest({
       solverExists: async () => false,
@@ -170,9 +179,7 @@ describe("solver HTTP server", () => {
     while (runCount < 2) await new Promise((resolve) => setTimeout(resolve, 5));
 
     const thirdRequest = solveRequest(baseUrl);
-    await new Promise((resolve) => setTimeout(resolve, 25));
-    releases.forEach((release) => release());
-    const third = await thirdRequest;
+    const third = await thirdRequest.finally(() => releases.forEach((release) => release()));
     expect(third.status).toBe(503);
     expect(runCount).toBe(2);
 

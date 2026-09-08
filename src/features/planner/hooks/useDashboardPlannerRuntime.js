@@ -1,3 +1,4 @@
+import { useMissionTracking } from "./useMissionTracking";
 import { useRouteSocket } from "./useRouteSocket";
 import { useRouteTiming } from "./useRouteTiming";
 import { useSolverHealth } from "./useSolverHealth";
@@ -9,7 +10,9 @@ export const useDashboardPlannerRuntime = () => {
   const solverApiUp = useSolverHealth();
   const routeTiming = useRouteTiming(telemetry.navigation);
 
+  const mission = useMissionTracking({onStarted:routeTiming.start});
   return {
+    mission,
     telemetryWsUp,
     telemetry,
     routeWsUp,

@@ -1,3 +1,6 @@
+#ifndef _WIN32
+#define _POSIX_C_SOURCE 200809L
+#endif
 #include "controller_io.h"
 
 #include <stdio.h>
@@ -13,9 +16,20 @@
 #endif
 
 long long get_file_mtime(const char *path) {
+#ifdef _WIN32
+  WIN32_FILE_ATTRIBUTE_DATA data;
+  if (!path || !GetFileAttributesExA(path, GetFileExInfoStandard, &data)) return -1;
+  return ((long long)data.ftLastWriteTime.dwHighDateTime << 32) |
+         data.ftLastWriteTime.dwLowDateTime;
+#else
   STAT_STRUCT file_stat;
   if (!path || STAT_FN(path, &file_stat) != 0) return -1;
-  return (long long)file_stat.st_mtime;
+#ifdef __APPLE__
+  return (long long)file_stat.st_mtimespec.tv_sec * 1000000000LL + file_stat.st_mtimespec.tv_nsec;
+#else
+  return (long long)file_stat.st_mtim.tv_sec * 1000000000LL + file_stat.st_mtim.tv_nsec;
+#endif
+#endif
 }
 
 int replace_file(const char *from_path, const char *to_path) {
@@ -25,7 +39,6 @@ int replace_file(const char *from_path, const char *to_path) {
              ? 0
              : -1;
 #else
-  remove(to_path);
   return rename(from_path, to_path);
 #endif
 }

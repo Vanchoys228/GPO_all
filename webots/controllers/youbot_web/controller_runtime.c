@@ -68,7 +68,7 @@ ControllerRuntimeNavigationResult controller_runtime_process_navigation_frame(
     const ControllerRuntimeSensorFrame *frame,
     const ControllerRuntimeNavigationConfig *config) {
   ControllerRuntimeNavigationResult result = {
-      CONTROLLER_RUNTIME_ACTION_WAIT_FOR_ROUTE, {0}, {0}};
+      .action = CONTROLLER_RUNTIME_ACTION_WAIT_FOR_ROUTE};
   if (!runtime || !frame || !config) return result;
 
   const int manual_relocation_detected =

@@ -83,5 +83,6 @@ void controller_telemetry_service_build_navigation(
       avoidance_steps,
       has_target,
       has_target ? route->waypoints[current_waypoint_index] : (Waypoint){0},
+      route ? route->command_id : "",
   };
 }

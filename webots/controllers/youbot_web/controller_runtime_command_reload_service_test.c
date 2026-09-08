@@ -52,6 +52,15 @@ int main(void) {
   assert(controller_runtime_command_reload_service_run(&service, 12, 6) ==
          CONTROLLER_RUNTIME_COMMAND_RELOAD_UNCHANGED);
   assert(spawn_calls == 1);
+  file = fopen(path, "a");
+  assert(file);
+  fputs("id 8\ntype spawn_obstacle\nx 3\ny 4\nid 9\ntype spawn_obstacle\nx 5\ny 6\n", file);
+  fclose(file);
+  assert(controller_runtime_command_reload_service_run(&service, 18, 6) == CONTROLLER_RUNTIME_COMMAND_RELOAD_APPLIED);
+  assert(last_spawn_id == 8);
+  assert(controller_runtime_command_reload_service_run(&service, 24, 6) == CONTROLLER_RUNTIME_COMMAND_RELOAD_APPLIED);
+  assert(last_spawn_id == 9);
+  assert(spawn_calls == 3);
   remove(path);
   return 0;
 }

@@ -35,11 +35,11 @@ ControllerRuntimeCommandReloadResult controller_runtime_command_reload_service_r
 
   const long long mtime = get_file_mtime(service->command_path);
   if (mtime < 0) return CONTROLLER_RUNTIME_COMMAND_RELOAD_MISSING;
-  if (mtime == service->last_modified) return CONTROLLER_RUNTIME_COMMAND_RELOAD_UNCHANGED;
+
 
   RuntimeCommand command = {0};
-  if (!controller_runtime_command_load_file(service->command_path, &service->limits, &command)) {
-    service->last_modified = mtime;
+  if (!controller_runtime_command_load_next_file(service->command_path, &service->limits, service->last_processed_id, &command)) {
+    if (mtime == service->last_modified) return CONTROLLER_RUNTIME_COMMAND_RELOAD_UNCHANGED;
     return CONTROLLER_RUNTIME_COMMAND_RELOAD_INVALID;
   }
 

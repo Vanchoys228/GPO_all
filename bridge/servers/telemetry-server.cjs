@@ -1,4 +1,7 @@
+const http = require("http");
+const {createHealthHandler} = require("./health-handler.cjs");
 const WebSocket = require("ws");
+const { verifyWebSocketOrigin } = require("../protocol/origin-policy.cjs");
 const { createTelemetryService } = require("../services/telemetry-service.cjs");
 
 const safeJsonParse = (text) => {
@@ -40,14 +43,16 @@ const createTelemetryServer = ({
   host,
   mockIdleMs = 2500,
   port,
+  telemetryService: suppliedTelemetryService,
 }) => {
-  const wss = new WebSocket.Server({ host, port });
+  const server = http.createServer(createHealthHandler({service:"telemetry",getStatus:() => ({clientCount:clients.size})}));
+  const wss = new WebSocket.Server({ server, maxPayload: 1024 * 1024, verifyClient: verifyWebSocketOrigin });
   const clients = new Set();
   const senders = new Set();
   let telemetryCount = 0;
   let lastRealTelemetryAt = 0;
   let mockPhase = 0;
-  const telemetryService = createTelemetryService();
+  const telemetryService = suppliedTelemetryService || createTelemetryService();
 
   const broadcastTelemetry = async (payload, exclude = null) => {
     telemetryCount += 1;
@@ -81,6 +86,7 @@ const createTelemetryServer = ({
   };
 
   wss.on("connection", (ws) => {
+    ws.on("error", error => console.error("[telemetry] socket error:", error.message));
     clients.add(ws);
     console.log("[telemetry] client connected");
     ws.on("message", async (data) => {
@@ -127,7 +133,7 @@ const createTelemetryServer = ({
       lastRealTelemetryAt = Date.now();
       await broadcastTelemetry(telemetry);
     } catch (error) {
-      console.error("[telemetry] failed to poll robot_state.json:", error.message);
+      console.error("[telemetry] failed to poll telemetry source:", error.message);
     }
   }, filePollMs);
 
@@ -136,8 +142,10 @@ const createTelemetryServer = ({
     clearInterval(fileTimer);
     for (const client of clients) client.terminate();
     await new Promise((resolve) => wss.close(resolve));
+    await new Promise(resolve => server.close(resolve));
   };
 
+  server.listen(port,host);
   return {
     broadcast,
     buildMockTelemetry,

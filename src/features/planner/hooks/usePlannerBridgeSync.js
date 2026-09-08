@@ -1,4 +1,4 @@
-import { useEffect, useRef } from "react";
+import { useEffect } from "react";
 import { sendRouteChannelPayload } from "../services/routeChannel";
 
 export const usePlannerBridgeSync = ({
@@ -6,24 +6,24 @@ export const usePlannerBridgeSync = ({
   cruiseSpeedMps,
   payloadKg,
   routeSocketRef,
+  routeConnected,
+  setStatus,
   surfaceSyncPayloadText,
   zoneSyncPayloadText,
 }) => {
-  const motionProfileTouchedRef = useRef(false);
 
   useEffect(() => {
-    sendRouteChannelPayload(routeSocketRef, JSON.parse(zoneSyncPayloadText));
-  }, [routeSocketRef, zoneSyncPayloadText]);
+    if (!routeConnected) return;
+    sendRouteChannelPayload(routeSocketRef, JSON.parse(zoneSyncPayloadText), { onError: error => setStatus(`Зоны не сохранены: ${error.message}`) });
+  }, [setStatus, routeConnected, routeSocketRef, zoneSyncPayloadText]);
 
   useEffect(() => {
-    sendRouteChannelPayload(routeSocketRef, JSON.parse(surfaceSyncPayloadText));
-  }, [routeSocketRef, surfaceSyncPayloadText]);
+    if (!routeConnected) return;
+    sendRouteChannelPayload(routeSocketRef, JSON.parse(surfaceSyncPayloadText), { onError: error => setStatus(`Поверхности не сохранены: ${error.message}`) });
+  }, [setStatus, routeConnected, routeSocketRef, surfaceSyncPayloadText]);
 
   useEffect(() => {
-    if (!motionProfileTouchedRef.current) {
-      motionProfileTouchedRef.current = true;
-      return;
-    }
+    if (!routeConnected) return;
     sendRouteChannelPayload(routeSocketRef, {
       type: "motion_profile",
       motion: {
@@ -31,6 +31,6 @@ export const usePlannerBridgeSync = ({
         payloadKg,
         batteryRange: batteryRangeMeters,
       },
-    });
-  }, [batteryRangeMeters, cruiseSpeedMps, payloadKg, routeSocketRef]);
+    }, { onError: error => setStatus(`Параметры движения не сохранены: ${error.message}`) });
+  }, [setStatus, routeConnected, batteryRangeMeters, cruiseSpeedMps, payloadKg, routeSocketRef]);
 };

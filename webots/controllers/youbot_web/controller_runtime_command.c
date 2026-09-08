@@ -8,9 +8,10 @@
 
 #define CONTROLLER_RUNTIME_EPS 1e-9
 
-int controller_runtime_command_load_file(
+int controller_runtime_command_load_next_file(
     const char *path,
     const ControllerRuntimeCommandLimits *limits,
+    long long after_id,
     RuntimeCommand *command) {
   if (!path || !limits || !command) return 0;
   FILE *file = fopen(path, "r");
@@ -35,7 +36,11 @@ int controller_runtime_command_load_file(
     char token[64];
 
     if (sscanf(line, " id %lld", &id) == 1) {
+      if (parsed.id > after_id) break;
+      if (id <= after_id) continue;
       parsed.id = id;
+    } else if (parsed.id <= after_id) {
+      continue;
     } else if (sscanf(line, " type %63s", token) == 1) {
       parsed.has_spawn_obstacle = strcmp(token, "spawn_obstacle") == 0;
       parsed.has_start_mapping_survey = strcmp(token, "start_mapping_survey") == 0;
@@ -98,4 +103,21 @@ int controller_runtime_command_load_file(
   }
   *command = parsed;
   return 1;
+}
+
+int controller_runtime_command_load_file(const char *path,
+    const ControllerRuntimeCommandLimits *limits, RuntimeCommand *command) {
+  return controller_runtime_command_load_next_file(path, limits, -1, command);
+}
+
+long long controller_runtime_command_latest_id(const char *path) {
+  FILE *file = path ? fopen(path, "r") : NULL;
+  if (!file) return -1;
+  char line[256];
+  long long latest = -1, id;
+  while (fgets(line, sizeof(line), file)) {
+    if (sscanf(line, " id %lld", &id) == 1 && id > latest) latest = id;
+  }
+  fclose(file);
+  return latest;
 }

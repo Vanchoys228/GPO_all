@@ -54,12 +54,6 @@ void controller_avoidance_state_begin(
   state->heading_accum_rad = 0.0;
 }
 
-static double clamp_value(double value, double min_value, double max_value) {
-  if (value < min_value) return min_value;
-  if (value > max_value) return max_value;
-  return value;
-}
-
 void controller_avoidance_set_detour(
     ControllerAvoidanceState *state,
     double x,

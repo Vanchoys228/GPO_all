@@ -1,3 +1,5 @@
+const { normalizeScene } = require("../protocol/scene-validation.cjs");
+const { prepareRoute } = require("./route-planning.cjs");
 const {
   clampInt,
   normalizeNumber,
@@ -18,6 +20,8 @@ const createPlanningService = ({ nativeSolver, maxConcurrentRuns = 2 }) => {
       ? unwrapPlanningRequest(request)
       : request;
     const points = validatePoints(payload?.points);
+    const scene = payload?.scene === undefined ? null : normalizeScene(payload.scene);
+    const anchor = payload?.anchor ? validatePoints([payload.anchor])[0] : null;
     const algorithm = resolveAlgorithmKey(payload?.algorithm?.key);
     const params = sanitizeNativeParams(algorithm, payload?.algorithm?.params);
     const task = resolveTaskKey(payload?.task);
@@ -31,6 +35,15 @@ const createPlanningService = ({ nativeSolver, maxConcurrentRuns = 2 }) => {
     activeRuns += 1;
     try {
       const solved = await nativeSolver.run({ points, algorithmKey: algorithm, params, taskKey: task, seed });
+      let prepared = {};
+      if (scene) {
+        let seedRoute = solved.route;
+        if (task === "tsp" && anchor) {
+          const { rotateClosedRouteToNearestPoint } = await import("../../shared/planning/routeAnchor.js");
+          seedRoute = rotateClosedRouteToNearestPoint(seedRoute, anchor);
+        }
+        prepared = await prepareRoute({seedRoute, scene});
+      }
       return {
         ok: true,
         task,
@@ -39,6 +52,7 @@ const createPlanningService = ({ nativeSolver, maxConcurrentRuns = 2 }) => {
         closed: solved.closed,
         order: solved.order,
         route: solved.route,
+        ...prepared,
       };
     } finally {
       activeRuns -= 1;

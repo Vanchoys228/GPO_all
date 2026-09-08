@@ -2,6 +2,7 @@
 #define YOUBOT_WEB_CONTROLLER_APP_INTERNAL_H
 
 #include "controller_app_context.h"
+#include "controller_zone_geometry.h"
 
 #define webots_devices controller_app.webots_devices
 #define webots_adapter controller_app.webots_adapter

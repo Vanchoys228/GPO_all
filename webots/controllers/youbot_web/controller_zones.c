@@ -4,12 +4,6 @@
 #include <stdio.h>
 #include <string.h>
 
-static int bounded_zone_count(int count) {
-  if (count < 0) return 0;
-  if (count > MAX_ZONES) return MAX_ZONES;
-  return count;
-}
-
 int controller_zone_data_equal(const ZoneData *left, const ZoneData *right) {
   if (!left || !right || left->count != right->count) return 0;
   for (int zone_index = 0; zone_index < left->count; ++zone_index) {
@@ -52,14 +46,15 @@ ControllerZoneLoadResult controller_limit_zones_load_file(const char *path, Zone
     return CONTROLLER_ZONE_LOAD_INVALID_HEADER;
   }
 
-  declared_zone_count = bounded_zone_count(declared_zone_count);
+  if (declared_zone_count < 0 || declared_zone_count > MAX_ZONES) { fclose(file); return CONTROLLER_ZONE_LOAD_INVALID_HEADER; }
   for (int zone_index = 0; zone_index < declared_zone_count; ++zone_index) {
-    if (!fgets(line, sizeof(line), file)) break;
+    if (!fgets(line, sizeof(line), file)) { fclose(file); return CONTROLLER_ZONE_LOAD_UNEXPECTED_END; }
     int declared_point_count = 0;
     if (sscanf(line, " zone %d", &declared_point_count) != 1) {
       fclose(file);
       return CONTROLLER_ZONE_LOAD_INVALID_ENTRY;
     }
+    if (declared_point_count < 3 || declared_point_count > MAX_ZONE_POINTS) { fclose(file); return CONTROLLER_ZONE_LOAD_INVALID_ENTRY; }
     LimitZone *zone = &zones->zones[zones->count];
     snprintf(zone->id, sizeof(zone->id), "zone-%d", zones->count + 1);
     zone->point_count = 0;
@@ -70,7 +65,7 @@ ControllerZoneLoadResult controller_limit_zones_load_file(const char *path, Zone
       }
       double x = 0.0;
       double y = 0.0;
-      if (sscanf(line, " %lf %lf", &x, &y) != 2) {
+      if (sscanf(line, " %lf %lf", &x, &y) != 2 || !isfinite(x) || !isfinite(y)) {
         fclose(file);
         return CONTROLLER_ZONE_LOAD_INVALID_POINT;
       }
@@ -103,9 +98,9 @@ ControllerZoneLoadResult controller_surface_zones_load_file(const char *path, Su
     return CONTROLLER_ZONE_LOAD_INVALID_HEADER;
   }
 
-  declared_zone_count = bounded_zone_count(declared_zone_count);
+  if (declared_zone_count < 0 || declared_zone_count > MAX_ZONES) { fclose(file); return CONTROLLER_ZONE_LOAD_INVALID_HEADER; }
   for (int zone_index = 0; zone_index < declared_zone_count; ++zone_index) {
-    if (!fgets(line, sizeof(line), file)) break;
+    if (!fgets(line, sizeof(line), file)) { fclose(file); return CONTROLLER_ZONE_LOAD_UNEXPECTED_END; }
     int declared_point_count = 0;
     char surface_key[32] = "neutral";
     char zone_id[64] = "";
@@ -113,6 +108,7 @@ ControllerZoneLoadResult controller_surface_zones_load_file(const char *path, Su
       fclose(file);
       return CONTROLLER_ZONE_LOAD_INVALID_ENTRY;
     }
+    if (declared_point_count < 3 || declared_point_count > MAX_ZONE_POINTS) { fclose(file); return CONTROLLER_ZONE_LOAD_INVALID_ENTRY; }
     SurfaceZone *zone = &zones->zones[zones->count];
     snprintf(zone->id, sizeof(zone->id), "%s", zone_id[0] ? zone_id : "surface-zone");
     snprintf(zone->surface_key, sizeof(zone->surface_key), "%s", surface_key);
@@ -124,7 +120,7 @@ ControllerZoneLoadResult controller_surface_zones_load_file(const char *path, Su
       }
       double x = 0.0;
       double y = 0.0;
-      if (sscanf(line, " %lf %lf", &x, &y) != 2) {
+      if (sscanf(line, " %lf %lf", &x, &y) != 2 || !isfinite(x) || !isfinite(y)) {
         fclose(file);
         return CONTROLLER_ZONE_LOAD_INVALID_POINT;
       }

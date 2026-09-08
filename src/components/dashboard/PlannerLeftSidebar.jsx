@@ -1,3 +1,4 @@
+import PlannerMissionStatus from "./sections/PlannerMissionStatus";
 import PlannerEnergySection from "./sections/PlannerEnergySection";
 import PlannerSurfaceZonesSection from "./sections/PlannerSurfaceZonesSection";
 import PlannerRouteControlsSection from "./sections/PlannerRouteControlsSection";
@@ -18,6 +19,7 @@ export default function PlannerLeftSidebar({
   algorithmKey,
   onAlgorithmChange,
   status,
+  mission,
   energyWarning,
   routeBlocked,
   algorithmFields,
@@ -87,6 +89,7 @@ export default function PlannerLeftSidebar({
       </div>
 
       <div className="min-h-0 min-w-0 max-w-full flex-1 overflow-x-hidden overflow-y-auto overscroll-contain p-4 space-y-4 [scrollbar-gutter:stable]">
+      <PlannerMissionStatus mission={mission} />
       <PlannerSetupSection
         activePointKind={activePointKind}
         activeZoneName={activeZoneName}

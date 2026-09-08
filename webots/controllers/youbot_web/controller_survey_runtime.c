@@ -3,8 +3,10 @@
 #include "controller_app_config.h"
 #include "controller_app_internal.h"
 #include "controller_input_runtime.h"
+#include "controller_io.h"
 #include "controller_lidar_runtime.h"
 
+#include "controller_mapping_route_io.h"
 #include "controller_mapping_scan_service.h"
 #include "controller_mapping_scan_transition.h"
 #include "controller_mapping_survey_contour_service.h"
@@ -14,6 +16,7 @@
 #include "controller_mapping_survey_lifecycle_service.h"
 #include "controller_mapping_survey_route_generation_service.h"
 #include "controller_mapping_survey_runtime_safety.h"
+#include "controller_mapping_survey_safety.h"
 #include "controller_mapping_survey_safety_service.h"
 #include "controller_math.h"
 #include "controller_survey_geometry.h"

@@ -1,5 +1,10 @@
-const createRouteService = ({ artifactStore }) => {
-  const handle = async (payload) => {
+const createRouteService = ({ artifactStore, missionService, adapter }) => {
+  const handle = async (payload, context) => {
+    if (payload?.type === "route" && missionService) {
+      const mission = await missionService.submit(payload, context);
+      return {handled:true,missionId:mission.missionId,status:mission.status,route:mission.command.route,planning:mission.command.planning,sceneRevision:mission.command.sceneRevision};
+    }
+    if (adapter) return {handled:await adapter.update(payload)};
     if (payload?.type === "route") {
       await artifactStore.writeRoute(payload);
       return { handled: true };

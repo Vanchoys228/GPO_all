@@ -23,6 +23,41 @@ const createStore = async () => {
 };
 
 describe("web state store", () => {
+  it("preserves an explicit mission command id across delivery retries", async () => {
+    const {store} = await createStore();
+    const command = {commandId:"mission-42",route:[{x:0,y:0},{x:1,y:0}]};
+    await store.writeRoute(command);
+    const first = await fs.readFile(store.paths.routeCsv,"utf8");
+    await store.writeRoute(command);
+    expect(await fs.readFile(store.paths.routeCsv,"utf8")).toBe(first);
+    expect(first).toContain("# command mission-42");
+  });
+  it("keeps the last complete controller route when an auxiliary write fails", async () => {
+    const {store} = await createStore();
+    await store.writeRoute({route:[{x:0,y:0},{x:1,y:0}]});
+    const previous = await fs.readFile(store.paths.routeCsv, "utf8");
+    await fs.unlink(store.paths.routeJson);
+    await fs.mkdir(store.paths.routeJson);
+    await expect(store.writeRoute({route:[{x:0,y:0},{x:5,y:0}]})).rejects.toThrow();
+    expect(await fs.readFile(store.paths.routeCsv, "utf8")).toBe(previous);
+  });
+  it("preserves concurrent runtime commands with colliding client ids in arrival order", async () => {
+    const {store} = await createStore();
+    await Promise.all([1,2,3].map(x => store.writeRuntimeCommand({commandId:10, obstacle:{x,y:0}})));
+    const text = await fs.readFile(store.paths.runtimeCommand, "utf8");
+    expect([...text.matchAll(/^id (\d+)$/gm)].map(match => Number(match[1]))).toEqual([10,11,12]);
+    expect([...text.matchAll(/^x (\d+)$/gm)].map(match => Number(match[1]))).toEqual([1,2,3]);
+  });
+  it("publishes a distinct launch id for identical route sends", async () => {
+    const {store}=await createStore();
+    const route={route:[{x:0,y:0},{x:1,y:0}]};
+    await store.writeRoute(route);
+    const first=await fs.readFile(store.paths.routeCsv,"utf8");
+    await store.writeRoute(route);
+    const second=await fs.readFile(store.paths.routeCsv,"utf8");
+    expect(second).not.toBe(first);
+    expect(second).toMatch(/# command [\w-]+/);
+  });
   it("writes compatible route JSON, CSV and motion files", async () => {
     const { stateDir, store } = await createStore();
     await store.writeRoute({

@@ -51,4 +51,5 @@ module.exports = {
   TELEMETRY_PORT,
   TELEMETRY_WS_URL: `ws://${BRIDGE_HOST}:${TELEMETRY_PORT}`,
   WEB_STATE_DIR,
+  MISSION_STATE_DIR: toPath(process.env.MISSION_STATE_DIR,path.join(WEB_STATE_DIR,"missions")),
 };

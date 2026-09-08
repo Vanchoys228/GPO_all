@@ -27,6 +27,8 @@ export const useDashboardPlannerDerivedState = (state, runtime) => {
     cruiseSpeedMps: energy.cruiseSpeedMps,
     payloadKg: energy.payloadKg,
     routeSocketRef: runtime.routeWsRef,
+    routeConnected: runtime.routeWsUp,
+    setStatus: route.setStatus,
     surfaceSyncPayloadText: syncPayloads.surfaceSyncPayloadText,
     zoneSyncPayloadText: syncPayloads.zoneSyncPayloadText,
   });

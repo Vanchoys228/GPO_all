@@ -46,7 +46,7 @@ export const usePlannerRuntimeCommands = ({
     sendRouteChannelPayload(routeSocketRef, payload, {
       onSent: () =>
         setStatus(
-          `Случайное препятствие добавлено: (${payload.obstacle.x.toFixed(2)}, ${payload.obstacle.y.toFixed(2)}).`
+          `Команда добавления препятствия сохранена bridge: (${payload.obstacle.x.toFixed(2)}, ${payload.obstacle.y.toFixed(2)}).`
         ),
       onError: () =>
         setStatus("Не удалось отправить команду добавления препятствия."),
@@ -70,7 +70,7 @@ export const usePlannerRuntimeCommands = ({
     sendRouteChannelPayload(routeSocketRef, payload, {
       onSent: () =>
         setStatus(
-          `Запущено обследование карты: скорость 0.8 м/с, сначала периметр, затем "${modeLabel}".`
+          `Команда обследования сохранена bridge: скорость 0.8 м/с, сначала периметр, затем "${modeLabel}".`
         ),
       onError: () => setStatus("Не удалось отправить команду объезда карты."),
     });

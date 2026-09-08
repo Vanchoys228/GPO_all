@@ -8,9 +8,9 @@ describe("route protocol validation", () => {
     expect(validatePoints([{ x: "1.5", y: 2 }])).toEqual([{ x: 1.5, y: 2 }]);
     expect(() => validatePoints([{ x: "bad", y: 2 }])).toThrow(/finite x and y/);
     expect(() => validatePoints(Array.from(
-      { length: 1001 },
+      { length: 769 },
       (_, index) => ({ x: index, y: 0 })
-    ))).toThrow(/at most 1000 points/);
+    ))).toThrow(/at most 768 points/);
   });
 
   it("validates limit and surface polygons", () => {

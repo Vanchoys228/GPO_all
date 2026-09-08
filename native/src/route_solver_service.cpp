@@ -34,6 +34,13 @@ SolveOutput solve_route(const SolveConfig& config) {
     };
   }
 
+  if (config.points.size() == 2) {
+    const bool closed = config.task == TaskKind::kTsp;
+    auto route = config.points;
+    if (closed) route.push_back(route.front());
+    return SolveOutput{closed, calculate_route_length(route, closed), {0, 1}, route};
+  }
+
   std::vector<int> order;
   bool closed = false;
   if (config.task == TaskKind::kTsp) {

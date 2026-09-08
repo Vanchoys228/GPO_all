@@ -32,6 +32,7 @@ describe("telemetry process", () => {
       coordinateContract,
       enableMockTelemetry: true,
       fileSource,
+      telemetryService:expect.objectContaining({publish:expect.any(Function)}),
       host: "127.0.0.1",
       port: 9001,
     });

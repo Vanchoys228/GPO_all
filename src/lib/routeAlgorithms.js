@@ -12,9 +12,10 @@ export {
 
 const normalizeRoutePoint = (point) => ({ x: Number(point?.x), y: Number(point?.y) });
 
-export const solveRouteWithNativeAlgorithm = async (points, algorithmKey, params, taskKey = "tsp") => {
+export const solveRouteWithNativeAlgorithm = async (points, algorithmKey, params, taskKey = "tsp", signal, {scene,anchor} = {}) => {
   const response = await fetch(SOLVER_ROUTE_URL, {
     method: "POST",
+    signal: signal ? AbortSignal.any([signal, AbortSignal.timeout(35000)]) : AbortSignal.timeout(35000),
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(createPlanningRequest({
       source: "planner-frontend",
@@ -23,6 +24,8 @@ export const solveRouteWithNativeAlgorithm = async (points, algorithmKey, params
         points: points.map((point) => ({ x: point.x, y: point.y })),
         algorithm: { key: algorithmKey, params },
         task: taskKey,
+        scene,
+        anchor,
       },
     })),
   });

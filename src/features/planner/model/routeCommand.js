@@ -33,7 +33,7 @@ export const buildRouteCommand = (
 
 export const buildRouteSentStatus = (pointCount, chargingStops) => {
   const chargingSuffix = chargingStops ? `, зарядок: ${chargingStops}` : "";
-  return `Маршрут отправлен (${pointCount} точек${chargingSuffix}).`;
+  return `Маршрут сохранён bridge (${pointCount} точек${chargingSuffix}).`;
 };
 
 export const buildAutoRouteUpdatedStatus = (pointCount, chargingStops) => {

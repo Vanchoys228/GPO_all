@@ -35,9 +35,9 @@ describe("route command", () => {
   });
 
   it("formats sent status with an optional charging stop count", () => {
-    expect(buildRouteSentStatus(8, 0)).toBe("Маршрут отправлен (8 точек).");
+    expect(buildRouteSentStatus(8, 0)).toBe("Маршрут сохранён bridge (8 точек).");
     expect(buildRouteSentStatus(8, 2)).toBe(
-      "Маршрут отправлен (8 точек, зарядок: 2)."
+      "Маршрут сохранён bridge (8 точек, зарядок: 2)."
     );
   });
 

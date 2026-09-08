@@ -250,10 +250,6 @@ void run_navigation_step(void) {
   const ControllerAvoidanceDetection avoidance_detection =
       perception_output.avoidance;
   const double center_obstacle_range = avoidance_detection.center_obstacle_range;
-  const double left_front_corner_range = avoidance_detection.left_front_corner_range;
-  const double right_front_corner_range = avoidance_detection.right_front_corner_range;
-  const double left_obstacle_range = avoidance_detection.left_obstacle_range;
-  const double right_obstacle_range = avoidance_detection.right_obstacle_range;
   const double expected_front_range = avoidance_detection.expected_front_range;
   const double near_front_range = avoidance_detection.near_front_range;
   const double left_lidar_context = avoidance_detection.left_lidar_context;

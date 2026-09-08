@@ -7,6 +7,13 @@ afterEach(() => {
 });
 
 describe("native route solver client", () => {
+  it("submits a scene and anchor to authoritative planning", async () => {
+    const fetchMock = vi.fn(async () => new Response(JSON.stringify({ok:true,route:[],planning:{ok:true}})));
+    vi.stubGlobal("fetch",fetchMock);
+    const scene = {polygons:[],surfaceZones:[],chargingStations:[],motion:{batteryRange:100}};
+    await solveRouteWithNativeAlgorithm([{x:0,y:0},{x:1,y:0}],"ga_tabu",{},"tsp",undefined,{scene,anchor:{x:1,y:0}});
+    expect(JSON.parse(fetchMock.mock.calls[0][1].body).payload).toMatchObject({scene,anchor:{x:1,y:0}});
+  });
   it("sends a versioned planning request and preserves the solved route", async () => {
     const fetchMock = vi.fn(async () => new Response(JSON.stringify(createPlanningResult({
       source: "planning-service",

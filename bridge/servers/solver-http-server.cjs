@@ -1,9 +1,9 @@
 const http = require("http");
+const { isAllowedOrigin } = require("../protocol/origin-policy.cjs");
 const { createPlanningService } = require("../services/planning-service.cjs");
 
 const sendJson = (response, statusCode, payload) => {
   response.writeHead(statusCode, {
-    "Access-Control-Allow-Origin": "*",
     "Access-Control-Allow-Headers": "Content-Type",
     "Access-Control-Allow-Methods": "GET,POST,OPTIONS",
     "Content-Type": "application/json; charset=utf-8",
@@ -37,14 +37,28 @@ const createSolverHttpServer = ({
   nativeSolver,
   port,
   solverPath,
+  planningService: suppliedPlanningService,
 }) => {
-  const planningService = createPlanningService({ nativeSolver });
+  const planningService = suppliedPlanningService || createPlanningService({ nativeSolver });
   const server = http.createServer(async (request, response) => {
+    if (!isAllowedOrigin(request.headers.origin)) {
+      sendJson(response, 403, { ok: false, error: "Origin is not allowed." });
+      return;
+    }
+    if (request.headers.origin) {
+      response.setHeader("Access-Control-Allow-Origin", request.headers.origin);
+      response.setHeader("Vary", "Origin");
+    }
     if (request.method === "OPTIONS") {
       sendJson(response, 204, {});
       return;
     }
 
+    if (request.method === "GET" && request.url === "/ready") {
+      const available = await nativeSolver.solverExists();
+      sendJson(response,available ? 200 : 503,{ok:available,service:"planning"});
+      return;
+    }
     if (request.method === "GET" && request.url === "/health") {
       sendJson(response, 200, {
         ok: true,

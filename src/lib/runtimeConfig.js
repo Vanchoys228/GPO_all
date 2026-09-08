@@ -19,3 +19,5 @@ export const ROUTE_WS_URL = `ws://${BRIDGE_HOST}:${ROUTE_PORT}/ui`;
 export const SOLVER_API_BASE_URL = `http://${BRIDGE_HOST}:${SOLVER_PORT}`;
 export const SOLVER_ROUTE_URL = `${SOLVER_API_BASE_URL}/api/solve-route`;
 export const SOLVER_HEALTH_URL = `${SOLVER_API_BASE_URL}/health`;
+
+export const MISSION_API_BASE_URL = `http://${BRIDGE_HOST}:${ROUTE_PORT}`;

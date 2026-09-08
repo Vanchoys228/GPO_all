@@ -39,5 +39,17 @@ int main(void) {
 
   if (controller_limit_zones_load_file("missing-zones.txt", &zones) != CONTROLLER_ZONE_LOAD_NO_DATA) return 14;
   if (zones.count != 0) return 15;
+  file = fopen(limit_path, "w");
+  if (!file) return 16;
+  fprintf(file, "zone_count %d\n", MAX_ZONES + 1);
+  fclose(file);
+  if (controller_limit_zones_load_file(limit_path, &zones) == CONTROLLER_ZONE_LOAD_OK) return 17;
+  file = fopen(limit_path, "w");
+  if (!file) return 18;
+  fprintf(file, "zone_count 1\nzone %d\n", MAX_ZONE_POINTS + 1);
+  for (int i = 0; i <= MAX_ZONE_POINTS; ++i) fprintf(file, "%d 0\n", i);
+  fclose(file);
+  if (controller_limit_zones_load_file(limit_path, &zones) == CONTROLLER_ZONE_LOAD_OK) return 19;
+  remove(limit_path);
   return 0;
 }

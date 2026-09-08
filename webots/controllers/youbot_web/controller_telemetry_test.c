@@ -17,6 +17,7 @@ int main(void) {
   snapshot.pose_yaw = 0.3;
   snapshot.navigation.status = "tracking_path";
   snapshot.navigation.error = "";
+  snapshot.navigation.command_id = "mission-42";
   snapshot.navigation.current_waypoint_index = 0;
   snapshot.navigation.has_target = 1;
   snapshot.navigation.target = route[0];
@@ -46,6 +47,7 @@ int main(void) {
   if (!strstr(json, "\"status\": \"tracking_path\"")) return 8;
   if (!strstr(json, "\"confidence\": 0.750")) return 9;
   if (!strstr(json, "\"headingDeg\": 90.000")) return 10;
+  if (!strstr(json, "\"missionId\": \"mission-42\"")) return 12;
   free(json);
   if (fopen(temp_path, "rb") != NULL) return 11;
   return 0;

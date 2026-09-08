@@ -18,6 +18,7 @@ typedef struct {
   Waypoint waypoints[MAX_WAYPOINTS];
   int count;
   long long last_modified;
+  char command_id[64];
 } RouteData;
 
 typedef enum {

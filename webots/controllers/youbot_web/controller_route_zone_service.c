@@ -5,9 +5,11 @@
 #include "controller_zones.h"
 
 #include <math.h>
+#include <string.h>
 
 static int route_data_equal(const RouteData *left, const RouteData *right) {
   if (!left || !right || left->count != right->count) return 0;
+  if (strcmp(left->command_id, right->command_id) != 0) return 0;
   for (int index = 0; index < left->count; ++index) {
     const Waypoint *a = &left->waypoints[index];
     const Waypoint *b = &right->waypoints[index];
@@ -29,7 +31,7 @@ static ControllerRouteZoneStatus route_status_from_load_result(
 
 static ControllerRouteZoneStatus zone_status_from_load_result(
     ControllerZoneLoadResult result) {
-  if (result == CONTROLLER_ZONE_LOAD_OK || result == CONTROLLER_ZONE_LOAD_NO_DATA) {
+  if (result == CONTROLLER_ZONE_LOAD_OK) {
     return CONTROLLER_ROUTE_ZONE_STATUS_OK;
   }
   if (result == CONTROLLER_ZONE_LOAD_INVALID_HEADER) {
@@ -68,15 +70,9 @@ ControllerRouteZoneServiceResult controller_route_zone_service_reload(
     const ZoneData *current_limit_zones,
     const SurfaceZoneData *current_surface_zones) {
   ControllerRouteZoneServiceResult result = {
-      CONTROLLER_ROUTE_ZONE_STATUS_NOT_CHECKED,
-      CONTROLLER_ROUTE_ZONE_STATUS_NOT_CHECKED,
-      CONTROLLER_ROUTE_ZONE_STATUS_NOT_CHECKED,
-      0,
-      0,
-      0,
-      {0},
-      {0},
-      {0},
+      .route_status = CONTROLLER_ROUTE_ZONE_STATUS_NOT_CHECKED,
+      .limit_zones_status = CONTROLLER_ROUTE_ZONE_STATUS_NOT_CHECKED,
+      .surface_zones_status = CONTROLLER_ROUTE_ZONE_STATUS_NOT_CHECKED,
   };
   if (!service || !paths || !request || !paths->route_path || !paths->limit_zones_path ||
       !paths->surface_zones_path || !current_route || !current_limit_zones ||
@@ -92,10 +88,10 @@ ControllerRouteZoneServiceResult controller_route_zone_service_reload(
     if (route_mtime == service->route_last_checked) {
       result.route_status = CONTROLLER_ROUTE_ZONE_STATUS_UNCHANGED;
     } else {
-      service->route_last_checked = route_mtime;
       const ControllerRouteLoadResult load_result =
           controller_route_load_file(paths->route_path, &result.route);
       result.route_status = route_status_from_load_result(load_result);
+      if (result.route_status == CONTROLLER_ROUTE_ZONE_STATUS_OK) service->route_last_checked = route_mtime;
       result.route_changed = result.route_status == CONTROLLER_ROUTE_ZONE_STATUS_OK &&
                              !route_data_equal(current_route, &result.route);
     }
@@ -106,10 +102,10 @@ ControllerRouteZoneServiceResult controller_route_zone_service_reload(
     if (limit_mtime == service->limit_zones_last_checked) {
       result.limit_zones_status = CONTROLLER_ROUTE_ZONE_STATUS_UNCHANGED;
     } else {
-      service->limit_zones_last_checked = limit_mtime;
       const ControllerZoneLoadResult load_result =
           controller_limit_zones_load_file(paths->limit_zones_path, &result.limit_zones);
       result.limit_zones_status = zone_status_from_load_result(load_result);
+      if (result.limit_zones_status == CONTROLLER_ROUTE_ZONE_STATUS_OK) service->limit_zones_last_checked = limit_mtime;
       result.limit_zones_changed =
           result.limit_zones_status == CONTROLLER_ROUTE_ZONE_STATUS_OK &&
           !controller_zone_data_equal(current_limit_zones, &result.limit_zones);
@@ -121,10 +117,10 @@ ControllerRouteZoneServiceResult controller_route_zone_service_reload(
     if (surface_mtime == service->surface_zones_last_checked) {
       result.surface_zones_status = CONTROLLER_ROUTE_ZONE_STATUS_UNCHANGED;
     } else {
-      service->surface_zones_last_checked = surface_mtime;
       const ControllerZoneLoadResult load_result = controller_surface_zones_load_file(
           paths->surface_zones_path, &result.surface_zones);
       result.surface_zones_status = zone_status_from_load_result(load_result);
+      if (result.surface_zones_status == CONTROLLER_ROUTE_ZONE_STATUS_OK) service->surface_zones_last_checked = surface_mtime;
       result.surface_zones_changed =
           result.surface_zones_status == CONTROLLER_ROUTE_ZONE_STATUS_OK &&
           !controller_surface_zone_data_equal(

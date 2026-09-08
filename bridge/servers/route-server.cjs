@@ -1,5 +1,8 @@
+const http = require("http");
+const {createMissionHttpHandler} = require("./mission-http-handler.cjs");
 const WebSocket = require("ws");
 const { createRouteService } = require("../services/route-service.cjs");
+const { verifyWebSocketOrigin } = require("../protocol/origin-policy.cjs");
 
 const safeJsonParse = (text) => {
   try {
@@ -15,38 +18,41 @@ const normalizeIncomingPayload = async (payload) => {
   return unwrapRouteCommand(payload);
 };
 
-const createRouteServer = ({ artifactStore, host, port }) => {
-  const wss = new WebSocket.Server({ host, port });
+const createRouteServer = ({ artifactStore, host, port, routeService: suppliedRouteService, missionService, ready }) => {
+  const server = http.createServer(createMissionHttpHandler({missionService,getStatus:() => getStatus(),ready}));
+  const wss = new WebSocket.Server({ server, maxPayload: 1024 * 1024, verifyClient: verifyWebSocketOrigin });
   const uiClients = new Set();
   let controllerConnection = null;
-  const routeService = createRouteService({ artifactStore });
+  const routeService = suppliedRouteService || createRouteService({ artifactStore });
+  let pending = Promise.resolve();
 
   wss.on("connection", (ws, request) => {
     const url = request?.url || "/";
-    const isUi = url.startsWith("/ui");
+    const isUi = url.split("?")[0] === "/ui";
     if (isUi) uiClients.add(ws);
     else controllerConnection = ws;
     console.log(`[route] client connected (${isUi ? "ui" : "controller"})`);
 
-    ws.on("message", async (data) => {
+    ws.on("error", error => console.error("[route] socket error:", error.message));
+    ws.on("message", (data) => {
       if (!isUi) return;
-      const text = data.toString();
-      const payload = await normalizeIncomingPayload(safeJsonParse(text));
-      if (!payload) {
-        console.error("[route] rejected invalid route contract");
-        return;
-      }
-      try {
-        await routeService.handle(payload);
-      } catch (error) {
-        console.error(`[route] failed to persist ${payload?.type || "unknown"}:`, error.message);
-      }
-
-      if (controllerConnection?.readyState === WebSocket.OPEN) {
-        controllerConnection.send(JSON.stringify(payload));
-      } else {
-        console.log("[route] controller websocket not connected; message saved to web_state");
-      }
+      const raw = safeJsonParse(data.toString());
+      const requestId = typeof raw?.requestId === "string" ? raw.requestId : null;
+      const reply = result => {
+        if (ws.readyState === WebSocket.OPEN) ws.send(JSON.stringify({ type: "route.ack", requestId, ...result }));
+      };
+      pending = pending.then(async () => {
+        try {
+          const payload = await normalizeIncomingPayload(raw);
+          if (!payload) throw new Error("Invalid command contract.");
+          const result = await routeService.handle(payload, {requestId});
+          if (!result.handled) throw new Error("Unsupported command type.");
+          if (!result.missionId && controllerConnection?.readyState === WebSocket.OPEN) controllerConnection.send(JSON.stringify(payload));
+          reply({ ok: true, status: "persisted", ...result });
+        } catch (error) {
+          reply({ ok: false, error: error.message });
+        }
+      });
     });
 
     ws.on("close", () => {
@@ -56,14 +62,23 @@ const createRouteServer = ({ artifactStore, host, port }) => {
     });
   });
 
+  const getStatus = () => ({
+    controllerConnected: controllerConnection?.readyState === WebSocket.OPEN,
+    uiClientCount: uiClients.size,
+  });
+  server.listen(port,host);
   return {
-    close: () => new Promise((resolve) => wss.close(resolve)),
-    getStatus: () => ({
-      controllerConnected: controllerConnection?.readyState === WebSocket.OPEN,
-      uiClientCount: uiClients.size,
-    }),
+    close: async () => {
+      await pending;
+      await missionService?.drain();
+      for (const client of wss.clients) client.terminate();
+      await new Promise(resolve => wss.close(resolve));
+      await new Promise(resolve => server.close(resolve));
+    },
+    getStatus,
     persistMessage: routeService.handle,
     wss,
+    server,
   };
 };
 

@@ -20,7 +20,9 @@ describe("route process", () => {
 
     expect(createWebStateStore).toHaveBeenCalledWith({ coordinateContract, stateDir: "/state" });
     expect(createRouteServer).toHaveBeenCalledWith({
-      artifactStore: { marker: "state-store" },
+      routeService: expect.objectContaining({handle:expect.any(Function)}),
+      missionService:expect.objectContaining({submit:expect.any(Function),get:expect.any(Function)}),
+      ready:expect.any(Function),
       host: "127.0.0.1",
       port: 9002,
     });

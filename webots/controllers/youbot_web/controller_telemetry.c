@@ -10,6 +10,15 @@ static const char *safe_text(const char *value) {
   return value ? value : "";
 }
 
+static const char *safe_command_id(const char *value) {
+  if (!value) return "";
+  for (const char *cursor = value; *cursor; ++cursor) {
+    if (!((*cursor >= 'a' && *cursor <= 'z') || (*cursor >= 'A' && *cursor <= 'Z') ||
+          (*cursor >= '0' && *cursor <= '9') || *cursor == '-' || *cursor == '_')) return "";
+  }
+  return value;
+}
+
 static const char *json_bool(int value) {
   return value ? "true" : "false";
 }
@@ -32,6 +41,7 @@ int controller_telemetry_write_snapshot(
 
   const ControllerTelemetryNavigation *navigation = &snapshot->navigation;
   fprintf(file, "  \"navigation\": {\n");
+  fprintf(file, "    \"missionId\": \"%s\",\n", safe_command_id(navigation->command_id));
   fprintf(file, "    \"status\": \"%s\",\n", safe_text(navigation->status));
   fprintf(file, "    \"error\": \"%s\",\n", safe_text(navigation->error));
   fprintf(file, "    \"currentWaypointIndex\": %d,\n", navigation->current_waypoint_index);

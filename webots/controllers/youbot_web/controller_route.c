@@ -1,59 +1,40 @@
 #include "controller_route.h"
-
 #include "controller_io.h"
-
+#include <math.h>
 #include <stdio.h>
 #include <string.h>
 
 #define CONTROLLER_ROUTE_PI 3.14159265358979323846
 
-ControllerRouteLoadResult controller_route_load_file(
-    const char *path,
-    RouteData *route) {
+ControllerRouteLoadResult controller_route_load_file(const char *path, RouteData *route) {
   if (!path || !route) return CONTROLLER_ROUTE_LOAD_CANNOT_OPEN;
-
   FILE *file = fopen(path, "r");
   if (!file) return CONTROLLER_ROUTE_LOAD_CANNOT_OPEN;
-
+  RouteData parsed = {0};
   char line[256];
-  int count = 0;
   while (fgets(line, sizeof(line), file)) {
-    double x = 0.0;
-    double z = 0.0;
-    double heading_deg = 0.0;
-
+    if (sscanf(line, "# command %63s", parsed.command_id) == 1) continue;
     if (line[0] == '\n' || line[0] == '\r' || line[0] == '#') continue;
-    if ((line[0] >= 'A' && line[0] <= 'z') ||
-        strncmp(line, "x,", 2) == 0 ||
-        strncmp(line, "x ", 2) == 0) {
-      continue;
+    if (strncmp(line, "x,", 2) == 0 || strncmp(line, "x ", 2) == 0) continue;
+    double x = 0.0, z = 0.0, heading = 0.0;
+    char extra;
+    int fields = sscanf(line, " %lf , %lf , %lf %c", &x, &z, &heading, &extra);
+    if (fields != 3) {
+      fields = sscanf(line, " %lf , %lf %c", &x, &z, &extra);
+      if (fields != 2) { fclose(file); return CONTROLLER_ROUTE_LOAD_INVALID; }
+      heading = 0.0;
     }
-
-    if (sscanf(line, " %lf , %lf , %lf", &x, &z, &heading_deg) == 3) {
-      if (count < MAX_WAYPOINTS) {
-        route->waypoints[count].x = x;
-        route->waypoints[count].z = z;
-        route->waypoints[count].heading_rad =
-            heading_deg * CONTROLLER_ROUTE_PI / 180.0;
-        route->waypoints[count].has_heading = 1;
-        ++count;
-      }
-      continue;
+    if (parsed.count >= MAX_WAYPOINTS || !isfinite(x) || !isfinite(z) || !isfinite(heading)) {
+      fclose(file);
+      return CONTROLLER_ROUTE_LOAD_INVALID;
     }
-
-    if (sscanf(line, " %lf , %lf", &x, &z) == 2 && count < MAX_WAYPOINTS) {
-      route->waypoints[count].x = x;
-      route->waypoints[count].z = z;
-      route->waypoints[count].heading_rad = 0.0;
-      route->waypoints[count].has_heading = 0;
-      ++count;
-    }
+    parsed.waypoints[parsed.count++] = (Waypoint){x, z, heading * CONTROLLER_ROUTE_PI / 180.0, fields == 3};
   }
-
+  const int failed = ferror(file);
   fclose(file);
-  if (count == 0) return CONTROLLER_ROUTE_LOAD_EMPTY;
-
-  route->count = count;
-  route->last_modified = get_file_mtime(path);
+  if (failed) return CONTROLLER_ROUTE_LOAD_CANNOT_OPEN;
+  if (!parsed.count) return CONTROLLER_ROUTE_LOAD_EMPTY;
+  parsed.last_modified = get_file_mtime(path);
+  *route = parsed;
   return CONTROLLER_ROUTE_LOAD_OK;
 }

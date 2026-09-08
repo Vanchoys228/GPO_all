@@ -1,4 +1,5 @@
 #include "controller_telemetry_service.h"
+#include <string.h>
 
 int main(void) {
   const ObstacleTracePoint trace[3] = {
@@ -35,9 +36,11 @@ int main(void) {
   RouteData route = {0};
   route.waypoints[0] = (Waypoint){1.0, 2.0, 0.5, 1};
   route.count = 1;
+  strcpy(route.command_id,"mission-42");
   ControllerTelemetryNavigation navigation = {0};
   controller_telemetry_service_build_navigation(
       "tracking_path", "", 0, 0, 1.2, 1, 0, 3.0, 4, &route, &navigation);
+  if (!navigation.command_id || strcmp(navigation.command_id,"mission-42")) return 5;
   if (!navigation.has_target || navigation.target.x != 1.0 ||
       navigation.current_waypoint_index != 0) return 3;
   controller_telemetry_service_build_navigation(

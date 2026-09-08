@@ -24,6 +24,7 @@ describe("planning process", () => {
       coordinateContract,
       host: "127.0.0.1",
       nativeSolver: { marker: "native-solver" },
+      planningService:expect.objectContaining({solve:expect.any(Function)}),
       port: 9003,
       solverPath: "/solver",
     });

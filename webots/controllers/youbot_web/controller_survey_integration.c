@@ -3,6 +3,7 @@
 #include "controller_survey_lifecycle.h"
 
 #include <math.h>
+#include <stddef.h>
 
 typedef struct {
   const char *route_path;

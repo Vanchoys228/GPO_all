@@ -5,6 +5,23 @@ import { createPlanningRequest } from "../../shared/contracts/index.js";
 const { createPlanningService } = planningServiceModule;
 
 describe("planning service", () => {
+  it("applies energy constraints on the server using the submitted scene", async () => {
+    const nativeSolver = { run: async () => ({route:[{x:0,y:0},{x:1,y:0},{x:1,y:1}],length:2}) };
+    const service = createPlanningService({nativeSolver});
+    await expect(service.solve({points:[{x:0,y:0},{x:1,y:0},{x:1,y:1}],scene:{polygons:[],surfaceZones:[],chargingStations:[],motion:{batteryRange:2.2}}})).rejects.toThrow(/запас|достижим|range/);
+  });
+  it("returns a final route and metrics with a server scene revision", async () => {
+    const nativeSolver = { run: async () => ({route:[{x:0,y:0},{x:1,y:0}],length:1}) };
+    const result = await createPlanningService({nativeSolver}).solve({points:[{x:0,y:0},{x:1,y:0}],scene:{polygons:[],surfaceZones:[],chargingStations:[],motion:{batteryRange:100}}});
+    expect(result.planning.routeEnergy).toBeGreaterThan(0);
+    expect(result.sceneRevision).toMatch(/^[a-f0-9]{64}$/);
+    expect(result.seedRoute).toHaveLength(2);
+  });
+  it("rejects malformed scene snapshots before starting the solver", async () => {
+    const run = vi.fn();
+    await expect(createPlanningService({nativeSolver:{run}}).solve({points:[{x:0,y:0}],scene:{surfaceZones:"bad"}})).rejects.toThrow();
+    expect(run).not.toHaveBeenCalled();
+  });
   it("normalizes a request and delegates it to the native solver", async () => {
     const nativeSolver = { run: vi.fn(async () => ({ length: 1, closed: true, order: [0], route: [{ x: 0, y: 0 }] })) };
     const service = createPlanningService({ nativeSolver });

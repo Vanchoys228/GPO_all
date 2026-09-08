@@ -5,6 +5,7 @@
 #include "controller_camera_runtime.h"
 #include "controller_input_orchestration.h"
 #include "controller_input_runtime.h"
+#include "controller_io.h"
 #include "controller_lidar_runtime.h"
 #include "controller_mapping_runtime.h"
 #include "controller_mapping_survey_lifecycle_service.h"
@@ -266,9 +267,8 @@ int controller_app_lifecycle_run(int argc, char **argv) {
           MAPPING_SURVEY_GRID_CELL,
       });
   controller_route_zone_service_init(&route_zone_service);
-  controller_route_zone_service_ignore_existing(
-      &route_zone_service,
-      &(ControllerRouteZoneServicePaths){ROUTE_PATH, ZONE_PATH, SURFACE_ZONE_PATH});
+  // Restore zones after restart, but require an explicit new route launch.
+  route_zone_service.route_last_checked = get_file_mtime(ROUTE_PATH);
   controller_route_zone_reload_service_init(
       &route_zone_reload_service,
       &route_zone_service,
@@ -321,6 +321,7 @@ int controller_app_lifecycle_run(int argc, char **argv) {
       &runtime_command_survey_ops,
       spawn_runtime_obstacle);
   runtime_command_reload_service.last_modified = get_file_mtime(RUNTIME_COMMAND_PATH);
+  runtime_command_reload_service.last_processed_id = controller_runtime_command_latest_id(RUNTIME_COMMAND_PATH);
 
   if (!controller_webots_pose_is_ready(&webots_pose) || !webots_pose.root_children_field) {
     set_status("error");

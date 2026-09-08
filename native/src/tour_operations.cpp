@@ -92,6 +92,7 @@ std::vector<int> mutate_order(
     const std::vector<int>& order,
     SeededRng& rng,
     double mutation_rate) {
+  if (order.size() < 3) return order;
   std::vector<int> candidate = order;
   const int last = static_cast<int>(candidate.size()) - 1;
   if (rng.chance(mutation_rate)) {
@@ -115,6 +116,7 @@ std::vector<int> mutate_order(
 }
 
 std::vector<int> create_neighbor(const std::vector<int>& order, SeededRng& rng) {
+  if (order.size() < 3) return order;
   std::vector<int> candidate = order;
   const int last = static_cast<int>(candidate.size()) - 1;
   const double move = rng.uniform();

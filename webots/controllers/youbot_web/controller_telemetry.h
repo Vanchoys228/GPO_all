@@ -21,6 +21,7 @@ typedef struct {
   int avoidance_steps;
   int has_target;
   Waypoint target;
+  const char *command_id;
 } ControllerTelemetryNavigation;
 
 typedef struct {

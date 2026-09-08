@@ -67,6 +67,13 @@
 
 C_SOURCES := $(strip $(file <controller_sources.txt))
 
+# Some Windows Webots distributions keep GCC runtime DLLs in bin/cpp.
+# Expose that bundled directory to build subprocesses without changing the
+# installation or requiring a machine-wide PATH update.
+ifeq ($(OS),Windows_NT)
+export PATH := $(PATH):/mingw64/bin/cpp
+endif
+
 ### Do not modify: this includes Webots global Makefile.include
 null :=
 space := $(null) $(null)

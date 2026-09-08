@@ -13,9 +13,9 @@ const nodeGlobals = {
 };
 
 export default defineConfig([
-  globalIgnores(["dist", "node_modules"]),
+  globalIgnores(["dist", "node_modules", "tmp", ".playwright-cli"]),
   {
-    files: ["src/**/*.{js,jsx}"],
+    files: ["src/**/*.{js,jsx}", "shared/**/*.js"],
     extends: [
       js.configs.recommended,
       reactHooks.configs.flat.recommended,

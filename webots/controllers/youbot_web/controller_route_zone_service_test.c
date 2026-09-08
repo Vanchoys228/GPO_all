@@ -50,6 +50,20 @@ int main(void) {
       controller_route_zone_service_reload(
           &service, &paths, &request, &route, &limit_zones, &surface_zones);
 
+  route = result.route;
+  if (!write_text_file(route_path, "x,y\n# command repeat-1\n1.0,2.0\n")) return 8;
+  service.route_last_checked = -2;
+  ControllerRouteZoneServiceResult repeat = controller_route_zone_service_reload(&service, &paths, &request, &route, &limit_zones, &surface_zones);
+  if (!repeat.route_changed || strcmp(repeat.route.command_id, "repeat-1")) return 9;
+  route = repeat.route;
+  if (!write_text_file(route_path, "x,y\n# command repeat-2\n1.0,2.0\n")) return 10;
+  service.route_last_checked = -2;
+  repeat = controller_route_zone_service_reload(&service, &paths, &request, &route, &limit_zones, &surface_zones);
+  if (!repeat.route_changed) return 11;
+  if (!write_text_file(route_path, "x,y\n1,broken\n")) return 12;
+  service.route_last_checked = -2;
+  repeat = controller_route_zone_service_reload(&service, &paths, &request, &route, &limit_zones, &surface_zones);
+  if (repeat.route_changed || service.route_last_checked != -2) return 13;
   remove(route_path);
   remove(limit_path);
   remove(surface_path);

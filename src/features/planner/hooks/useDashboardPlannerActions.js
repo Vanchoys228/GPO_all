@@ -7,6 +7,10 @@ export const useDashboardPlannerActions = (state, runtime, derived) => {
   const { algorithm, canvas, energy, interaction, limits, mapping, route, surfaces } = state;
   const { plannerModel, syncPayloads, viewModel } = derived;
   const routeLifecycle = useDashboardPlannerRouteLifecycle({
+    plannerModel,
+    optimizedRoute: route.optimizedRoute,
+    onMissionSubmitted: runtime.mission?.track,
+    isOptimizing: route.isOptimizing,
     resetRouteTiming: runtime.routeTiming.reset,
     setActiveLimitZoneId: limits.setActiveLimitZoneId,
     setActivePointKind: interaction.setActivePointKind,

@@ -41,6 +41,14 @@ const expectNoMessage = (socket, timeoutMs = 50) =>
   });
 
 describe("telemetry WebSocket server", () => {
+  it("rejects untrusted browser origins", async () => {
+    const server = createTelemetryServer({ coordinateContract: {version:1}, fileSource: {poll:async () => null}, host:"127.0.0.1", port:0 });
+    await new Promise(resolve => server.wss.once("listening", resolve));
+    try {
+      const socket = new WebSocket(`ws://127.0.0.1:${server.wss.address().port}`, { origin:"https://untrusted.example" });
+      await expect(waitForOpen(socket)).rejects.toThrow(/401/);
+    } finally { await server.close(); }
+  });
   it("rejects invalid input and continues delivering the next valid telemetry event", async () => {
     const server = createTelemetryServer({
       coordinateContract: { version: 1, telemetry: { messageType: "telemetry" } },

@@ -30,6 +30,7 @@ export const createLeftSidebarProps = ({ state, runtime, derived, actions }) => 
     algorithmKey: algorithm.algorithmKey,
     onAlgorithmChange: actions.handleAlgorithmChange,
     status: route.status,
+    mission: runtime.mission?.state,
     energyWarning: route.energyWarning,
     routeBlocked: plannerModel.routeBlocked,
     algorithmFields: viewModel.algorithmFields,

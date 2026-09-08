@@ -28,8 +28,8 @@ describe("bridge protocol validation", () => {
   });
 
   it("rejects routes larger than the solver limit", () => {
-    const points = Array.from({ length: 1001 }, (_, index) => ({ x: index, y: 0 }));
-    expect(() => validatePoints(points)).toThrow(/at most 1000 points/);
+    const points = Array.from({ length: 769 }, (_, index) => ({ x: index, y: 0 }));
+    expect(() => validatePoints(points)).toThrow(/at most 768 points/);
   });
 
   it("requires at least three polygon points", () => {

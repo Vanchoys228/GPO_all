@@ -1,5 +1,6 @@
 const SURFACE_KEYS = new Set(["neutral", "rough", "slippery"]);
-const MAX_ROUTE_POINTS = 1000;
+const limits = require("../../shared/controller-limits.json");
+const MAX_ROUTE_POINTS = limits.maxRoutePoints;
 
 const createValidationError = (message) => {
   const error = new Error(message);
@@ -29,6 +30,7 @@ const validatePolygons = (zones) => {
   if (!Array.isArray(zones)) {
     throw new Error("Limit zones payload must be an array.");
   }
+  if (zones.length > limits.maxZones) throw createValidationError(`At most ${limits.maxZones} zones are supported.`);
 
   return zones.map((zone, index) => {
     const id =
@@ -40,6 +42,7 @@ const validatePolygons = (zones) => {
         ? zone.name.trim()
         : `Zone ${index + 1}`;
     const points = validatePoints(zone?.points || []);
+    if (points.length > limits.maxZonePoints) throw createValidationError(`At most ${limits.maxZonePoints} vertices per zone are supported.`);
     if (points.length < 3) {
       throw new Error("Every limit zone must contain at least three points.");
     }
@@ -51,6 +54,7 @@ const validateSurfaceZones = (zones) => {
   if (!Array.isArray(zones)) {
     throw new Error("Surface zones payload must be an array.");
   }
+  if (zones.length > limits.maxZones) throw createValidationError(`At most ${limits.maxZones} zones are supported.`);
 
   return zones.map((zone, index) => {
     const id =
@@ -63,6 +67,7 @@ const validateSurfaceZones = (zones) => {
         : `Surface ${index + 1}`;
     const surfaceKey = SURFACE_KEYS.has(zone?.surfaceKey) ? zone.surfaceKey : "neutral";
     const points = validatePoints(zone?.points || []);
+    if (points.length > limits.maxZonePoints) throw createValidationError(`At most ${limits.maxZonePoints} vertices per zone are supported.`);
     if (points.length < 3) {
       throw new Error("Every surface zone must contain at least three points.");
     }
