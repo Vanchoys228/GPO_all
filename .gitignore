@@ -37,6 +37,12 @@ webots/worlds/.*.jpg
 *.sw?
 
 # Private service state
+.env
+.env.*
+!.env.example
+secrets/
+backups/
+native/build-tests/
 data/
 web_state/missions/
 web_state/gateway-journal/

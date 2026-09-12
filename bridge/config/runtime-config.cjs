@@ -1,4 +1,5 @@
 const path = require("path");
+const { readSecret } = require("./secret.cjs");
 
 const projectRoot = path.resolve(__dirname, "..", "..");
 require("dotenv").config({ path: path.join(projectRoot, ".env"), quiet: true });
@@ -41,6 +42,7 @@ const SOLVER_PATH = toPath(
 );
 
 module.exports = {
+  LOG_DIR: process.env.LOG_DIR ? toPath(process.env.LOG_DIR) : undefined,
   BRIDGE_HOST,
   ROUTE_PORT,
   ROUTE_WS_URL: `ws://${BRIDGE_HOST}:${ROUTE_PORT}`,
@@ -54,7 +56,7 @@ module.exports = {
   GATEWAY_PORT: toPort(process.env.GATEWAY_PORT,9004),
   GATEWAY_BIND_HOST: toHost(process.env.GATEWAY_BIND_HOST,"127.0.0.1"),
   GATEWAY_URL: process.env.GATEWAY_URL || `http://127.0.0.1:${toPort(process.env.GATEWAY_PORT,9004)}`,
-  GATEWAY_TOKEN: process.env.GATEWAY_TOKEN || "",
+  GATEWAY_TOKEN: readSecret({ value: process.env.GATEWAY_TOKEN, file: process.env.GATEWAY_TOKEN_FILE, root: projectRoot }),
   SOLVER_BIND_HOST: toHost(process.env.SOLVER_BIND_HOST,BRIDGE_HOST),
   ROUTE_BIND_HOST: toHost(process.env.ROUTE_BIND_HOST,BRIDGE_HOST),
   TELEMETRY_BIND_HOST: toHost(process.env.TELEMETRY_BIND_HOST,BRIDGE_HOST),

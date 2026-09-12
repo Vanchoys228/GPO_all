@@ -23,7 +23,7 @@ const start = name => {
   const child = spawn(process.execPath,[path.join(root,`bridge/processes/run-${name}-service.cjs`)],{cwd:path.join(directory,name),env,stdio:["ignore","pipe","pipe"],windowsHide:true});
   child.logs="";child.stdout.on("data",data => child.logs+=data);child.stderr.on("data",data => child.logs+=data);children.push(child);return child;
 };
-const stop = async child => {if(child.exitCode !== null || child.signalCode) return;const exited=once(child,"exit");child.kill();await exited;};
+const stop = async child => {if(child.exitCode !== null || child.signalCode) return;const exited=once(child,"exit");child.kill();const [code]=await exited;if(process.platform!=="win32")assert.equal(code,0,child.logs);};
 const waitReady = async (portNumber,child) => {
   for(let i=0;i<100;i++) {
     if(child.exitCode !== null) throw new Error(child.logs);
