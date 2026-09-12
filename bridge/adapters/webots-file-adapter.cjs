@@ -10,6 +10,9 @@ const createWebotsFileAdapter = ({artifactStore, stateDir}) => ({
     }
     await artifactStore.writeRoute(command);
   },
+  async cancel({missionId}) {
+    await artifactStore.writeRuntimeCommand({type:"cancel_mission",missionId,requestKey:missionId});
+  },
   async update(payload) {
     switch (payload?.type) {
       case "limit_zones": await artifactStore.writeLimitZones(payload); break;
@@ -30,8 +33,8 @@ const createWebotsFileAdapter = ({artifactStore, stateDir}) => ({
       const state = JSON.parse(await fs.readFile(filename,"utf8"));
       if (state.navigation?.missionId !== missionId) return null;
       const navigation = state.navigation || {};
-      const status = navigation.status === "route_failed" ? "failed" : navigation.finished === true ? "completed" : navigation.status === "route_loaded" ? "accepted" : "running";
-      return {missionId,status};
+      const status = navigation.status === "mission_cancelled" ? "cancelled" : navigation.status === "route_failed" ? "failed" : navigation.finished === true ? "completed" : navigation.status === "route_loaded" ? "accepted" : "running";
+      return {missionId,status,observedAt:new Date(stat.mtimeMs).toISOString()};
     } catch (error) {
       if (error.code === "ENOENT" || error instanceof SyntaxError) return null;
       throw error;

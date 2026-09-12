@@ -49,6 +49,20 @@ ControllerRuntimeCommandReloadResult controller_runtime_command_reload_service_r
   }
   service->last_processed_id = command.id;
 
+  if (command.has_cancel_mission) {
+    strcpy(service->runtime->cancelled_mission_id, command.mission_id);
+    if (!service->runtime->route.command_id[0] ||
+        strcmp(service->runtime->route.command_id, command.mission_id) == 0) {
+      strcpy(service->runtime->route.command_id, command.mission_id);
+      service->runtime->route_finished = 1;
+      service->runtime->mapping_survey.route_active = 0;
+      service->runtime->avoidance.active = 0;
+      if (service->survey_ops.reset_navigation) service->survey_ops.reset_navigation();
+      if (service->survey_ops.set_status) service->survey_ops.set_status("mission_cancelled");
+    }
+    return CONTROLLER_RUNTIME_COMMAND_RELOAD_APPLIED;
+  }
+
   if (command.has_start_mapping_survey) {
     controller_survey_integration_start(
         service->route_path,

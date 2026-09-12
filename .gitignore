@@ -35,3 +35,8 @@ webots/worlds/.*.jpg
 *.njsproj
 *.sln
 *.sw?
+
+# Private service state
+data/
+web_state/missions/
+web_state/gateway-journal/

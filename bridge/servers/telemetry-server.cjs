@@ -44,8 +44,9 @@ const createTelemetryServer = ({
   mockIdleMs = 2500,
   port,
   telemetryService: suppliedTelemetryService,
+  ready,
 }) => {
-  const server = http.createServer(createHealthHandler({service:"telemetry",getStatus:() => ({clientCount:clients.size})}));
+  const server = http.createServer(createHealthHandler({service:"telemetry",ready,getStatus:() => ({clientCount:clients.size})}));
   const wss = new WebSocket.Server({ server, maxPayload: 1024 * 1024, verifyClient: verifyWebSocketOrigin });
   const clients = new Set();
   const senders = new Set();
@@ -140,6 +141,7 @@ const createTelemetryServer = ({
   const close = async () => {
     clearInterval(mockTimer);
     clearInterval(fileTimer);
+    fileSource.close?.();
     for (const client of clients) client.terminate();
     await new Promise((resolve) => wss.close(resolve));
     await new Promise(resolve => server.close(resolve));

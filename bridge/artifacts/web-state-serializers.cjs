@@ -39,6 +39,10 @@ const createMotionProfileText = (motion) => {
 
 const createRuntimeCommandText = (payload) => {
   const commandId = Number(payload?.commandId) > 0 ? Math.trunc(Number(payload.commandId)) : Date.now();
+  if (payload?.type === "cancel_mission") {
+    const {validateMissionId}=require("../protocol/mission-contract.cjs");
+    return `id ${commandId}\ntype cancel_mission\nmission_id ${validateMissionId(payload.missionId)}\n`;
+  }
   if (payload?.type === "start_mapping_survey") {
     const field = payload.field || {};
     const motion = sanitizeMotionProfile(payload.motion);

@@ -82,6 +82,8 @@ typedef struct {
   long long id;
   int has_spawn_obstacle;
   int has_start_mapping_survey;
+  int has_cancel_mission;
+  char mission_id[64];
   int has_field_bounds;
   int clear_map;
   MappingSurveyMode survey_mode;

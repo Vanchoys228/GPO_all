@@ -51,5 +51,12 @@ module.exports = {
   TELEMETRY_PORT,
   TELEMETRY_WS_URL: `ws://${BRIDGE_HOST}:${TELEMETRY_PORT}`,
   WEB_STATE_DIR,
-  MISSION_STATE_DIR: toPath(process.env.MISSION_STATE_DIR,path.join(WEB_STATE_DIR,"missions")),
+  MISSION_STATE_DIR: toPath(process.env.MISSION_STATE_DIR,path.join(projectRoot,"data","missions")),
+  GATEWAY_PORT: toPort(process.env.GATEWAY_PORT,9004),
+  GATEWAY_BIND_HOST: toHost(process.env.GATEWAY_BIND_HOST,"127.0.0.1"),
+  GATEWAY_URL: process.env.GATEWAY_URL || `http://127.0.0.1:${toPort(process.env.GATEWAY_PORT,9004)}`,
+  GATEWAY_TOKEN: process.env.GATEWAY_TOKEN || "",
+  SOLVER_BIND_HOST: toHost(process.env.SOLVER_BIND_HOST,BRIDGE_HOST),
+  ROUTE_BIND_HOST: toHost(process.env.ROUTE_BIND_HOST,BRIDGE_HOST),
+  TELEMETRY_BIND_HOST: toHost(process.env.TELEMETRY_BIND_HOST,BRIDGE_HOST),
 };

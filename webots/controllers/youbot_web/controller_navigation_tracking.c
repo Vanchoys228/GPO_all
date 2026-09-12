@@ -22,8 +22,9 @@ int controller_navigation_tracking_prepare(
   };
 
   if (output->mode == NAV_MODE_IDLE) output->mode = NAV_MODE_TRACK;
+  const double align_distance = fmin(config->final_align_distance, config->position_tolerance);
   if (input->is_final_waypoint && input->target_has_heading &&
-      input->distance_to_target <= config->final_align_distance) {
+      input->distance_to_target <= align_distance) {
     output->mode = NAV_MODE_FINAL_ALIGN;
   } else if (!input->is_final_waypoint && output->mode == NAV_MODE_FINAL_ALIGN) {
     output->mode = NAV_MODE_TRACK;
@@ -34,7 +35,7 @@ int controller_navigation_tracking_prepare(
     output->mode = NAV_MODE_TRACK;
     return 0;
   }
-  if (input->distance_to_target > config->final_align_distance * 1.35) {
+  if (input->distance_to_target > align_distance) {
     output->mode = NAV_MODE_TURN;
     return 0;
   }

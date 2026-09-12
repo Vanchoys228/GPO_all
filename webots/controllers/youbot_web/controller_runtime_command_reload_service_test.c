@@ -61,6 +61,18 @@ int main(void) {
   assert(controller_runtime_command_reload_service_run(&service, 24, 6) == CONTROLLER_RUNTIME_COMMAND_RELOAD_APPLIED);
   assert(last_spawn_id == 9);
   assert(spawn_calls == 3);
+  strcpy(runtime.route.command_id, "mission-cancel");
+  runtime.route.count = 2;
+  runtime.route_finished = 0;
+  file = fopen(path, "a");
+  assert(file);
+  fputs("id 10\ntype cancel_mission\nmission_id mission-cancel\n", file);
+  fclose(file);
+  assert(controller_runtime_command_reload_service_run(&service, 30, 6) == CONTROLLER_RUNTIME_COMMAND_RELOAD_APPLIED);
+  assert(runtime.route_finished == 1);
+  assert(strcmp(runtime.cancelled_mission_id, "mission-cancel") == 0);
+  assert(strcmp(status, "mission_cancelled") == 0);
+  assert(spawn_calls == 3);
   remove(path);
   return 0;
 }

@@ -9,7 +9,7 @@ afterEach(async () => { for (const directory of directories.splice(0)) await rm(
 const setup = async () => {
   const directory = await mkdtemp(path.join(os.tmpdir(),"gpo-missions-")); directories.push(directory);
   const repository = repositories.createMissionRepository({directory});
-  const adapter = { submit:vi.fn(async () => {}), getFeedback:vi.fn(async () => null) };
+  const adapter = { submit:vi.fn(async () => {}), cancel:vi.fn(async () => {}), getFeedback:vi.fn(async () => null) };
   return { repository, adapter, service:missions.createMissionService({repository,adapter}) };
 };
 const payload = { type:"route", route:[{x:0,y:0},{x:1,y:0}] };
@@ -45,4 +45,27 @@ describe("mission application service", () => {
     adapter.getFeedback.mockResolvedValue({missionId:"mission-4",status:"running"});
     expect((await service.get("mission-4")).status).toBe("completed");
   });
+});
+
+it("reconciles prepared delivery after restart without a browser", async () => {
+  const {repository,adapter,service}=await setup();
+  adapter.submit.mockRejectedValueOnce(new Error("offline"));
+  await expect(service.submit(payload,{requestId:"recover"})).rejects.toThrow();
+  const restarted=missions.createMissionService({repository,adapter});
+  await restarted.reconcile();
+  expect((await repository.get("recover")).status).toBe("persisted");
+  adapter.getFeedback.mockResolvedValue({missionId:"recover",status:"completed"});
+  await restarted.reconcile();
+  expect((await repository.get("recover")).status).toBe("completed");
+});
+it("rejects replacement until cancellation is acknowledged by the controller", async () => {
+  const {repository,adapter,service}=await setup();
+  await service.submit(payload,{requestId:"active"});
+  await expect(service.submit(payload,{requestId:"next"})).rejects.toMatchObject({statusCode:409});
+  expect((await service.cancel("active")).status).toBe("cancelling");
+  await expect(service.submit(payload,{requestId:"next"})).rejects.toMatchObject({statusCode:409});
+  adapter.getFeedback.mockResolvedValue({missionId:"active",status:"cancelled"});
+  await service.reconcile();
+  expect((await repository.get("active")).status).toBe("cancelled");
+  await service.submit(payload,{requestId:"next"});
 });

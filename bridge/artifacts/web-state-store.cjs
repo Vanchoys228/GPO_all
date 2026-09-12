@@ -140,11 +140,13 @@ const createWebStateStore = ({ coordinateContract, stateDir }) => {
       if (error.code === "ENOENT") return "";
       throw error;
     });
+    // A retry after a lost gateway reply must not append another runtime effect.
+    if (payload.requestKey && previous.includes(`# request ${payload.requestKey}\n`)) return;
     const latestId = [...previous.matchAll(/^id (\d+)$/gm)].reduce((max, match) => Math.max(max, Number(match[1])), 0);
     const requestedId = Number(payload?.commandId);
     const commandId = Math.max(latestId + 1, Number.isSafeInteger(requestedId) && requestedId > 0 ? requestedId : Date.now());
     if (!Number.isSafeInteger(commandId)) throw new Error("Runtime command id exceeds the supported range.");
-    const commandText = createRuntimeCommandText({ ...payload, commandId });
+    const commandText = (payload.requestKey ? `# request ${validateMissionId(payload.requestKey)}\n` : "") + createRuntimeCommandText({ ...payload, commandId });
     if (payload?.type === "start_mapping_survey") await writeMotionProfile(payload.motion);
     await atomicWrite(paths.runtimeCommand, previous + (previous && !previous.endsWith("\n") ? "\n" : "") + commandText);
   };

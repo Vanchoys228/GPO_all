@@ -10,6 +10,11 @@ const createMissionRepository = ({directory}) => {
       try { return JSON.parse(await fs.readFile(filename(id), "utf8")); }
       catch (error) { if (error.code === "ENOENT") return null; throw error; }
     },
+    async list() {
+      await fs.mkdir(directory,{recursive:true});
+      const names = (await fs.readdir(directory)).filter(name => /^[a-zA-Z0-9_-]{1,63}\.json$/.test(name));
+      return Promise.all(names.map(name => this.get(name.slice(0,-5))));
+    },
     async save(record) {
       const target = filename(record.missionId);
       await fs.mkdir(directory,{recursive:true});

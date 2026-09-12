@@ -9,6 +9,7 @@ static int nearly_equal(double left, double right) {
 int main(void) {
   const ControllerNavigationTrackingConfig tracking_config = {
       .final_align_distance = 0.18,
+      .position_tolerance = 0.05,
       .heading_tolerance_rad = 0.08,
       .track_slow_radius = 0.22,
       .turn_exit_error_rad = 0.12,
@@ -67,7 +68,7 @@ int main(void) {
       .target_has_heading = 1,
       .target_heading = 1.0,
       .current_heading = 0.8,
-      .distance_to_target = 0.1,
+      .distance_to_target = 0.04,
       .runtime_linear_speed_limit = 0.22,
       .runtime_angular_speed_limit = 1.6,
       .lidar_speed_scale = 1.0,

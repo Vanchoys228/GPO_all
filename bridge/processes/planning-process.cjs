@@ -13,7 +13,7 @@ const startPlanningProcess = ({
   const nativeSolver = createNativeSolver({ solverPath: config.SOLVER_PATH });
   const planningServer = createSolverHttpServer({
     coordinateContract,
-    host: config.BRIDGE_HOST,
+    host: config.SOLVER_BIND_HOST || config.BRIDGE_HOST,
     nativeSolver,
     planningService:createPlanningService({nativeSolver}),
     port: config.SOLVER_PORT,

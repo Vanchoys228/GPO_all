@@ -20,7 +20,9 @@
     "test:bridge": "node scripts/bridge-smoke-test.mjs",
     "test:webots": "webots\\controllers\\youbot_web\\run_controller_tests.bat",
     "preview": "vite preview",
-    "test:services": "node scripts/services-smoke-test.mjs"
+    "test:services": "node scripts/services-smoke-test.mjs",
+    "service:gateway": "node bridge/processes/run-gateway-service.cjs",
+    "test:simulation": "node scripts/simulation-smoke-test.mjs"
   },
   "dependencies": {
     "dotenv": "^17.3.1",
@@ -45,5 +47,8 @@
     "tailwindcss": "^3.4.18",
     "vite": "^7.2.4",
     "vitest": "^4.1.1"
+  },
+  "engines": {
+    "node": ">=22.19.0"
   }
 }

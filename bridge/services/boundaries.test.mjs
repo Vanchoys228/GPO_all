@@ -8,3 +8,10 @@ describe("application service boundaries", () => {
     }
   });
 });
+
+it("mission and telemetry composition cannot import simulator files",async()=>{
+  for(const file of ["route-process.cjs","telemetry-process.cjs"]){
+    const source=await readFile(new URL(`../processes/${file}`,import.meta.url),"utf8");
+    expect(source).not.toMatch(/WEB_STATE_DIR|webots-file|webots-telemetry|web-state-store/);
+  }
+});

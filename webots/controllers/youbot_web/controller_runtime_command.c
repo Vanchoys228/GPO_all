@@ -44,6 +44,9 @@ int controller_runtime_command_load_next_file(
     } else if (sscanf(line, " type %63s", token) == 1) {
       parsed.has_spawn_obstacle = strcmp(token, "spawn_obstacle") == 0;
       parsed.has_start_mapping_survey = strcmp(token, "start_mapping_survey") == 0;
+      parsed.has_cancel_mission = strcmp(token, "cancel_mission") == 0;
+    } else if (sscanf(line, " mission_id %63s", token) == 1) {
+      strcpy(parsed.mission_id, token);
     } else if (sscanf(line, " clear_map %lf", &numeric) == 1) {
       parsed.clear_map = fabs(numeric) > CONTROLLER_RUNTIME_EPS;
     } else if (sscanf(line, " mode %63s", token) == 1) {
@@ -98,9 +101,10 @@ int controller_runtime_command_load_next_file(
   }
 
   if (parsed.id < 0 ||
-      (!parsed.has_spawn_obstacle && !parsed.has_start_mapping_survey)) {
+      (!parsed.has_spawn_obstacle && !parsed.has_start_mapping_survey && !parsed.has_cancel_mission)) {
     return 0;
   }
+  if (parsed.has_cancel_mission && !parsed.mission_id[0]) return 0;
   *command = parsed;
   return 1;
 }

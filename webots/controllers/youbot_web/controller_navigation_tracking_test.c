@@ -53,7 +53,7 @@ int main(void) {
       .target_has_heading = 1,
       .target_heading = 1.0,
       .current_heading = 0.95,
-      .distance_to_target = 0.1,
+      .distance_to_target = 0.04,
       .runtime_linear_speed_limit = 0.22,
       .runtime_angular_speed_limit = 1.6,
       .lidar_speed_scale = 1.0,
@@ -64,5 +64,11 @@ int main(void) {
       output.action != CONTROLLER_NAVIGATION_TRACKING_FINAL_ALIGN) return 5;
   if (!nearly_equal(output.linear_speed, 0.0) || !nearly_equal(output.angular_speed, 0.17)) return 6;
 
+  input.mode = NAV_MODE_FINAL_ALIGN;
+  input.distance_to_target = 0.17;
+  input.current_heading = input.target_heading;
+  controller_navigation_tracking_compute(&tracking_config, &input, &output);
+  if (output.action == CONTROLLER_NAVIGATION_TRACKING_FINAL_ALIGN) return 7;
+  if (output.linear_speed <= 0.0) return 8;
   return 0;
 }

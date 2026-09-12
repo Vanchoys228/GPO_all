@@ -50,7 +50,7 @@ const createRouteServer = ({ artifactStore, host, port, routeService: suppliedRo
           if (!result.missionId && controllerConnection?.readyState === WebSocket.OPEN) controllerConnection.send(JSON.stringify(payload));
           reply({ ok: true, status: "persisted", ...result });
         } catch (error) {
-          reply({ ok: false, error: error.message });
+          reply({ ok: false, error: error.message, code:error.code || "command_failed", statusCode:error.statusCode || 503 });
         }
       });
     });

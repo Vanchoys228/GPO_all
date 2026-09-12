@@ -80,7 +80,7 @@ const createFileTelemetrySource = ({ normalizeTelemetry, stateDir }) => {
     }
   };
 
-  return { paths, poll, readCameraFrame };
+  return { paths, poll, readCameraFrame, getObservedAt:() => lastMtimeMs };
 };
 
 module.exports = { createFileTelemetrySource, safeJsonParse };
