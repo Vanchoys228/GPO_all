@@ -1,6 +1,6 @@
 import {spawn} from "node:child_process";
 import {createServer} from "node:net";
-import {mkdtemp,readFile,writeFile,rm} from "node:fs/promises";
+import {mkdtemp,mkdir,readFile,writeFile,rm} from "node:fs/promises";
 import {once} from "node:events";
 import os from "node:os";
 import path from "node:path";
@@ -18,8 +18,9 @@ const port = async () => {
 };
 const [planningPort,routePort,telemetryPort,gatewayPort] = await Promise.all([port(),port(),port(),port()]);
 const env = {...process.env,BRIDGE_BIND_HOST:"127.0.0.1",SOLVER_PORT:String(planningPort),ROUTE_PORT:String(routePort),TELEMETRY_PORT:String(telemetryPort),GATEWAY_PORT:String(gatewayPort),GATEWAY_BIND_HOST:"127.0.0.1",GATEWAY_URL:`http://127.0.0.1:${gatewayPort}`,GATEWAY_TOKEN:"smoke-secret",WEB_STATE_DIR:path.join(directory,"simulator"),MISSION_STATE_DIR:path.join(directory,"missions")};
+for (const name of ["gateway","route","planning","telemetry"]) await mkdir(path.join(directory,name),{recursive:true});
 const start = name => {
-  const child = spawn(process.execPath,[`bridge/processes/run-${name}-service.cjs`],{cwd:root,env,stdio:["ignore","pipe","pipe"],windowsHide:true});
+  const child = spawn(process.execPath,[path.join(root,`bridge/processes/run-${name}-service.cjs`)],{cwd:path.join(directory,name),env,stdio:["ignore","pipe","pipe"],windowsHide:true});
   child.logs="";child.stdout.on("data",data => child.logs+=data);child.stderr.on("data",data => child.logs+=data);children.push(child);return child;
 };
 const stop = async child => {if(child.exitCode !== null || child.signalCode) return;const exited=once(child,"exit");child.kill();await exited;};

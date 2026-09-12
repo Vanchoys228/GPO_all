@@ -1,8 +1,7 @@
-require("dotenv").config();
-
 const path = require("path");
 
 const projectRoot = path.resolve(__dirname, "..", "..");
+require("dotenv").config({ path: path.join(projectRoot, ".env"), quiet: true });
 
 const toPort = (value, fallback) => {
   const parsed = Number.parseInt(value, 10);
@@ -17,7 +16,7 @@ const toHost = (value, fallback) => {
 
 const toPath = (value, fallback) => {
   const normalized = String(value || "").trim();
-  return normalized ? path.resolve(normalized) : fallback;
+  return normalized ? path.resolve(projectRoot, normalized) : fallback;
 };
 
 const BRIDGE_HOST = toHost(
