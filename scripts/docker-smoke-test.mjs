@@ -34,9 +34,11 @@ try {
   launcher = fork(path.join(root, "scripts/start-stack.mjs"), [physics ? "--headless" : "--no-webots", ...(process.argv.includes("--no-build") ? ["--no-build"] : [])], { cwd: root, env, windowsHide: true, stdio: ["ignore", "pipe", "pipe", "ipc"] });
   launcher.stdout.on("data", data => { logs = (logs + data).slice(-30000); });
   launcher.stderr.on("data", data => { logs = (logs + data).slice(-30000); });
-  let ready = false; launcher.on("message", value => { if (value === "ready") ready = true; });
+  let ready = false; launcher.on("message", value => { if (value.type === "ready") { ready = true; env.STACK_COMPOSE_TOKEN_FILE = value.tokenMountFile; } });
   await until(() => { if (launcher.exitCode !== null) throw new Error(logs); return ready; }, "launcher readiness", 900000);
-  env.STACK_GATEWAY_TOKEN = (await readFile(env.STACK_TOKEN_FILE, "utf8")).trim();
+  const duplicate = fork(path.join(root, "scripts/start-stack.mjs"), ["--no-webots", "--no-build"], { cwd: root, env, windowsHide: true, stdio: ["ignore", "ignore", "ignore", "ipc"] });
+  const [duplicateCode] = await once(duplicate, "exit");
+  assert.equal(duplicateCode, 1, "A duplicate launcher must refuse to own the running stack");
   assert.equal((await fetch("http://127.0.0.1:8080/health")).status, 200);
   assert.match(await (await fetch("http://127.0.0.1:8080/dashboard")).text(), /<div id="root">/);
   const scene = { polygons: [], surfaceZones: [], chargingStations: [], motion: { cruiseSpeedMps: 0.22, payloadKg: 0, batteryRange: 100 } };
@@ -85,7 +87,6 @@ finally {
     if (launcher.exitCode === null) launcher.kill();
   }
   // Only this test's uniquely named Compose project and its disposable volume.
-  env.STACK_GATEWAY_TOKEN ||= (await readFile(env.STACK_TOKEN_FILE, "utf8").catch(() => "")).trim();
   await compose("down", "-v", "--timeout", "15");
   await mkdir(path.join(root, "output"), { recursive: true });
   await writeFile(path.join(root, "output/docker-smoke.log"), logs);

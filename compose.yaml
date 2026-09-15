@@ -94,4 +94,4 @@ volumes:
 
 secrets:
   gateway_token:
-    environment: STACK_GATEWAY_TOKEN
+    file: ${STACK_COMPOSE_TOKEN_FILE:-./secrets/gateway-token}

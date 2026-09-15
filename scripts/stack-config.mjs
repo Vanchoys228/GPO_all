@@ -1,4 +1,5 @@
-import { mkdir, readFile, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, readFile, writeFile } from "node:fs/promises";
+import os from "node:os";
 import { randomBytes } from "node:crypto";
 import path from "node:path";
 
@@ -14,4 +15,13 @@ export async function ensureToken(file) {
 export function parseOptions(args) {
   for (const arg of args) if (!["--headless", "--no-build", "--no-webots"].includes(arg)) throw new Error(`Unknown option: ${arg}`);
   return { headless: args.includes("--headless"), build: !args.includes("--no-build"), webots: !args.includes("--no-webots") };
+}
+
+export async function stageToken(token) {
+  // Private parent directory protects the host; the bind-mounted file is readable
+  // by the container's non-root UID without changing the persistent secret's mode.
+  const directory = await mkdtemp(path.join(os.tmpdir(), "gpo-secret-"));
+  const file = path.join(directory, "gateway-token");
+  await writeFile(file, token, { mode: 0o444, flag: "wx" });
+  return { directory, file };
 }

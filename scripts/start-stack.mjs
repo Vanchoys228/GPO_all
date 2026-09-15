@@ -1,10 +1,10 @@
 import { spawn, fork } from "node:child_process";
 import { once } from "node:events";
-import { access, mkdir, readFile, stat, copyFile } from "node:fs/promises";
+import { access, mkdir, readFile, stat, copyFile, rm } from "node:fs/promises";
 import path from "node:path";
 import { createServer } from "node:net";
 import config from "../bridge/config/runtime-config.cjs";
-import { ensureToken, parseOptions } from "./stack-config.mjs";
+import { ensureToken, parseOptions, stageToken } from "./stack-config.mjs";
 
 const root = path.resolve(import.meta.dirname, "..");
 const options = parseOptions(process.argv.slice(2));
@@ -14,7 +14,7 @@ const stateDir = path.resolve(root, process.env.STACK_WEB_STATE_DIR || config.WE
 const env = { ...process.env, STACK_TOKEN_FILE: tokenFile, STACK_GATEWAY_URL: "http://host.docker.internal:9004" };
 const children = [];
 const launcherLock = createServer();
-let gateway, simulator, currentCommand, finish, interrupted = false, composeOwned = false, stopping = false;
+let gateway, simulator, currentCommand, finish, secretMount, interrupted = false, composeOwned = false, stopping = false;
 const requestStop = () => { if (interrupted) return; interrupted = true; currentCommand?.kill(); finish?.(); };
 process.on("SIGINT", requestStop);
 process.on("SIGTERM", requestStop);
@@ -64,7 +64,8 @@ try {
   launcherLock.listen(9005, "127.0.0.1");
   await once(launcherLock, "listening");
   const token = await ensureToken(tokenFile);
-  env.STACK_GATEWAY_TOKEN = token;
+  secretMount = await stageToken(token);
+  env.STACK_COMPOSE_TOKEN_FILE = secretMount.file;
   await run("docker", ["info"], true);
   const existing = await run("docker", ["compose", "-p", project, "ps", "--all", "--quiet"], true);
   if (existing.trim()) throw new Error(`Compose project ${project} already exists. Stop its launcher or run docker compose -p ${project} down first (without -v).`);
@@ -120,7 +121,7 @@ try {
   await new Promise(resolve => {
     finish = resolve;
     if (interrupted) resolve();
-    if (process.send) process.send("ready");
+    if (process.send) process.send({ type: "ready", tokenMountFile: secretMount.file });
     for (const child of children) child.once("exit", () => { if (!stopping) { process.exitCode = 1; resolve(); } });
   });
 } catch (error) {
@@ -129,6 +130,7 @@ try {
 }
 finally {
   await stop();
+  if (secretMount) await rm(secretMount.directory, { recursive: true, force: true });
   if (launcherLock.listening) await new Promise(resolve => launcherLock.close(resolve));
   if (process.connected) process.disconnect();
 }
