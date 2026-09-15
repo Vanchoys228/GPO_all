@@ -15,3 +15,14 @@ it("persists records and rejects another owner until the first closes",async()=>
   expect(await second.get("durable")).toMatchObject({status:"prepared"});
   expect(await second.list()).toHaveLength(1);
 });
+
+it("recovers a reused process ID when the previous process identity is gone",async()=>{
+  const directory=await mkdtemp(path.join(os.tmpdir(),"gpo-sqlite-reused-"));
+  let identity="previous-process";
+  const first=sqlite.createSqliteRepository({directory,processIdentity:()=>identity});
+  const second=sqlite.createSqliteRepository({directory,processIdentity:()=>identity});
+  resources.push({directory,repositories:[first,second]});
+  await first.save({missionId:"durable",status:"completed"});
+  identity="new-process";
+  expect(await second.get("durable")).toMatchObject({status:"completed"});
+});

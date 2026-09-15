@@ -10,13 +10,16 @@ describe("architecture cleanup", () => {
     }
   });
 
-  it("defines production frontend and optional headless Webots containers", () => {
+  it("defines independent service containers and a Windows simulator launcher", () => {
     const compose = readFileSync("compose.yaml", "utf8");
 
     expect(compose).toContain("dockerfile: docker/frontend.Dockerfile");
     expect(compose).toContain('127.0.0.1:8080:80');
-    expect(compose).toContain("dockerfile: docker/webots.Dockerfile");
-    expect(compose).toContain("- simulation");
+    for (const service of ["planning", "route", "telemetry"]) {
+      expect(compose).toContain(`bridge/processes/run-${service}-service.cjs`);
+    }
+    expect(compose).not.toContain("ws-bridge.cjs");
+    expect(existsSync("scripts/start-stack.mjs")).toBe(true);
     expect(existsSync("docker/nginx.conf")).toBe(true);
   });
 

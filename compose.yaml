@@ -1,42 +1,97 @@
+x-runtime: &runtime
+  image: gpo-service:local
+  build:
+    context: .
+    dockerfile: docker/bridge.Dockerfile
+  init: true
+  restart: unless-stopped
+  stop_grace_period: 15s
+  read_only: true
+  tmpfs:
+    - /tmp
+  security_opt:
+    - no-new-privileges:true
+  cap_drop: [ALL]
+  logging:
+    driver: json-file
+    options:
+      max-size: 5m
+      max-file: '4'
+
+x-client: &client
+  BRIDGE_BIND_HOST: 0.0.0.0
+  GATEWAY_URL: ${STACK_GATEWAY_URL:-http://host.docker.internal:9004}
+  GATEWAY_TOKEN_FILE: /run/secrets/gateway_token
+
 services:
+  planning:
+    <<: *runtime
+    command: [node, bridge/processes/run-planning-service.cjs]
+    environment:
+      BRIDGE_BIND_HOST: 0.0.0.0
+      SOLVER_PATH: /app/native/build/gpo_route_solver
+    ports: ['127.0.0.1:9003:9003']
+    healthcheck:
+      test: [CMD, node, docker/healthcheck.cjs, '9003']
+      interval: 5s
+      timeout: 4s
+      retries: 12
+      start_period: 10s
+
+  route:
+    <<: *runtime
+    command: [node, bridge/processes/run-route-service.cjs]
+    environment:
+      <<: *client
+      MISSION_STATE_DIR: /data/missions
+    secrets: [gateway_token]
+    extra_hosts: ['host.docker.internal:host-gateway']
+    volumes: [missions:/data/missions]
+    ports: ['127.0.0.1:9002:9002']
+    healthcheck:
+      test: [CMD, node, docker/healthcheck.cjs, '9002']
+      interval: 5s
+      timeout: 4s
+      retries: 12
+      start_period: 10s
+
+  telemetry:
+    <<: *runtime
+    command: [node, bridge/processes/run-telemetry-service.cjs]
+    environment: *client
+    secrets: [gateway_token]
+    extra_hosts: ['host.docker.internal:host-gateway']
+    ports: ['127.0.0.1:9001:9001']
+    healthcheck:
+      test: [CMD, node, docker/healthcheck.cjs, '9001']
+      interval: 5s
+      timeout: 4s
+      retries: 12
+      start_period: 10s
+
   frontend:
+    image: gpo-frontend:local
     build:
       context: .
       dockerfile: docker/frontend.Dockerfile
     depends_on:
-      - bridge
-    ports:
-      - "127.0.0.1:8080:80"
+      planning: {condition: service_healthy}
+      route: {condition: service_healthy}
+      telemetry: {condition: service_healthy}
+    ports: ['127.0.0.1:8080:80']
     restart: unless-stopped
+    logging:
+      driver: json-file
+      options: {max-size: 5m, max-file: '4'}
+    healthcheck:
+      test: [CMD, wget, -q, --spider, 'http://127.0.0.1/health']
+      interval: 5s
+      timeout: 3s
+      retries: 12
 
-  bridge:
-    build:
-      context: .
-      dockerfile: docker/bridge.Dockerfile
-    environment:
-      BRIDGE_BIND_HOST: 0.0.0.0
-      TELEMETRY_PORT: 9001
-      ROUTE_PORT: 9002
-      SOLVER_PORT: 9003
-      WEB_STATE_DIR: /state
-      SOLVER_PATH: /app/native/build/gpo_route_solver
-      MOCK_TELEMETRY: ${MOCK_TELEMETRY:-0}
-    ports:
-      - "127.0.0.1:9001:9001"
-      - "127.0.0.1:9002:9002"
-      - "127.0.0.1:9003:9003"
-    volumes:
-      - ./web_state:/state
-    restart: unless-stopped
+volumes:
+  missions:
 
-  webots:
-    profiles:
-      - simulation
-    build:
-      context: .
-      dockerfile: docker/webots.Dockerfile
-    depends_on:
-      - bridge
-    volumes:
-      - ./web_state:/project/web_state
-    restart: "no"
+secrets:
+  gateway_token:
+    file: ${STACK_TOKEN_FILE:-./secrets/gateway-token}

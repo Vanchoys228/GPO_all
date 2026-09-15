@@ -22,7 +22,9 @@
     "preview": "vite preview",
     "test:services": "node scripts/services-smoke-test.mjs",
     "service:gateway": "node bridge/processes/run-gateway-service.cjs",
-    "test:simulation": "node scripts/simulation-smoke-test.mjs"
+    "test:simulation": "node scripts/simulation-smoke-test.mjs",
+    "start": "node scripts/start-stack.mjs",
+    "test:docker": "node scripts/docker-smoke-test.mjs"
   },
   "dependencies": {
     "dotenv": "^17.3.1",

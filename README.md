@@ -225,28 +225,34 @@ npm run test:simulation
 npm run test:webots
 ```
 
-## Docker-стек
+## Запуск всего проекта одной командой (Windows + Docker Desktop)
 
-Compose запускает production frontend, WebSocket bridge и Linux-версию native
-solver. Webots с графическим окном пока работает на Windows и использует общий
-каталог `web_state`.
+После установки Node.js 22.19+, Docker Desktop с Linux Engine, Webots и
+Visual Studio C++ Build Tools выполните один раз `npm ci`. Затем:
 
-```bash
-docker compose up --build
+```powershell
+npm start
 ```
 
-Headless Webots R2025a запускается отдельным профилем:
+Команда собирает контроллер Webots и Docker-образы, запускает Windows gateway,
+четыре отдельных контейнера (frontend, planning, route, telemetry), ждёт их
+готовности и открывает Webots. Интерфейс: http://127.0.0.1:8080.
+Первый запуск требует Интернета и времени для загрузки образов/компилятора.
+После неизменённой сборки можно использовать `npm start -- --no-build`.
 
-```bash
-docker compose --profile simulation up --build
-```
+Остановка: Ctrl+C в терминале запуска. Launcher закрывает запущенный им Webots,
+останавливает контейнеры и gateway. Постоянный volume миссий сохраняется.
+Не запускайте одновременно старый `npm run bridge` или отдельные сервисы на
+портах 9001–9004. Уже открытый Webots перед полным запуском закройте.
 
-После запуска доступны прежние адреса:
+`secrets/gateway-token` создаётся автоматически и повторно используется;
+он не попадает в Git или Docker-образ. Контейнерные миссии хранятся в volume
+`gpo-stack_missions`, файлы симулятора и журнал gateway — в `WEB_STATE_DIR`.
+Старое `data/missions` автоматически не переносится: перед переключением с
+локальных сервисов сохраните старые данные и следуйте инструкции миграции.
 
-- `ws://127.0.0.1:9001` — телеметрия;
-- `ws://127.0.0.1:9002/ui` — маршруты и команды UI;
-- `http://127.0.0.1:9003/health` — состояние bridge и solver.
-- `http://127.0.0.1:8080` — frontend.
+Подробнее: [Docker и launcher](docs/DOCKER.md),
+[эксплуатация и резервные копии](docs/OPERATIONS.md).
 
 ## Проверки качества
 

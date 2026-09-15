@@ -46,3 +46,5 @@ native/build-tests/
 data/
 web_state/missions/
 web_state/gateway-journal/
+
+web_state/runtime-project/

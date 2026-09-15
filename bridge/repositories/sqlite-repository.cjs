@@ -5,7 +5,15 @@ const { DatabaseSync } = require("node:sqlite");
 const { validateMissionId } = require("../protocol/mission-contract.cjs");
 // Private to one service on one host. SQLite serializes ownership acquisition;
 // a crashed local owner can be recovered without deleting another writer's lock.
-const createSqliteRepository = ({directory}) => {
+const linuxProcessIdentity = pid => {
+  if (process.platform !== "linux") return null;
+  try {
+    const stat = fs.readFileSync(`/proc/${pid}/stat`, "utf8");
+    const started = stat.slice(stat.lastIndexOf(")") + 2).split(" ")[19];
+    return `${fs.readFileSync("/proc/sys/kernel/random/boot_id", "utf8").trim()}:${fs.readlinkSync(`/proc/${pid}/ns/pid`)}:${started}`;
+  } catch { return null; }
+};
+const createSqliteRepository = ({directory, processIdentity = linuxProcessIdentity}) => {
   let db;
   const token = randomUUID();
   const ready = async () => {
@@ -15,13 +23,16 @@ const createSqliteRepository = ({directory}) => {
     try {
       candidate.exec("PRAGMA busy_timeout=3000; PRAGMA journal_mode=WAL; CREATE TABLE IF NOT EXISTS records (id TEXT PRIMARY KEY, body TEXT NOT NULL); CREATE TABLE IF NOT EXISTS owner (id INTEGER PRIMARY KEY CHECK(id=1), pid INTEGER NOT NULL, token TEXT NOT NULL);");
       candidate.exec("BEGIN IMMEDIATE");
-      const owner = candidate.prepare("SELECT pid FROM owner WHERE id=1").get();
+      if (!candidate.prepare("PRAGMA table_info(owner)").all().some(column => column.name === "identity")) candidate.exec("ALTER TABLE owner ADD COLUMN identity TEXT");
+      const owner = candidate.prepare("SELECT pid, identity FROM owner WHERE id=1").get();
       if (owner) {
         let alive = true;
         try {process.kill(owner.pid,0);} catch(error) {if(error.code === "ESRCH") alive=false;}
+        const currentIdentity = alive && processIdentity(owner.pid);
+        if (owner.identity && currentIdentity && owner.identity !== currentIdentity) alive = false;
         if (alive) throw new Error(`Storage already owned by process ${owner.pid}: ${directory}`);
       }
-      candidate.prepare("INSERT OR REPLACE INTO owner VALUES (1,?,?)").run(process.pid,token);
+      candidate.prepare("INSERT OR REPLACE INTO owner (id,pid,token,identity) VALUES (1,?,?,?)").run(process.pid,token,processIdentity(process.pid));
       // Import the previous per-record JSON format in the configured directory once.
       for (const name of fs.readdirSync(directory).filter(name => /^[a-zA-Z0-9_-]{1,63}\.json$/.test(name))) {
         const record = JSON.parse(fs.readFileSync(path.join(directory,name),"utf8"));

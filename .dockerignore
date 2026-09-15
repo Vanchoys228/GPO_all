@@ -9,3 +9,15 @@ webots/controllers/youbot_web/*.obj
 web_state/*
 !web_state/.gitkeep
 *.log
+.env.*
+!.env.example
+secrets
+backups
+data
+logs
+output
+tmp
+.playwright-cli
+.worktrees
+native/build-tests
+docs/audit-2026-09-05
