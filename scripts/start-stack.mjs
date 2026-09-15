@@ -13,6 +13,7 @@ const tokenFile = path.resolve(root, process.env.STACK_TOKEN_FILE || "secrets/ga
 const stateDir = path.resolve(root, process.env.STACK_WEB_STATE_DIR || config.WEB_STATE_DIR);
 const env = { ...process.env, STACK_TOKEN_FILE: tokenFile, STACK_GATEWAY_URL: "http://host.docker.internal:9004" };
 const children = [];
+const launcherLock = createServer();
 let gateway, simulator, currentCommand, finish, interrupted = false, composeOwned = false, stopping = false;
 const requestStop = () => { if (interrupted) return; interrupted = true; currentCommand?.kill(); finish?.(); };
 process.on("SIGINT", requestStop);
@@ -59,6 +60,11 @@ async function stop() {
 }
 try {
   if (options.webots && process.platform !== "win32") throw new Error("The graphical launcher requires Windows; use --no-webots for service testing.");
+  // The OS releases this lock after crashes; no stale PID file can block recovery.
+  launcherLock.listen(9005, "127.0.0.1");
+  await once(launcherLock, "listening");
+  const token = await ensureToken(tokenFile);
+  env.STACK_GATEWAY_TOKEN = token;
   await run("docker", ["info"], true);
   const existing = await run("docker", ["compose", "-p", project, "ps", "--all", "--quiet"], true);
   if (existing.trim()) throw new Error(`Compose project ${project} already exists. Stop its launcher or run docker compose -p ${project} down first (without -v).`);
@@ -76,7 +82,6 @@ try {
     if (options.build) await run(process.env.ComSpec || "cmd.exe", ["/d", "/c", "webots\\controllers\\youbot_web\\build_youbot_web.bat"]);
     await access(path.join(root, "webots/controllers/youbot_web/youbot_web.exe"));
   }
-  const token = await ensureToken(tokenFile);
   await mkdir(stateDir, { recursive: true });
   gateway = fork(path.join(root, "scripts/gateway-child.cjs"), [], {
     cwd: root, windowsHide: true,
@@ -118,5 +123,12 @@ try {
     if (process.send) process.send("ready");
     for (const child of children) child.once("exit", () => { if (!stopping) { process.exitCode = 1; resolve(); } });
   });
-} catch (error) { console.error(error.message); process.exitCode = 1; }
-finally { await stop(); if (process.connected) process.disconnect(); }
+} catch (error) {
+  console.error(error.message); process.exitCode = 1;
+  if (composeOwned) await compose("logs", "--tail", "40").catch(() => {});
+}
+finally {
+  await stop();
+  if (launcherLock.listening) await new Promise(resolve => launcherLock.close(resolve));
+  if (process.connected) process.disconnect();
+}

@@ -9,6 +9,7 @@ Planning, route и telemetry работают отдельными Node-проц
 Route единолично владеет volume `gpo-stack_missions`. Файлы Webots не монтируются
 в сервисные контейнеры. Frontend обслуживается nginx на localhost:8080.
 Порты 9001–9003 также опубликованы только на localhost для браузерных клиентов.
+Порт localhost:9005 удерживается launcher как блокировка повторного запуска.
 Это конфигурация локальной рабочей станции, не публичного сервера.
 
 ## Запуск
@@ -40,8 +41,12 @@ restart policy действует при выходе процесса.
 Для полного launcher задаются `STACK_TOKEN_FILE` (по умолчанию
 `secrets/gateway-token`) и `STACK_WEB_STATE_DIR` (по умолчанию `WEB_STATE_DIR`).
 Эти значения передаются gateway явно; отдельный `GATEWAY_TOKEN` из `.env` в этом
-режиме не используется. Путь секрета монтируется в route/telemetry read-only,
-frontend и planning его не получают. Сохраните файл секрета между запусками.
+режиме не используется. Launcher передаёт значение в Compose как environment-backed secret; Compose
+предоставляет его route/telemetry файлом `/run/secrets/gateway_token`,
+frontend и planning его не получают. Это устраняет зависимость от UID владельца
+исходного файла на Windows/Linux; исходный файл остаётся приватным. Для ручных
+команд Compose с операциями запуска задайте `STACK_GATEWAY_TOKEN` из файла;
+`npm start` делает это автоматически. Сохраните файл секрета между запусками.
 Gateway слушает 0.0.0.0 для доступа Docker: ограничьте порт 9004 доверенной
 сетью в Windows Firewall. Launcher не меняет правила firewall.
 

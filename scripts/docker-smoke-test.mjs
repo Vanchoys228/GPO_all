@@ -36,6 +36,7 @@ try {
   launcher.stderr.on("data", data => { logs = (logs + data).slice(-30000); });
   let ready = false; launcher.on("message", value => { if (value === "ready") ready = true; });
   await until(() => { if (launcher.exitCode !== null) throw new Error(logs); return ready; }, "launcher readiness", 900000);
+  env.STACK_GATEWAY_TOKEN = (await readFile(env.STACK_TOKEN_FILE, "utf8")).trim();
   assert.equal((await fetch("http://127.0.0.1:8080/health")).status, 200);
   assert.match(await (await fetch("http://127.0.0.1:8080/dashboard")).text(), /<div id="root">/);
   const scene = { polygons: [], surfaceZones: [], chargingStations: [], motion: { cruiseSpeedMps: 0.22, payloadKg: 0, batteryRange: 100 } };
@@ -66,7 +67,10 @@ try {
     assert.ok(Math.hypot(last.pose.x - first.pose.x, last.pose.y - first.pose.y) < 0.05);
   }
   telemetry = new WebSocket("ws://127.0.0.1:9001");
-  let observed = false; telemetry.on("message", () => { observed = true; });
+  let observed = false;
+  telemetry.on("message", data => { const event = JSON.parse(data); if (event.type === "telemetry.event" && event.payload?.pose) observed = true; });
+  await once(telemetry, "open");
+  if (!physics) await writeFile(stateFile, JSON.stringify({ pose: { x: 3.25, y: 0 }, navigation: { missionId: "docker-cancel", status: "mission_cancelled", finished: true } }));
   await until(() => observed, "telemetry websocket", 15000);
   console.log(`Docker smoke passed: frontend, native planning, mission completion, crash recovery, idempotency, cancellation, telemetry. Physics=${physics}`);
 } catch (error) { console.error(logs); throw error; }
@@ -81,6 +85,7 @@ finally {
     if (launcher.exitCode === null) launcher.kill();
   }
   // Only this test's uniquely named Compose project and its disposable volume.
+  env.STACK_GATEWAY_TOKEN ||= (await readFile(env.STACK_TOKEN_FILE, "utf8").catch(() => "")).trim();
   await compose("down", "-v", "--timeout", "15");
   await mkdir(path.join(root, "output"), { recursive: true });
   await writeFile(path.join(root, "output/docker-smoke.log"), logs);
