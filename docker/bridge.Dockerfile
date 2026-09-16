@@ -17,7 +17,9 @@ COPY --from=native-build /app/native/build/gpo_route_solver ./native/build/gpo_r
 COPY bridge ./bridge
 COPY shared ./shared
 COPY docker/healthcheck.cjs ./docker/healthcheck.cjs
+COPY docker/gateway-healthcheck.cjs ./docker/gateway-healthcheck.cjs
+COPY docker/init-container-secret.cjs ./docker/init-container-secret.cjs
 COPY package.json ./
-RUN mkdir -p /data/missions && chown node:node /data/missions
+RUN mkdir -p /data/missions /data/webots /data/webots/gateway-journal && chown -R node:node /data
 USER node
 CMD ["node", "bridge/processes/run-planning-service.cjs"]

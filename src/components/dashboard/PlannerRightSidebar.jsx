@@ -2,6 +2,7 @@ import PlannerConstraintsSection from "./sections/PlannerConstraintsSection";
 import PlannerLimitZonesSection from "./sections/PlannerLimitZonesSection";
 import PlannerRoutePointsSection from "./sections/PlannerRoutePointsSection";
 import PlannerTelemetrySection from "./sections/PlannerTelemetrySection";
+import PlannerSimulationSection from "./sections/PlannerSimulationSection";
 
 export default function PlannerRightSidebar({
   onCollapse,
@@ -95,6 +96,7 @@ export default function PlannerRightSidebar({
         visitsInsideLimitCount={visitsInsideLimitCount}
       />
 
+      <PlannerSimulationSection />
       <PlannerTelemetrySection
         mapExportPromptOpen={mapExportPromptOpen}
         mappingSurveyMode={mappingSurveyMode}

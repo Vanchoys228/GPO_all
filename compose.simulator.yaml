@@ -1,0 +1,85 @@
+# docker compose -f compose.yaml -f compose.simulator.yaml up --build -d
+services:
+  init-secret:
+    image: gpo-service:local
+    build:
+      context: .
+      dockerfile: docker/bridge.Dockerfile
+    user: '0:0'
+    command: [node, docker/init-container-secret.cjs]
+    volumes: [container-secrets:/run/secrets]
+    read_only: true
+    cap_drop: [ALL]
+    security_opt: [no-new-privileges:true]
+
+  gateway:
+    image: gpo-service:local
+    build:
+      context: .
+      dockerfile: docker/bridge.Dockerfile
+    command: [node, bridge/processes/run-gateway-service.cjs]
+    init: true
+    restart: unless-stopped
+    environment:
+      GATEWAY_BIND_HOST: 0.0.0.0
+      GATEWAY_TOKEN_FILE: /run/secrets/gateway_token
+      WEB_STATE_DIR: /data/webots
+    depends_on:
+      init-secret: {condition: service_completed_successfully}
+    volumes:
+      - container-secrets:/run/secrets:ro
+      - simulator-state:/data/webots
+      - gateway-journal:/data/webots/gateway-journal
+    read_only: true
+    tmpfs: [/tmp]
+    cap_drop: [ALL]
+    security_opt: [no-new-privileges:true]
+    healthcheck:
+      test: [CMD, node, docker/gateway-healthcheck.cjs]
+      interval: 5s
+      timeout: 4s
+      retries: 12
+
+  simulator:
+    image: gpo-webots:local
+    build:
+      context: .
+      dockerfile: docker/webots.Dockerfile
+    init: true
+    restart: unless-stopped
+    environment:
+      WEB_STATE_DIR: /data/webots
+    volumes: [simulator-state:/data/webots]
+    ports: ['127.0.0.1:1234:1234']
+    shm_size: 256mb
+    healthcheck:
+      test: [CMD, python3, /usr/local/bin/webots-healthcheck.py]
+      interval: 5s
+      timeout: 4s
+      retries: 24
+      start_period: 30s
+    depends_on:
+      gateway: {condition: service_healthy}
+
+  route:
+    secrets: !reset []
+    volumes:
+      - container-secrets:/run/secrets:ro
+    environment:
+      GATEWAY_URL: http://gateway:9004
+    depends_on:
+      gateway: {condition: service_healthy}
+
+  telemetry:
+    secrets: !reset []
+    volumes:
+      - container-secrets:/run/secrets:ro
+    environment:
+      GATEWAY_URL: http://gateway:9004
+    depends_on:
+      gateway: {condition: service_healthy}
+
+volumes:
+  container-secrets:
+  simulator-state:
+  gateway-journal:

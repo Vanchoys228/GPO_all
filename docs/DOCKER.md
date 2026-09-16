@@ -1,5 +1,8 @@
 # Docker и полный запуск
 
+Полностью контейнерный режим с Webots и gateway описан в [FULL-CONTAINER.md](FULL-CONTAINER.md).
+Этот документ описывает альтернативный гибридный запуск с Windows Webots.
+
 ## Размещение
 
 Windows запускает Webots и gateway. Gateway слушает порт 9004 и защищён токеном;
