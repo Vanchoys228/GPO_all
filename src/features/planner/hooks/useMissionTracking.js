@@ -42,7 +42,7 @@ export const useMissionTracking = ({onStarted,fetchMission = getMission}) => {
         if (result.missionId !== missionId) throw new Error("Ответ относится к другой миссии.");
         setState(result);
         if (result.status === "running" && !started) {started=true;onStarted?.();}
-        if (terminal.has(result.status)) return;
+        if (terminal.has(result.status)) {setMissionId(null);return;}
       } catch(error) {
         if (controller.signal.aborted) return;
         setState(previous => ({...previous,connectionError:error.message}));

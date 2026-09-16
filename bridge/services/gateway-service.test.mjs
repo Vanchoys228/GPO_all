@@ -23,4 +23,12 @@ describe("gateway delivery journal", () => {
     await service.execute("submit", "m2", {commandId:"m2"});
     expect(adapter.submit.mock.calls.map(([p]) => p.commandId)).toEqual(["m2","m2"]);
   });
+  it("redelivers a durable cancellation until a restarted controller acknowledges it", async () => {
+    const { repository, adapter, service } = setup();
+    const payload = {missionId:"m3"};
+    await service.execute("cancel", "m3", payload);
+    await gateway.createGatewayService({repository,adapter}).execute("cancel", "m3", payload);
+    expect(adapter.cancel).toHaveBeenCalledTimes(2);
+    expect(adapter.cancel).toHaveBeenLastCalledWith({...payload,redeliver:true});
+  });
 });

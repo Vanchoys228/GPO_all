@@ -19,7 +19,13 @@ const createGatewayService = ({repository, adapter}) => {
       const key = fingerprint({operation, requestId}).slice(0, 63);
       let record = await repository.get(key);
       if (record && record.fingerprint !== hash) throw serviceError(409, "id_conflict", "Request ID belongs to another command.");
-      if (record?.status === "delivered") return record.result;
+      if (record?.status === "delivered") {
+        // A controller started after this journal entry deliberately ignores old
+        // runtime commands. Cancellation is safe to publish again and gives the
+        // new controller a fresh command id without replaying robot movement.
+        if (operation === "cancel") await adapter.cancel({...payload,redeliver:true});
+        return record.result;
+      }
       const active=await repository.get("gateway-active");
       if (active && !["completed","failed","cancelled"].includes(active.status) && (operation === "update" || (operation === "submit" && active.commandId !== requestId))) {
         const feedback=await feedbackFor(active.commandId);

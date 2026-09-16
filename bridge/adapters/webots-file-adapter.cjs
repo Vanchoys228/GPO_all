@@ -10,8 +10,8 @@ const createWebotsFileAdapter = ({artifactStore, stateDir}) => ({
     }
     await artifactStore.writeRoute(command);
   },
-  async cancel({missionId}) {
-    await artifactStore.writeRuntimeCommand({type:"cancel_mission",missionId,requestKey:missionId});
+  async cancel({missionId,redeliver=false}) {
+    await artifactStore.writeRuntimeCommand({type:"cancel_mission",missionId,...(!redeliver ? {requestKey:missionId} : {})});
   },
   async update(payload) {
     switch (payload?.type) {
