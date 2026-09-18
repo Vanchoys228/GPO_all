@@ -7,8 +7,9 @@ import {createRouteCommand} from "../shared/contracts/index.js";
 const project=`gpo-full-test-${Date.now()}`;
 const root=new URL("../",import.meta.url);
 const sockets=[];
+const simulatorFiles=process.env.SIMULATOR_GPU === "1" ? ["-f","compose.simulator.gpu-wslg.yaml"] : [];
 const compose=(...args)=>new Promise((resolve,reject)=>{
-  const child=spawn("docker",["compose","-p",project,"-f","compose.yaml","-f","compose.simulator.yaml",...args],{cwd:root,windowsHide:true,stdio:"inherit"});
+  const child=spawn("docker",["compose","-p",project,"-f","compose.yaml","-f","compose.simulator.yaml",...simulatorFiles,...args],{cwd:root,windowsHide:true,stdio:"inherit"});
   child.on("error",reject);child.on("exit",code=>code===0 ? resolve() : reject(new Error(`Compose exit ${code}`)));
 });
 const delay=ms=>new Promise(resolve=>setTimeout(resolve,ms));
@@ -43,22 +44,27 @@ try {
   await until(()=>telemetry?.perception?.camera?.frameDataUrl,"robot camera");
   assert.equal(telemetry.navigation.status,"waiting_for_route","fresh stack must not move before a mission");
   const streaming=await connect("ws://127.0.0.1:8080/simulation/");
-  let imageUrl;
+  let sceneLoaded=false, model="", updates=0, simulationMode;
   streaming.on("message",data=>{
     const message=data.toString();
-    if(message.startsWith("multimedia: "))imageUrl=new URL(message.split(" ")[1],"http://127.0.0.1:8080/simulation/");
-    if(message==="scene load completed")streaming.send("resize: 960x540");
+    if(message === "real-time" || message === "fast")simulationMode=message;
+    if(message.startsWith("model:"))model=message.slice(6);
+    if(message.startsWith("application/json:"))updates++;
+    if(message==="scene load completed")sceneLoaded=true;
   });
-  streaming.send("mjpeg: 960x540");
-  await until(()=>imageUrl,"streaming handshake",30000);
-  const response=await fetch(imageUrl,{signal:AbortSignal.timeout(20000)});
+  streaming.send("w3d;broadcast");
+  await until(()=>sceneLoaded && model.includes("<") && updates>0,"W3D scene and updates",30000);
+  const response=await fetch("http://127.0.0.1:8080/webots/wwi/wrenjs.wasm",{signal:AbortSignal.timeout(20000)});
   assert.equal(response.status,200);
-  assert.match(response.headers.get("content-type"),/multipart\/x-mixed-replace/);
-  const reader=response.body.getReader();let bytes=Buffer.alloc(0);
-  while(bytes.indexOf(Buffer.from([0xff,0xd9]))<0){const part=await reader.read();assert.ok(!part.done);bytes=Buffer.concat([bytes,Buffer.from(part.value)]);}
-  await reader.cancel();assert.ok(bytes.indexOf(Buffer.from([0xff,0xd8]))>=0,"stream must contain a JPEG frame");
+  assert.deepEqual(Buffer.from(await response.arrayBuffer()).subarray(0,4),Buffer.from([0,97,115,109]));
   const socket=await connect("ws://127.0.0.1:9002/ui");
   await send(socket,"complete",[{x:0,y:0},{x:1,y:0}]);
+  streaming.send("fast:-1");
+  await until(()=>simulationMode === "fast","fast mode acknowledgement",10000);
+  streaming.send("real-time:-1");
+  await until(()=>simulationMode === "real-time","realtime mode acknowledgement",10000);
+  streaming.send("fast:-1");
+  await until(()=>simulationMode === "fast","fast mode during mission",10000);
   await until(async()=>(await mission("complete")).status==="completed","physical route completion");
   await compose("kill","-s","SIGKILL","route");
   await compose("up","-d","--wait","route");
@@ -71,7 +77,7 @@ try {
   await until(async()=>(await mission("restart-cancel")).status==="cancelled","cancel after simulator restart");
   await send(nextSocket,"after-restart",[{x:0,y:0},{x:1,y:0}]);
   await until(async()=>(await mission("after-restart")).status==="completed","route after simulator restart");
-  console.log("PASS: six containers, camera, MJPEG through nginx, physical missions, route crash and simulator cancellation recovery");
+  console.log("PASS: six containers, camera, W3D through nginx, local WASM, speed controls, physical missions, route crash and simulator cancellation recovery");
 } finally {
   for(const socket of sockets)socket.terminate();
   // The unique project above is owned solely by this test; its volumes are disposable.

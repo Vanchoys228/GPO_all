@@ -12,6 +12,7 @@ RUN python /cache-webots-assets.py
 
 FROM cyberbotics/webots:R2025a-ubuntu22.04
 USER root
+RUN apt-get update && apt-get install --yes --no-install-recommends mesa-utils && rm -rf /var/lib/apt/lists/*
 RUN useradd --uid 1000 --create-home simulator && mkdir -p /data/webots && chown simulator:simulator /data/webots
 WORKDIR /project
 COPY --from=build /project/controllers/youbot_web/youbot_web ./controllers/youbot_web/youbot_web
@@ -21,6 +22,7 @@ COPY docker/start-webots.sh /usr/local/bin/start-project-webots
 COPY docker/webots-healthcheck.py /usr/local/bin/webots-healthcheck.py
 RUN sed -i 's/\r$//' /usr/local/bin/start-project-webots && chmod +x /usr/local/bin/start-project-webots && \
     sed -i 's/position 32.430003995926356 31.59802927772458 14.95951242560089/position 4.8645 4.7397 2.2439/' /project/worlds/youbot_only.wbt && \
+    sed -i '/basicTimeStep 16/a\  FPS 30' /project/worlds/youbot_only.wbt && \
     chown -R simulator:simulator /project
 ENV WEB_STATE_DIR=/data/webots
 USER simulator

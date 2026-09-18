@@ -1,0 +1,24 @@
+# Optional Windows Docker Desktop / WSLg OpenGL acceleration.
+# Use together with compose.yaml and compose.simulator.yaml.
+services:
+  simulator:
+    environment:
+      WEBOTS_RENDERER: "${WEBOTS_RENDERER:-gpu}"
+      DISPLAY: "${WEBOTS_DISPLAY:-:0}"
+      LD_LIBRARY_PATH: /usr/lib/wsl/lib
+      MESA_D3D12_DEFAULT_ADAPTER_NAME: "${WEBOTS_GPU_NAME:-NVIDIA}"
+    devices:
+      - /dev/dxg:/dev/dxg
+    volumes:
+      - type: bind
+        source: "${WSLG_X11_PATH:-/mnt/host/wslg/.X11-unix}"
+        target: /tmp/.X11-unix
+        read_only: true
+        bind:
+          create_host_path: false
+      - type: bind
+        source: "${WSL_LIB_PATH:-/usr/lib/wsl}"
+        target: /usr/lib/wsl
+        read_only: true
+        bind:
+          create_host_path: false

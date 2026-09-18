@@ -21,3 +21,4 @@ tmp
 .worktrees
 native/build-tests
 docs/audit-2026-09-05
+public/webots/wwi

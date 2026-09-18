@@ -4,6 +4,7 @@
   "version": "0.0.0",
   "type": "module",
   "scripts": {
+    "prepare:viewer": "node scripts/prepare-webots-viewer.mjs",
     "dev": "vite --host 127.0.0.1",
     "bridge": "node ws-bridge.cjs",
     "service:planning": "node bridge/processes/run-planning-service.cjs",

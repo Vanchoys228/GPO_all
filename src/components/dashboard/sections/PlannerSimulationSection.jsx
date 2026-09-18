@@ -1,23 +1,43 @@
 import {useEffect,useRef,useState} from "react";
-import {connectSimulationStream} from "../../../features/planner/services/simulationStream";
+import {connectSimulationViewer} from "../../../features/planner/services/simulationViewer";
 
 function SimulationImage() {
-  const [frame,setFrame]=useState(null);
+  const frame=useRef(null);
   const [status,setStatus]=useState("connecting");
+  const [mode,setMode]=useState(null);
+  const [pending,setPending]=useState(false);
+  const [error,setError]=useState("");
   const connection=useRef(null);
   useEffect(()=>{
-    const endpoint=new URL("/simulation/",window.location.href);
-    endpoint.protocol=endpoint.protocol === "https:" ? "wss:" : "ws:";
-    const dispose=connectSimulationStream({url:endpoint.href,onFrame:setFrame,onStatus:setStatus});
+    const dispose=connectSimulationViewer({frame:frame.current,onStatus:setStatus,onMode:setMode,onError:setError});
     connection.current=dispose;
     return ()=>{connection.current=null;dispose();};
   },[]);
+  const changeMode=async value=>{
+    const active=connection.current;
+    if (!active) return;
+    setPending(true);setError("");
+    try {await active.setMode(value);}
+    catch (failure) {if (connection.current === active) setError(failure.message);}
+    finally {if (connection.current === active) setPending(false);}
+  };
   return <>
     <p className="mb-2 text-xs text-slate-600" role="status">
-      {status === "connected" ? "Прямой вид симуляции" : status === "reconnecting" ? "Симулятор недоступен. Повторное подключение…" : "Подключение к симулятору…"}
+      {status === "connected" ? "Интерактивный вид симуляции" : status === "error" ? "Просмотрщик недоступен" : status === "reconnecting" ? "Симулятор недоступен. Повторное подключение…" : "Подключение к симулятору…"}
     </p>
+    <div className="mb-2 flex gap-2" role="group" aria-label="Скорость симуляции">
+      {[["realtime","Обычная"],["fast","Максимальная"]].map(([value,label])=><button
+        key={value} type="button" aria-pressed={mode === value}
+        disabled={status !== "connected" || pending}
+        onClick={()=>changeMode(value)}
+        title={value === "realtime" ? "Цель — 1× реального времени" : "Максимальная скорость, доступная компьютеру"}
+        className={`rounded-md border px-2 py-1 text-xs disabled:opacity-50 ${mode === value ? "border-sky-600 bg-sky-600 text-white" : "border-slate-200 text-slate-700 hover:bg-sky-50"}`}
+      >{label}</button>)}
+    </div>
+    {pending && <p className="mb-2 text-xs text-slate-600" role="status">Изменяем скорость…</p>}
+    {error && <p className="mb-2 text-xs text-red-700" role="alert">{error}</p>}
     <div className="aspect-video overflow-hidden rounded-lg bg-slate-950">
-      {frame && <img src={frame} alt="Робот в симуляторе Webots" className="h-full w-full object-contain" onError={()=>connection.current?.reconnect()}/>}
+      <iframe ref={frame} title="Робот в симуляторе Webots" className="h-full w-full border-0" allow="fullscreen"/>
     </div>
   </>;
 }

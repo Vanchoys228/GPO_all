@@ -93,7 +93,8 @@ Youbot {
     }
     DEF FRONT_CAMERA Camera {
       translation 0.3 0 0.24
-      rotation 0 1 0 -1.5708
+      # Optical axis +X points forward; +Z stays up in the ENU robot frame.
+      rotation 0 0 1 0
       children [
         Shape {
           appearance PBRAppearance {
