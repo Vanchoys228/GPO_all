@@ -214,6 +214,7 @@ typedef struct {
   long long id;
   int has_spawn_obstacle;
   int has_start_mapping_survey;
+  int has_clear_runtime_obstacles;
   int clear_map;
   MappingSurveyMode survey_mode;
   double x;
@@ -3138,6 +3139,7 @@ static int load_runtime_command(RuntimeCommand *command) {
     if (sscanf(line, " type %63s", token) == 1) {
       parsed.has_spawn_obstacle = strcmp(token, "spawn_obstacle") == 0 ? 1 : 0;
       parsed.has_start_mapping_survey = strcmp(token, "start_mapping_survey") == 0 ? 1 : 0;
+      parsed.has_clear_runtime_obstacles = strcmp(token, "clear_runtime_obstacles") == 0 ? 1 : 0;
       continue;
     }
     if (sscanf(line, " clear_map %lf", &numeric) == 1) {
@@ -3171,7 +3173,7 @@ static int load_runtime_command(RuntimeCommand *command) {
   }
 
   fclose(file);
-  if (parsed.id < 0 || (!parsed.has_spawn_obstacle && !parsed.has_start_mapping_survey)) return 0;
+  if (parsed.id < 0 || (!parsed.has_spawn_obstacle && !parsed.has_start_mapping_survey && !parsed.has_clear_runtime_obstacles)) return 0;
   *command = parsed;
   return 1;
 }
@@ -3192,6 +3194,13 @@ static void maybe_reload_runtime_command() {
   runtime_command_last_modified = mtime;
   if (command.id <= last_processed_runtime_command_id) return;
   last_processed_runtime_command_id = command.id;
+
+  if (command.has_clear_runtime_obstacles) {
+    remove_runtime_obstacle_nodes();
+    clear_error();
+    set_status("runtime_obstacles_cleared");
+    return;
+  }
 
   if (command.has_start_mapping_survey) {
     clear_error();

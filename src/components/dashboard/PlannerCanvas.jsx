@@ -1,9 +1,10 @@
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, useState } from "react";
 import {
   CANVAS_HEIGHT,
   CANVAS_WIDTH,
   POINT_KIND_META,
   SCALE,
+  canvasToWorld,
   drawDiamond,
   drawPlannerBackground,
   worldToCanvas,
@@ -19,6 +20,7 @@ const INITIAL_DRAW_STATE = {
   optimizedRoute: [],
   obstacleTrace: [],
   obstacleMap: INITIAL_TELEMETRY.obstacleMap,
+  manualObstacles: [],
   routeBlocked: false,
   hoveredPointIndex: null,
 };
@@ -29,6 +31,8 @@ export default function PlannerCanvas({
   optimizedRoute,
   hoveredPointIndex,
   telemetry,
+  manualObstacles = [],
+  visibleLayers,
   onCanvasClick,
   onCanvasMouseDown,
   onCanvasMouseMove,
@@ -38,6 +42,7 @@ export default function PlannerCanvas({
   const telemetryTargetRef = useRef({ ...INITIAL_TELEMETRY });
   const telemetryRenderRef = useRef({ ...INITIAL_TELEMETRY });
   const drawStateRef = useRef(INITIAL_DRAW_STATE);
+  const [cursorPoint, setCursorPoint] = useState(null);
 
   useEffect(() => {
     telemetryTargetRef.current = telemetry;
@@ -53,6 +58,7 @@ export default function PlannerCanvas({
       optimizedRoute,
       obstacleTrace: telemetry.obstacleTrace || [],
       obstacleMap: telemetry.obstacleMap || INITIAL_TELEMETRY.obstacleMap,
+      manualObstacles,
       routeBlocked: plannerModel.routeBlocked,
       hoveredPointIndex,
     };
@@ -65,6 +71,7 @@ export default function PlannerCanvas({
     plannerModel.surfaceZones,
     plannerModel.visitEntries,
     plannerModel.zoneEntries,
+    manualObstacles,
     telemetry.obstacleMap,
     telemetry.obstacleTrace,
   ]);
@@ -94,9 +101,9 @@ export default function PlannerCanvas({
       current.z += (target.z - current.z) * alpha;
       current.yaw += normalizeAngle(target.yaw - current.yaw) * alpha;
 
-      drawPlannerBackground(ctx, state.surfaceZones);
+      drawPlannerBackground(ctx, visibleLayers.surfaces ? state.surfaceZones : []);
 
-      if (state.obstacleMap?.cells?.length) {
+      if (visibleLayers.obstacleTrace && state.obstacleMap?.cells?.length) {
         const rawCellSize = Number(state.obstacleMap.cellSize);
         const cellSize = Number.isFinite(rawCellSize) && rawCellSize > 0 ? rawCellSize : 0.06;
         const cellCanvasSize = Math.max(3, cellSize * SCALE * 0.92);
@@ -125,7 +132,7 @@ export default function PlannerCanvas({
         });
       }
 
-      state.zoneEntries.forEach((zone) => {
+      if (visibleLayers.zones) state.zoneEntries.forEach((zone) => {
         if (zone.points.length > 1) {
           ctx.setLineDash([10, 8]);
           ctx.strokeStyle = zone.color.stroke;
@@ -178,7 +185,26 @@ export default function PlannerCanvas({
         }
       });
 
-      if (state.obstacleTrace.length) {
+      if (visibleLayers.zones) {
+        state.manualObstacles.forEach((obstacle, index) => {
+          const center = worldToCanvas(obstacle.x, obstacle.y);
+          const width = Math.max(8, obstacle.sizeX * SCALE);
+          const height = Math.max(8, obstacle.sizeY * SCALE);
+
+          ctx.fillStyle = "rgba(71, 85, 105, 0.72)";
+          ctx.strokeStyle = "#0f172a";
+          ctx.lineWidth = 2;
+          ctx.fillRect(center.x - width / 2, center.y - height / 2, width, height);
+          ctx.strokeRect(center.x - width / 2, center.y - height / 2, width, height);
+          ctx.fillStyle = "#ffffff";
+          ctx.font = "700 10px 'Segoe UI', sans-serif";
+          ctx.textAlign = "center";
+          ctx.textBaseline = "middle";
+          ctx.fillText(`O${index + 1}`, center.x, center.y);
+        });
+      }
+
+      if (visibleLayers.obstacleTrace && state.obstacleTrace.length) {
         state.obstacleTrace.forEach((point) => {
           const confidenceRaw = Number(point?.confidence);
           const confidence = Number.isFinite(confidenceRaw)
@@ -199,7 +225,7 @@ export default function PlannerCanvas({
         });
       }
 
-      if (state.optimizedRoute.length > 1) {
+      if (visibleLayers.route && state.optimizedRoute.length > 1) {
         ctx.strokeStyle = state.routeBlocked ? "#dc2626" : "#0f766e";
         ctx.lineWidth = 5;
         ctx.beginPath();
@@ -211,7 +237,7 @@ export default function PlannerCanvas({
         ctx.stroke();
       }
 
-      state.chargeEntries.forEach((entry) => {
+      if (visibleLayers.route) state.chargeEntries.forEach((entry) => {
         const point = worldToCanvas(entry.point.x, entry.point.y);
         const hovered = state.hoveredPointIndex === entry.index;
 
@@ -238,7 +264,7 @@ export default function PlannerCanvas({
         ctx.fillText(`C${entry.order}`, point.x, point.y);
       });
 
-      state.visitEntries.forEach((entry) => {
+      if (visibleLayers.route) state.visitEntries.forEach((entry) => {
         const plannedEntry = state.plannedVisitEntryMap.get(entry.index);
         const point = worldToCanvas(entry.point.x, entry.point.y);
         const hovered = state.hoveredPointIndex === entry.index;
@@ -322,22 +348,55 @@ export default function PlannerCanvas({
 
     loop();
     return () => window.cancelAnimationFrame(raf);
-  }, [canvasRef]);
+  }, [canvasRef, visibleLayers]);
+
+  const handleMouseMove = (event) => {
+    if (canvasRef.current) {
+      const rect = canvasRef.current.getBoundingClientRect();
+      const scaleX = canvasRef.current.width / rect.width;
+      const scaleY = canvasRef.current.height / rect.height;
+      setCursorPoint(
+        canvasToWorld(
+          (event.clientX - rect.left) * scaleX,
+          (event.clientY - rect.top) * scaleY
+        )
+      );
+    }
+    onCanvasMouseMove(event);
+  };
+
+  const handleMouseLeave = (event) => {
+    setCursorPoint(null);
+    onCanvasMouseLeave(event);
+  };
 
   return (
-    <main className="flex-1 overflow-auto bg-stone-200 p-4">
-      <div className="mx-auto max-w-[1380px]">
-        <div className="relative rounded-[28px] border border-stone-300 bg-white/80 p-3 shadow-xl lg:p-4">
+    <main className="h-full min-h-0 min-w-0 flex-1 overflow-hidden bg-slate-100 p-0">
+      <div className="flex h-full w-full flex-col overflow-hidden bg-white">
+        <div className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-200 px-4 py-3">
+          <div className="min-w-0">
+            <h1 className="truncate text-base font-bold text-slate-950">Рабочая карта маршрута</h1>
+            <div className="truncate text-xs text-slate-500">
+              Рабочая область планирования маршрута
+            </div>
+          </div>
+        </div>
+        <div className="relative flex min-h-0 flex-1 items-center justify-center p-3 xl:p-4">
+          {cursorPoint && (
+            <div className="pointer-events-none absolute bottom-5 left-5 z-10 rounded-md border border-slate-200 bg-white/95 px-3 py-2 text-xs font-semibold text-slate-600 shadow-sm">
+              x {cursorPoint.x.toFixed(2)}, y {cursorPoint.y.toFixed(2)}
+            </div>
+          )}
           <canvas
             ref={canvasRef}
             width={CANVAS_WIDTH}
             height={CANVAS_HEIGHT}
             onClick={onCanvasClick}
             onMouseDown={onCanvasMouseDown}
-            onMouseMove={onCanvasMouseMove}
+            onMouseMove={handleMouseMove}
             onMouseUp={onCanvasMouseUp}
-            onMouseLeave={onCanvasMouseLeave}
-            className="w-full h-auto rounded-[24px] border border-stone-200 bg-stone-100 cursor-crosshair"
+            onMouseLeave={handleMouseLeave}
+            className="h-auto w-auto max-h-full max-w-full cursor-crosshair rounded-lg border border-slate-200 bg-slate-100"
           />
         </div>
       </div>

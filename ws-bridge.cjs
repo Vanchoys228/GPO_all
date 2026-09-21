@@ -815,7 +815,7 @@ routeWss.on("connection", (ws, req) => {
       } catch (error) {
         console.error("[route] failed to write limit zone artifacts:", error.message);
       }
-    } else if (parsed?.type === "spawn_random_obstacle" || parsed?.type === "start_mapping_survey") {
+    } else if (parsed?.type === "spawn_random_obstacle" || parsed?.type === "start_mapping_survey" || parsed?.type === "clear_runtime_obstacles") {
       try {
         await writeRuntimeCommandArtifact(parsed);
       } catch (error) {

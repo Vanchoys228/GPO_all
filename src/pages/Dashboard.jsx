@@ -1,11 +1,9 @@
-﻿import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import {
   ALGORITHM_OPTIONS,
   TASK_OPTIONS,
   getAlgorithmFields,
-  getAlgorithmLabel,
   getDefaultAlgorithmParams,
-  getTaskLabel,
   probeNativeSolver,
   solveRouteWithNativeAlgorithm,
 } from "../lib/routeAlgorithms";
@@ -49,6 +47,17 @@ import { DEFAULT_ENERGY_OPTIONS } from "../lib/energyModel";
 import PlannerCanvas from "../components/dashboard/PlannerCanvas";
 import PlannerLeftSidebar from "../components/dashboard/PlannerLeftSidebar";
 import PlannerRightSidebar from "../components/dashboard/PlannerRightSidebar";
+import {
+  ArrowLeft,
+  PanelLeftClose,
+  PanelLeftOpen,
+  BatteryCharging,
+  Bot,
+  Map as MapIcon,
+  Route,
+  Shield,
+  SlidersHorizontal,
+} from "lucide-react";
 
 const ENERGY_SHORTAGE_FALLBACK =
   "Запаса хода не хватает: добавьте станции зарядки или увеличьте запас.";
@@ -57,10 +66,6 @@ const MAPPING_SURVEY_MODES = [
   { key: "snake", label: "Змейка" },
   { key: "double", label: "Двойной объезд" },
 ];
-
-const getMappingSurveyModeLabel = (modeKey) =>
-  MAPPING_SURVEY_MODES.find((mode) => mode.key === modeKey)?.label ||
-  MAPPING_SURVEY_MODES[0].label;
 
 const getEnergyWarningText = (routeBuildResult) => {
   if (!routeBuildResult || routeBuildResult.ok) return "";
@@ -430,15 +435,16 @@ export default function Dashboard() {
   const [points, setPoints] = useState([]);
   const [routeSeed, setRouteSeed] = useState([]);
   const [optimizedRoute, setOptimizedRoute] = useState([]);
-  const [status, setStatus] = useState("");
-  const [energyWarning, setEnergyWarning] = useState("");
+  const [notification, setNotification] = useState(null);
+  const notificationTimerRef = useRef(null);
   const [expandedPoint, setExpandedPoint] = useState(null);
   const [hoveredPointIndex, setHoveredPointIndex] = useState(null);
-  const [telemetryWsUp, setTelemetryWsUp] = useState(false);
-  const [routeWsUp, setRouteWsUp] = useState(false);
-  const [solverApiUp, setSolverApiUp] = useState(false);
+  const [, setTelemetryWsUp] = useState(false);
+  const [, setRouteWsUp] = useState(false);
+  const [, setSolverApiUp] = useState(false);
   const [isOptimizing, setIsOptimizing] = useState(false);
   const [telemetry, setTelemetry] = useState(INITIAL_TELEMETRY);
+  const [manualObstacles, setManualObstacles] = useState([]);
   const [routeTaskKey, setRouteTaskKey] = useState("tsp");
   const [algorithmKey, setAlgorithmKey] = useState("ga_tabu");
   const [activePointKind, setActivePointKind] = useState("visit");
@@ -470,6 +476,14 @@ export default function Dashboard() {
   const [mappingSurveyMode, setMappingSurveyMode] = useState(
     MAPPING_SURVEY_MODES[0].key
   );
+  const [workspaceSection, setWorkspaceSection] = useState(null);
+  const [sidebarOpen, setSidebarOpen] = useState(true);
+  const [visibleLayers, setVisibleLayers] = useState({
+    surfaces: true,
+    zones: true,
+    obstacleTrace: true,
+    route: true,
+  });
   const [algorithmParams, setAlgorithmParams] = useState(() =>
     Object.fromEntries(
       ALGORITHM_OPTIONS.map((option) => [
@@ -525,7 +539,7 @@ export default function Dashboard() {
   );
   const autoRouteSyncToken = `${zoneSyncPayloadText}|${chargePointsRoutingText}|${batteryRangeMeters}|${cruiseSpeedMps}|${payloadKg}`;
 
-  const handleImportGraph = (rawGraph, sourceName = "graph.json") => {
+  const handleImportGraph = (rawGraph) => {
     const imported = normalizeImportedGraph(rawGraph);
     const importedZones =
       imported.limitZones.length > 0 ? imported.limitZones : [INITIAL_ZONE];
@@ -543,7 +557,6 @@ export default function Dashboard() {
     setHoveredPointIndex(null);
     setRouteSeed([]);
     setOptimizedRoute([]);
-    setEnergyWarning("");
     setRouteEnergyStats((prev) => ({
       ...prev,
       routeEnergy: 0,
@@ -563,12 +576,6 @@ export default function Dashboard() {
       if (hasAlgorithm) setAlgorithmKey(imported.algorithmKey);
     }
 
-    const visitCount = imported.points.filter((point) => point.kind === "visit").length;
-    const chargeCount = imported.points.filter((point) => point.kind === "charge").length;
-    const zonePointCount = imported.points.filter((point) => point.kind === "limit").length;
-    setStatus(
-      `Граф импортирован из ${sourceName}: точек посещения ${visitCount}, зарядок ${chargeCount}, точек зон ${zonePointCount}.`
-    );
   };
 
   useEffect(() => {
@@ -654,8 +661,7 @@ export default function Dashboard() {
   useEffect(() => {
     if (!routeSeed.length) {
       setOptimizedRoute([]);
-      setEnergyWarning("");
-      setRouteEnergyStats((prev) => ({
+        setRouteEnergyStats((prev) => ({
         ...prev,
         routeEnergy: 0,
         estimatedTimeSec: 0,
@@ -676,17 +682,16 @@ export default function Dashboard() {
     });
     if (!nextRoute.ok) {
       setOptimizedRoute([]);
-      setEnergyWarning(getEnergyWarningText(nextRoute));
+      showNotification(getEnergyWarningText(nextRoute) || nextRoute.error || "Маршрут недостижим при текущих ограничениях.");
       setRouteEnergyStats((prev) => ({
         ...prev,
         routeEnergy: 0,
         estimatedTimeSec: 0,
         averageSlipRisk: 0,
       }));
-      setStatus(nextRoute.error || "Маршрут недостижим при текущих ограничениях.");
+      showNotification(nextRoute.error || "Маршрут недостижим при текущих ограничениях.");
       return;
     }
-    setEnergyWarning("");
     setOptimizedRoute(nextRoute.route);
     setRouteEnergyStats({
       routeEnergy: nextRoute.routeEnergy,
@@ -707,8 +712,7 @@ export default function Dashboard() {
     if (lastAutoRouteZoneSyncRef.current === autoRouteSyncToken) return;
     lastAutoRouteZoneSyncRef.current = autoRouteSyncToken;
     if (routeSeed.length < 2) {
-      setEnergyWarning("");
-      setRouteEnergyStats((prev) => ({
+        setRouteEnergyStats((prev) => ({
         ...prev,
         routeEnergy: 0,
         estimatedTimeSec: 0,
@@ -734,17 +738,16 @@ export default function Dashboard() {
       energyOptions,
     });
     if (!rebuilt.ok) {
-      setEnergyWarning(getEnergyWarningText(rebuilt));
+      showNotification(getEnergyWarningText(rebuilt) || rebuilt.error || "Невозможно безопасно перестроить маршрут.");
       setRouteEnergyStats((prev) => ({
         ...prev,
         routeEnergy: 0,
         estimatedTimeSec: 0,
         averageSlipRisk: 0,
       }));
-      setStatus(rebuilt.error || "Невозможно безопасно перестроить маршрут.");
+      showNotification(rebuilt.error || "Невозможно безопасно перестроить маршрут.");
       return;
     }
-    setEnergyWarning("");
     setRouteEnergyStats({
       routeEnergy: rebuilt.routeEnergy,
       estimatedTimeSec: rebuilt.estimatedTimeSec,
@@ -753,7 +756,7 @@ export default function Dashboard() {
     });
     const routeForController = sanitizeRouteForController(rebuilt.route);
     if (routeForController.length < 2) {
-      setStatus("Маршрут стал слишком коротким после перестройки под зоны.");
+      showNotification("Маршрут стал слишком коротким после перестройки под зоны.");
       return;
     }
 
@@ -772,16 +775,7 @@ export default function Dashboard() {
       route: routeForController.map((point) => ({ x: point.x, y: point.y })),
     };
 
-    sendRouteChannelPayload(routeWsRef, payload, {
-      onSent: () => {
-        const chargingSuffix = rebuilt.stationStopCount
-          ? `, зарядок: ${rebuilt.stationStopCount}`
-          : "";
-        setStatus(
-          `Маршрут обновлён после изменения ограничивающих зон (${routeForController.length} точек${chargingSuffix}).`
-        );
-      },
-    });
+    sendRouteChannelPayload(routeWsRef, payload);
   }, [
     algorithmKey,
     autoRouteSyncToken,
@@ -797,6 +791,28 @@ export default function Dashboard() {
     zoneSyncPayloadText,
   ]);
 
+  const showNotification = (message, tone = "error") => {
+    if (!message) return;
+    setNotification({ message, tone });
+  };
+
+  useEffect(() => {
+    if (!notification) return undefined;
+    if (notificationTimerRef.current) {
+      window.clearTimeout(notificationTimerRef.current);
+    }
+    notificationTimerRef.current = window.setTimeout(() => {
+      setNotification(null);
+      notificationTimerRef.current = null;
+    }, 4500);
+    return () => {
+      if (notificationTimerRef.current) {
+        window.clearTimeout(notificationTimerRef.current);
+        notificationTimerRef.current = null;
+      }
+    };
+  }, [notification]);
+
   const resetZones = () => {
     setLimitZones([INITIAL_ZONE]);
     setActiveLimitZoneId(INITIAL_ZONE.id);
@@ -809,8 +825,7 @@ export default function Dashboard() {
     if (dropSolvedRoute) {
       setRouteSeed([]);
       setOptimizedRoute([]);
-      setEnergyWarning("");
-      setRouteEnergyStats((prev) => ({
+        setRouteEnergyStats((prev) => ({
         ...prev,
         routeEnergy: 0,
         estimatedTimeSec: 0,
@@ -829,7 +844,6 @@ export default function Dashboard() {
     setActiveLimitZoneId(zone.id);
     setNextZoneNumber((prev) => prev + 1);
     setActivePointKind("limit");
-    setStatus(`Создана ${zone.name}.`);
   };
 
   const selectZone = (zoneId) => {
@@ -842,7 +856,7 @@ export default function Dashboard() {
     if (!target) return;
 
     if (!target.closed && target.points.length < 3) {
-      setStatus("Чтобы замкнуть зону, нужно минимум три точки.");
+      showNotification("Чтобы замкнуть зону, нужно минимум три точки.");
       return;
     }
 
@@ -852,11 +866,6 @@ export default function Dashboard() {
       )
     );
     clearRouteState({ dropSolvedRoute: false });
-    setStatus(
-      target.closed
-        ? `${target.name} открыта для редактирования.`
-        : `${target.name} замкнута.`
-    );
   };
 
   const clearZone = (zoneId) => {
@@ -867,7 +876,6 @@ export default function Dashboard() {
       prev.map((zone) => (zone.id === zoneId ? { ...zone, closed: false } : zone))
     );
     clearRouteState({ dropSolvedRoute: false });
-    setStatus("Точки выбранной зоны очищены.");
   };
 
   const removeZone = (zoneId) => {
@@ -883,7 +891,6 @@ export default function Dashboard() {
     );
     if (activeLimitZoneId === zoneId) setActiveLimitZoneId(nextZones[0].id);
     clearRouteState({ dropSolvedRoute: false });
-    setStatus("Ограничивающая зона удалена.");
   };
 
   const updateAlgorithmParam = (field, rawValue) => {
@@ -978,14 +985,11 @@ export default function Dashboard() {
     const point = canvasToWorld(canvasPoint.x, canvasPoint.y);
 
     if (!isInsideMap(point)) {
-      setStatus("Кликните внутри рабочей карты.");
       return;
     }
 
     if (activePointKind === "limit" && plannerModel.activeZone?.closed) {
-      setStatus(
-        "Зона уже замкнута. Нажмите «Открыть», чтобы добавлять или менять точки."
-      );
+      showNotification("Зона уже замкнута. Нажмите «Открыть», чтобы добавлять или менять точки.");
       return;
     }
 
@@ -1000,13 +1004,6 @@ export default function Dashboard() {
     ]);
     if (activePointKind === "visit") clearRouteState();
     else clearRouteState({ dropSolvedRoute: false });
-    setStatus(
-      activePointKind === "visit"
-        ? "Добавлена точка посещения."
-        : activePointKind === "charge"
-          ? "Добавлена станция зарядки."
-          : `Добавлена точка в ${plannerModel.activeZoneName}.`
-    );
   };
 
   const clearPoints = (kind = null) => {
@@ -1017,16 +1014,13 @@ export default function Dashboard() {
       clearRouteState({ dropSolvedRoute: false });
     } else {
       clearRouteState();
+      setTelemetry((prev) => ({
+        ...prev,
+        obstacleTrace: [],
+        obstacleMap: { ...INITIAL_TELEMETRY.obstacleMap, cells: [] },
+      }));
+      setManualObstacles([]);
     }
-    setStatus(
-      kind === "visit"
-        ? "Маршрутные точки очищены."
-        : kind === "charge"
-          ? "Станции зарядки очищены."
-        : kind === "limit"
-          ? "Ограничивающие зоны очищены."
-          : "Все точки очищены."
-    );
   };
 
   const deletePoint = (index) => {
@@ -1046,15 +1040,11 @@ export default function Dashboard() {
   const handleRouteTaskChange = (nextTaskKey) => {
     setRouteTaskKey(nextTaskKey);
     clearRouteState();
-    setStatus("");
-    setEnergyWarning("");
   };
 
   const handleAlgorithmChange = (nextAlgorithmKey) => {
     setAlgorithmKey(nextAlgorithmKey);
     clearRouteState();
-    setStatus("");
-    setEnergyWarning("");
   };
 
   const invalidateEnergyDependentRoute = () => {
@@ -1065,7 +1055,6 @@ export default function Dashboard() {
       estimatedTimeSec: 0,
       averageSlipRisk: 0,
     }));
-    setEnergyWarning("");
   };
 
   const handleBatteryRangeChange = (rawValue) => {
@@ -1144,13 +1133,11 @@ export default function Dashboard() {
     if (isOptimizing) return;
 
     if (plannerModel.visitPoints.length < 2) {
-      setStatus("Добавьте хотя бы две точки посещения.");
-      setEnergyWarning("");
-      return;
+      showNotification("Добавьте хотя бы две точки посещения.");
+        return;
     }
 
     setIsOptimizing(true);
-    setStatus("Строим маршрут...");
 
     try {
       const routeAnchor = getRouteAnchor(telemetry);
@@ -1183,8 +1170,7 @@ export default function Dashboard() {
           estimatedTimeSec: 0,
           averageSlipRisk: 0,
         }));
-        setEnergyWarning(getEnergyWarningText(routed));
-        setStatus(routed.error || "Не удалось построить достижимый маршрут.");
+        showNotification(getEnergyWarningText(routed) || routed.error || "Не удалось построить достижимый маршрут.");
         return;
       }
       const blocked = routeCrossesAnyLimitPolygon(
@@ -1199,18 +1185,7 @@ export default function Dashboard() {
         limitingMaxSpeedMps: routed.limitingMaxSpeedMps,
         averageSlipRisk: routed.averageSlipRisk,
       });
-      setEnergyWarning("");
-      const chargingSuffix = routed.stationStopCount
-        ? ` Добавлено заездов на зарядку: ${routed.stationStopCount}.`
-        : "";
-      const energySuffix = ` Энергия: ${routed.routeEnergy.toFixed(1)} ед., время: ${routed.estimatedTimeSec.toFixed(1)} с.`;
-      setStatus(
-        blocked
-          ? "Маршрут построен, но всё ещё пересекает ограничивающий контур."
-          : plannerModel.adjustedVisits.length
-            ? `Маршрут построен: ${getTaskLabel(routeTaskKey)} (${getAlgorithmLabel(algorithmKey)}). ${plannerModel.adjustedVisits.length} точек автоматически сдвинуты к безопасной позиции.${chargingSuffix}${energySuffix}`
-            : `Маршрут построен: ${getTaskLabel(routeTaskKey)} (${getAlgorithmLabel(algorithmKey)}).${chargingSuffix}${energySuffix}`
-      );
+      if (blocked) showNotification("Маршрут построен, но всё ещё пересекает ограничивающий контур.");
     } catch (error) {
       setRouteSeed([]);
       setOptimizedRoute([]);
@@ -1220,10 +1195,7 @@ export default function Dashboard() {
         estimatedTimeSec: 0,
         averageSlipRisk: 0,
       }));
-      setEnergyWarning("");
-      setStatus(
-        error instanceof Error ? error.message : "Не удалось построить маршрут."
-      );
+      showNotification(error instanceof Error ? error.message : "Не удалось построить маршрут.");
     } finally {
       setIsOptimizing(false);
     }
@@ -1231,12 +1203,12 @@ export default function Dashboard() {
 
   const sendRoute = () => {
     if (!optimizedRoute.length) {
-      setStatus("Сначала постройте маршрут.");
+      showNotification("Сначала постройте маршрут.");
       return;
     }
 
     if (plannerModel.routeBlocked) {
-      setStatus("Маршрут всё ещё пересекает ограничивающий контур.");
+      showNotification("Маршрут всё ещё пересекает ограничивающий контур.");
       return;
     }
 
@@ -1252,11 +1224,7 @@ export default function Dashboard() {
         energyOptions,
       });
       if (!rebuiltForController.ok) {
-        setEnergyWarning(getEnergyWarningText(rebuiltForController));
-        setStatus(
-          rebuiltForController.error ||
-            "Невозможно безопасно построить маршрут через текущие зоны."
-        );
+        showNotification(getEnergyWarningText(rebuiltForController) || rebuiltForController.error || "Невозможно безопасно построить маршрут через текущие зоны.");
         return;
       }
       controllerRouteSource = rebuiltForController.route;
@@ -1264,7 +1232,7 @@ export default function Dashboard() {
     }
     const routeForController = sanitizeRouteForController(controllerRouteSource);
     if (routeForController.length < 2) {
-      setStatus("Маршрут слишком короткий после очистки.");
+      showNotification("Маршрут слишком короткий после очистки.");
       return;
     }
 
@@ -1286,8 +1254,7 @@ export default function Dashboard() {
     const sendPayload = (socket) => {
       socket.send(JSON.stringify(payload));
       const chargingSuffix = chargingStops ? `, зарядок: ${chargingStops}` : "";
-      setEnergyWarning("");
-      setStatus(`Маршрут отправлен (${routeForController.length} точек${chargingSuffix}).`);
+        showNotification(`Маршрут отправлен (${routeForController.length} точек${chargingSuffix}).`, "success");
     };
 
     const ws = routeWsRef.current;
@@ -1301,7 +1268,7 @@ export default function Dashboard() {
       temp.onclose = () => setRouteWsUp(false);
       temp.onerror = () => {
         setRouteWsUp(false);
-        setStatus("Ошибка соединения с маршрутом.");
+        showNotification("Ошибка соединения с маршрутом.");
       };
       return;
     }
@@ -1324,7 +1291,7 @@ export default function Dashboard() {
     });
 
     if (!center) {
-      setStatus("Не удалось подобрать безопасное место для случайного препятствия.");
+      showNotification("Не удалось подобрать безопасное место для случайного препятствия.");
       return;
     }
 
@@ -1338,14 +1305,35 @@ export default function Dashboard() {
       },
     };
 
+    setManualObstacles((current) => [...current, payload.obstacle]);
+
     sendRouteChannelPayload(routeWsRef, payload, {
       onSent: () => {
-        setStatus(
-          `Случайное препятствие добавлено: (${payload.obstacle.x.toFixed(2)}, ${payload.obstacle.y.toFixed(2)}).`
-        );
       },
       onError: () => {
-        setStatus("Не удалось отправить команду добавления препятствия.");
+        showNotification("Не удалось отправить команду добавления препятствия.");
+      },
+    });
+  };
+
+  const clearObstacles = () => {
+    if (!manualObstacles.length) {
+      showNotification("Созданных препятствий сейчас нет.");
+      return;
+    }
+
+    const payload = {
+      type: "clear_runtime_obstacles",
+      commandId: Date.now(),
+    };
+
+    sendRouteChannelPayload(routeWsRef, payload, {
+      onSent: () => {
+        setManualObstacles([]);
+        showNotification("Созданные препятствия очищены.", "success");
+      },
+      onError: () => {
+        showNotification("Не удалось отправить команду очистки препятствий.");
       },
     });
   };
@@ -1357,23 +1345,17 @@ export default function Dashboard() {
       clearMap: true,
       mode: mappingSurveyMode,
     };
-    const modeLabel = getMappingSurveyModeLabel(mappingSurveyMode);
-
     sendRouteChannelPayload(routeWsRef, payload, {
       onSent: () => {
-        setStatus(
-          `Запущено обследование карты: сначала периметр, затем "${modeLabel}".`
-        );
       },
       onError: () => {
-        setStatus("Не удалось отправить команду объезда карты.");
+        showNotification("Не удалось отправить команду объезда карты.");
       },
     });
   };
 
   const exportMapImage = () => {
     if (!telemetry.obstacleMap?.cells?.length) {
-      setStatus("Пока нет накопленной карты препятствий для экспорта.");
       return;
     }
 
@@ -1383,7 +1365,6 @@ export default function Dashboard() {
 
     const ctx = exportCanvas.getContext("2d");
     if (!ctx) {
-      setStatus("Не удалось подготовить PNG-экспорт карты.");
       return;
     }
 
@@ -1422,101 +1403,253 @@ export default function Dashboard() {
     link.href = exportCanvas.toDataURL("image/png");
     link.download = fileName.endsWith(".png") ? fileName : `${fileName}.png`;
     link.click();
-    setStatus(`Карта сохранена в PNG: ${link.download}`);
+  };
+
+  const workspaceSections = [
+    { key: "route", label: "Маршрут", icon: Route },
+    { key: "zones", label: "Зоны", icon: Shield },
+    { key: "algorithm", label: "Алгоритм", icon: SlidersHorizontal },
+    { key: "energy", label: "Энергия", icon: BatteryCharging },
+    { key: "mapping", label: "Карта", icon: MapIcon },
+  ];
+
+  const showRouteSettings = ["route", "algorithm", "energy"].includes(workspaceSection);
+
+  const toggleMapLayer = (layerKey) => {
+    setVisibleLayers((current) => ({
+      ...current,
+      [layerKey]: !current[layerKey],
+    }));
+  };
+
+  const selectWorkspaceSection = (sectionKey) => {
+    setWorkspaceSection(sectionKey);
+    if (sectionKey === "route") setActivePointKind("visit");
+    if (sectionKey === "zones") setActivePointKind("limit");
+    if (sectionKey === "energy") setActivePointKind("charge");
+  };
+
+  const returnToWorkspaceMenu = () => {
+    setWorkspaceSection(null);
   };
 
   return (
-    <div className="flex h-screen bg-stone-100 text-stone-900">
-      <PlannerLeftSidebar
-        activePointKind={activePointKind}
-        onActivePointKindChange={setActivePointKind}
-        onClearVisitPoints={() => clearPoints("visit")}
-        onClearChargePoints={() => clearPoints("charge")}
-        onClearLimitPoints={() => clearPoints("limit")}
-        routeTaskKey={routeTaskKey}
-        onRouteTaskChange={handleRouteTaskChange}
-        algorithmKey={algorithmKey}
-        onAlgorithmChange={handleAlgorithmChange}
-        status={status}
-        energyWarning={energyWarning}
-        routeBlocked={plannerModel.routeBlocked}
-        algorithmFields={algorithmFields}
-        selectedAlgorithmParams={selectedAlgorithmParams}
-        onAlgorithmParamChange={updateAlgorithmParam}
-        isOptimizing={isOptimizing}
-        onOptimizeRoute={optimizeRoute}
-        onSendRoute={sendRoute}
-        onAddRandomObstacle={addRandomObstacle}
-        onImportGraph={handleImportGraph}
-        onClearAll={() => clearPoints()}
-        hasRoute={optimizedRoute.length > 0}
-        routeLength={plannerModel.routeLength}
-        visitCount={plannerModel.visitEntries.length}
-        chargeCount={plannerModel.chargeEntries.length}
-        zoneCount={plannerModel.zoneEntries.length}
-        polygonCount={plannerModel.polygons.length}
-        adjustedVisitCount={plannerModel.adjustedVisits.length}
-        activeZoneName={plannerModel.activeZoneName}
-        batteryRangeInput={batteryRangeInput}
-        onBatteryRangeChange={handleBatteryRangeChange}
-        onBatteryRangeBlur={handleBatteryRangeBlur}
-        cruiseSpeedMps={cruiseSpeedMps}
-        cruiseSpeedInput={cruiseSpeedInput}
-        onCruiseSpeedChange={handleCruiseSpeedChange}
-        onCruiseSpeedBlur={handleCruiseSpeedBlur}
-        payloadKg={payloadKg}
-        payloadInput={payloadInput}
-        onPayloadChange={handlePayloadChange}
-        onPayloadBlur={handlePayloadBlur}
-        routeEnergyStats={routeEnergyStats}
-      />
+    <div className="flex h-screen flex-col overflow-hidden bg-slate-100 text-slate-900">
+      {notification && (
+        <div className="pointer-events-none fixed right-4 top-4 z-[100] w-[min(420px,calc(100vw-2rem))]">
+          <div
+            role="alert"
+            className={`rounded-lg border px-4 py-3 text-sm font-semibold shadow-lg ${
+              notification.tone === "success"
+                ? "border-emerald-200 bg-emerald-50 text-emerald-900"
+                : "border-rose-200 bg-rose-50 text-rose-900"
+            }`}
+          >
+            {notification.message}
+          </div>
+        </div>
+      )}
 
-      <PlannerCanvas
-        canvasRef={canvasRef}
-        plannerModel={plannerModel}
-        optimizedRoute={optimizedRoute}
-        hoveredPointIndex={hoveredPointIndex}
-        telemetry={telemetry}
-        onCanvasClick={addPointFromCanvas}
-        onCanvasMouseDown={handleCanvasMouseDown}
-        onCanvasMouseMove={handleCanvasMouseMove}
-        onCanvasMouseUp={finishDragging}
-        onCanvasMouseLeave={finishDragging}
-      />
+      <header className="shrink-0 border-b border-slate-200 bg-white px-4 py-3">
+        <div className="mx-auto flex max-w-[1920px] items-center gap-3">
+          <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-md bg-slate-950 text-white">
+            <Bot size={19} />
+          </div>
+          <div className="min-w-0">
+            <div className="truncate text-sm font-bold text-slate-950">GPO Robot Planner</div>
+            <div className="truncate text-xs text-slate-500">Планирование и управление маршрутом</div>
+          </div>
+        </div>
+      </header>
 
-      <PlannerRightSidebar
-        activeZone={plannerModel.activeZone}
-        activeZoneName={plannerModel.activeZoneName}
-        activeLimitZoneId={activeLimitZoneId}
-        zoneEntries={plannerModel.zoneEntries}
-        visitEntries={plannerModel.visitEntries}
-        chargeEntries={plannerModel.chargeEntries}
-        plannedVisitEntries={plannerModel.plannedVisitEntries}
-        expandedPoint={expandedPoint}
-        hoveredPointIndex={hoveredPointIndex}
-        visitsInsideLimitCount={plannerModel.visitsInsideLimit.length}
-        polygonCount={plannerModel.polygons.length}
-        adjustedVisitCount={plannerModel.adjustedVisits.length}
-        routeBlocked={plannerModel.routeBlocked}
-        telemetry={telemetry}
-        telemetryWsUp={telemetryWsUp}
-        routeWsUp={routeWsUp}
-        solverApiUp={solverApiUp}
-        mappingSurveyMode={mappingSurveyMode}
-        mappingSurveyModes={MAPPING_SURVEY_MODES}
-        onMappingSurveyModeChange={setMappingSurveyMode}
-        onStartMappingSurvey={startMappingSurvey}
-        onExportMapImage={exportMapImage}
-        onCreateZone={createZone}
-        onSelectZone={selectZone}
-        onToggleZoneClosed={toggleZoneClosed}
-        onClearZone={clearZone}
-        onRemoveZone={removeZone}
-        onToggleExpandedPoint={setExpandedPoint}
-        onHoverPoint={setHoveredPointIndex}
-        onDeletePoint={deletePoint}
-        onUpdatePointTask={updatePointTask}
-      />
+      <div className="relative flex min-h-0 flex-1 overflow-hidden">
+        <aside
+          className={`absolute inset-y-0 left-0 z-40 flex w-[300px] max-w-[calc(100vw-16px)] flex-col border-r border-slate-200 bg-slate-50 shadow-xl transition-transform duration-200 ease-out ${
+            sidebarOpen ? "translate-x-0" : "-translate-x-full"
+          }`}
+        >
+          {workspaceSection ? (
+            <>
+              <div className="shrink-0 border-b border-slate-200 bg-white px-3 py-3">
+                <div className="flex items-center justify-between gap-2">
+                  <button
+                    type="button"
+                    onClick={returnToWorkspaceMenu}
+                    className="inline-flex h-8 items-center gap-2 rounded-md border border-slate-200 bg-white px-2.5 text-sm font-semibold text-slate-700 shadow-sm transition hover:bg-slate-50"
+                  >
+                    <ArrowLeft size={16} />
+                    Назад
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setSidebarOpen(false)}
+                    title="Скрыть меню"
+                    aria-label="Скрыть меню"
+                    className="inline-flex h-8 w-8 items-center justify-center rounded-md border border-slate-200 bg-white text-slate-600 shadow-sm transition hover:bg-slate-50"
+                  >
+                    <PanelLeftClose size={17} />
+                  </button>
+                </div>
+                <div className="mt-3 text-xs font-bold uppercase text-slate-500">Раздел</div>
+                <h2 className="mt-1 text-base font-bold text-slate-950">
+                  {workspaceSections.find((section) => section.key === workspaceSection)?.label}
+                </h2>
+              </div>
+
+              <div className="min-h-0 flex-1">
+                {showRouteSettings ? (
+                  <PlannerLeftSidebar
+                    activeTab={workspaceSection}
+                    routeTaskKey={routeTaskKey}
+                    onRouteTaskChange={handleRouteTaskChange}
+                    algorithmKey={algorithmKey}
+                    onAlgorithmChange={handleAlgorithmChange}
+                    algorithmFields={algorithmFields}
+                    selectedAlgorithmParams={selectedAlgorithmParams}
+                    onAlgorithmParamChange={updateAlgorithmParam}
+                    isOptimizing={isOptimizing}
+                    onOptimizeRoute={optimizeRoute}
+                    onSendRoute={sendRoute}
+                    onAddRandomObstacle={addRandomObstacle}
+                    onClearObstacles={clearObstacles}
+                    onImportGraph={handleImportGraph}
+                    visitEntries={plannerModel.visitEntries}
+                    chargeEntries={plannerModel.chargeEntries}
+                    plannedVisitEntries={plannerModel.plannedVisitEntries}
+                    expandedPoint={expandedPoint}
+                    hoveredPointIndex={hoveredPointIndex}
+                    onToggleExpandedPoint={setExpandedPoint}
+                    onHoverPoint={setHoveredPointIndex}
+                    onDeletePoint={deletePoint}
+                    onUpdatePointTask={updatePointTask}
+                    onClearVisitPoints={() => clearPoints("visit")}
+                    onClearChargePoints={() => clearPoints("charge")}
+                    visitCount={plannerModel.visitEntries.length}
+                    chargeCount={plannerModel.chargeEntries.length}
+                    zoneCount={plannerModel.zoneEntries.length}
+                    polygonCount={plannerModel.polygons.length}
+                    adjustedVisitCount={plannerModel.adjustedVisits.length}
+                    activeZoneName={plannerModel.activeZoneName}
+                    batteryRangeInput={batteryRangeInput}
+                    onBatteryRangeChange={handleBatteryRangeChange}
+                    onBatteryRangeBlur={handleBatteryRangeBlur}
+                    cruiseSpeedMps={cruiseSpeedMps}
+                    cruiseSpeedInput={cruiseSpeedInput}
+                    onCruiseSpeedChange={handleCruiseSpeedChange}
+                    onCruiseSpeedBlur={handleCruiseSpeedBlur}
+                    payloadKg={payloadKg}
+                    payloadInput={payloadInput}
+                    onPayloadChange={handlePayloadChange}
+                    onPayloadBlur={handlePayloadBlur}
+                    routeEnergyStats={routeEnergyStats}
+                  />
+                ) : (
+                  <PlannerRightSidebar
+                    activeTab={workspaceSection}
+                    onClearLimitPoints={() => clearPoints("limit")}
+                    activeLimitZoneId={activeLimitZoneId}
+                    zoneEntries={plannerModel.zoneEntries}
+                    visitEntries={plannerModel.visitEntries}
+                    chargeEntries={plannerModel.chargeEntries}
+                    plannedVisitEntries={plannerModel.plannedVisitEntries}
+                    expandedPoint={expandedPoint}
+                    hoveredPointIndex={hoveredPointIndex}
+                    visitsInsideLimitCount={plannerModel.visitsInsideLimit.length}
+                    polygonCount={plannerModel.polygons.length}
+                    adjustedVisitCount={plannerModel.adjustedVisits.length}
+                    routeBlocked={plannerModel.routeBlocked}
+                    telemetry={telemetry}
+                    visibleLayers={visibleLayers}
+                    onToggleLayer={toggleMapLayer}
+                    routeLength={plannerModel.routeLength}
+                    mappingSurveyMode={mappingSurveyMode}
+                    mappingSurveyModes={MAPPING_SURVEY_MODES}
+                    onMappingSurveyModeChange={setMappingSurveyMode}
+                    onStartMappingSurvey={startMappingSurvey}
+                    onExportMapImage={exportMapImage}
+                    onCreateZone={createZone}
+                    onSelectZone={selectZone}
+                    onToggleZoneClosed={toggleZoneClosed}
+                    onClearZone={clearZone}
+                    onRemoveZone={removeZone}
+                    onToggleExpandedPoint={setExpandedPoint}
+                    onHoverPoint={setHoveredPointIndex}
+                    onDeletePoint={deletePoint}
+                    onUpdatePointTask={updatePointTask}
+                  />
+                )}
+              </div>
+            </>
+          ) : (
+            <>
+              <div className="shrink-0 border-b border-slate-200 bg-white px-3 py-3">
+                <div className="flex items-center justify-between gap-2">
+                  <div>
+                    <div className="text-xs font-bold uppercase text-slate-500">Навигация</div>
+                    <h2 className="mt-1 text-base font-bold text-slate-950">Разделы</h2>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => setSidebarOpen(false)}
+                    title="Скрыть меню"
+                    aria-label="Скрыть меню"
+                    className="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-md border border-slate-200 bg-white text-slate-600 shadow-sm transition hover:bg-slate-50"
+                  >
+                    <PanelLeftClose size={17} />
+                  </button>
+                </div>
+              </div>
+              <nav className="min-h-0 flex-1 overflow-auto p-3" aria-label="Разделы планировщика">
+                <div className="space-y-2">
+                  {workspaceSections.map((section) => {
+                    const Icon = section.icon;
+                    return (
+                      <button
+                        key={section.key}
+                        type="button"
+                        onClick={() => selectWorkspaceSection(section.key)}
+                        className="flex w-full items-center gap-3 rounded-lg border border-slate-200 bg-white px-3 py-3 text-left text-sm font-semibold text-slate-800 shadow-sm transition hover:border-slate-300 hover:bg-slate-50"
+                      >
+                        <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-md bg-slate-100 text-slate-700">
+                          <Icon size={18} />
+                        </span>
+                        <span className="min-w-0 flex-1">{section.label}</span>
+                      </button>
+                    );
+                  })}
+                </div>
+              </nav>
+            </>
+          )}
+        </aside>
+
+        {!sidebarOpen && (
+          <button
+            type="button"
+            onClick={() => setSidebarOpen(true)}
+            title="Показать меню"
+            aria-label="Показать меню"
+            className="absolute left-3 top-3 z-30 inline-flex h-9 w-9 items-center justify-center rounded-md border border-slate-200 bg-white text-slate-700 shadow-md transition hover:bg-slate-50"
+          >
+            <PanelLeftOpen size={18} />
+          </button>
+        )}
+
+        <PlannerCanvas
+          canvasRef={canvasRef}
+          plannerModel={plannerModel}
+          optimizedRoute={optimizedRoute}
+          hoveredPointIndex={hoveredPointIndex}
+          telemetry={telemetry}
+          manualObstacles={manualObstacles}
+          visibleLayers={visibleLayers}
+          onCanvasClick={addPointFromCanvas}
+          onCanvasMouseDown={handleCanvasMouseDown}
+          onCanvasMouseMove={handleCanvasMouseMove}
+          onCanvasMouseUp={finishDragging}
+          onCanvasMouseLeave={finishDragging}
+        />
+      </div>
     </div>
   );
 }

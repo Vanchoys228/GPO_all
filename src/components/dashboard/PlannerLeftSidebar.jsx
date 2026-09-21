@@ -1,7 +1,24 @@
-import { useRef } from "react";
+import { createElement, useRef } from "react";
+import {
+  BatteryCharging,
+  Gauge,
+  Layers3,
+  MapPin,
+  Play,
+  Radio,
+  Route,
+  Settings2,
+  Shield,
+  SlidersHorizontal,
+  Trash2,
+  Upload,
+  X,
+  Zap,
+} from "lucide-react";
 import { ALGORITHM_OPTIONS, TASK_OPTIONS } from "../../lib/routeAlgorithms";
 import {
-  POINT_KIND_OPTIONS,
+  DEFAULT_POINT_TASK,
+  POINT_TASKS,
   ROUTE_CLEARANCE_MARGIN,
   SAFE_POINT_MARGIN,
 } from "../../lib/zonePlanner";
@@ -10,14 +27,16 @@ import {
   describeSurfaceRuntime,
 } from "../../lib/energyModel";
 
-const cardCls =
-  "rounded-2xl bg-white/95 backdrop-blur border border-stone-200 shadow-[0_18px_40px_rgba(15,23,42,0.06)] p-4";
+
+const panelCls = "rounded-lg border border-slate-200 bg-white p-3 shadow-sm";
 const inputCls =
-  "w-full rounded-xl border border-stone-300 bg-white px-3 py-2 text-sm text-stone-900 shadow-sm transition focus:border-sky-400 focus:outline-none focus:ring-2 focus:ring-sky-100";
+  "h-10 w-full rounded-md border border-slate-200 bg-white px-3 text-sm text-slate-900 outline-none transition focus:border-teal-500 focus:ring-2 focus:ring-teal-100";
 const subtleButtonCls =
-  "rounded-xl border border-stone-300 bg-stone-100 px-3 py-2 text-sm font-semibold text-stone-800 shadow-sm transition hover:bg-stone-200 hover:border-stone-400";
-const neutralButtonCls =
-  "rounded-xl border border-slate-300 bg-slate-800 px-3 py-2 text-sm font-semibold text-white shadow-sm transition hover:bg-slate-900";
+  "inline-flex h-10 items-center justify-center gap-2 rounded-md border border-slate-200 bg-white px-3 text-sm font-semibold text-slate-700 shadow-sm transition hover:bg-slate-50";
+const pointRowCls =
+  "flex items-center justify-between gap-3 rounded-md border border-slate-200 bg-white px-3 py-2 transition hover:border-sky-200 hover:bg-sky-50";
+const dangerButtonCls =
+  "inline-flex h-9 items-center justify-center gap-2 rounded-md border border-rose-200 bg-rose-50 px-3 text-xs font-semibold text-rose-700 transition hover:bg-rose-100";
 
 const formatSeconds = (seconds) => {
   if (!Number.isFinite(seconds) || seconds <= 0) return "0 c";
@@ -34,19 +53,24 @@ const parseLooseInput = (rawValue, fallback) => {
   return Number.isFinite(parsed) ? parsed : fallback;
 };
 
+function SectionTitle({ icon: Icon, title, action }) {
+  return (
+    <div className="flex items-center justify-between gap-3">
+      <div className="flex min-w-0 items-center gap-2">
+        {createElement(Icon, { className: "shrink-0 text-slate-500", size: 17 })}
+        <h3 className="truncate text-sm font-semibold text-slate-950">{title}</h3>
+      </div>
+      {action}
+    </div>
+  );
+}
+
 export default function PlannerLeftSidebar({
-  activePointKind,
-  onActivePointKindChange,
-  onClearVisitPoints,
-  onClearChargePoints,
-  onClearLimitPoints,
+  activeTab = "route",
   routeTaskKey,
   onRouteTaskChange,
   algorithmKey,
   onAlgorithmChange,
-  status,
-  energyWarning,
-  routeBlocked,
   algorithmFields,
   selectedAlgorithmParams,
   onAlgorithmParamChange,
@@ -54,16 +78,19 @@ export default function PlannerLeftSidebar({
   onOptimizeRoute,
   onSendRoute,
   onAddRandomObstacle,
+  onClearObstacles,
   onImportGraph,
-  onClearAll,
-  hasRoute,
-  routeLength,
-  visitCount,
-  chargeCount,
-  zoneCount,
-  polygonCount,
-  adjustedVisitCount,
-  activeZoneName,
+  visitEntries,
+  chargeEntries,
+  plannedVisitEntries,
+  expandedPoint,
+  hoveredPointIndex,
+  onToggleExpandedPoint,
+  onHoverPoint,
+  onDeletePoint,
+  onUpdatePointTask,
+  onClearVisitPoints,
+  onClearChargePoints,
   batteryRangeInput,
   onBatteryRangeChange,
   onBatteryRangeBlur,
@@ -78,6 +105,7 @@ export default function PlannerLeftSidebar({
   routeEnergyStats,
 }) {
   const fileInputRef = useRef(null);
+  const plannedVisitLookup = new Map(plannedVisitEntries.map((entry) => [entry.index, entry]));
 
   const handleImportClick = () => {
     fileInputRef.current?.click();
@@ -103,256 +131,230 @@ export default function PlannerLeftSidebar({
     reader.readAsText(file);
   };
 
-  return (
-    <aside className="w-[310px] overflow-auto border-r border-stone-200 bg-gradient-to-b from-stone-100 via-white to-slate-100 p-4 space-y-4 xl:w-[330px]">
-      <div className={cardCls}>
-        <div className="text-[11px] uppercase tracking-[0.22em] text-stone-500 mb-2">
-          Карта маршрута
-        </div>
-        <h2 className="text-2xl font-bold leading-tight">Планировщик маршрута робота</h2>
-        <p className="mt-2 text-sm text-stone-600">
-          Добавляйте точки посещения, станции зарядки и ограничивающие зоны.
-          Теперь расчёт учитывает покрытие пола, массу груза и заданную скорость.
+  const renderVisitPoints = () => (
+    <div className={panelCls}>
+      <SectionTitle
+        icon={MapPin}
+        title="Точки посещения"
+        action={<span className="text-xs font-semibold text-slate-500">{visitEntries.length} шт.</span>}
+      />
+      <div className="mt-3 space-y-2">
+        {visitEntries.map((entry) => {
+          const expanded = expandedPoint === entry.index;
+          const plannedEntry = plannedVisitLookup.get(entry.index);
+          return (
+            <div key={entry.index}>
+              <div
+                className={`${pointRowCls} ${hoveredPointIndex === entry.index ? "border-sky-300 bg-sky-50" : ""}`}
+                onClick={() => onToggleExpandedPoint(expanded ? null : entry.index)}
+                onMouseEnter={() => onHoverPoint(entry.index)}
+                onMouseLeave={() => onHoverPoint(null)}
+              >
+                <div className="min-w-0">
+                  <div className="truncate text-sm font-semibold text-slate-950">
+                    V{entry.order} ({entry.point.x.toFixed(2)}, {entry.point.y.toFixed(2)})
+                  </div>
+                  {plannedEntry?.adjusted && <div className="mt-1 text-xs text-amber-700">Безопасная позиция</div>}
+                </div>
+                <button
+                  type="button"
+                  title="Удалить точку"
+                  aria-label="Удалить точку"
+                  onClick={(event) => { event.stopPropagation(); onDeletePoint(entry.index); }}
+                  className="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-md border border-rose-200 bg-rose-50 p-0 text-rose-700 hover:bg-rose-100"
+                >
+                  <X size={15} />
+                </button>
+              </div>
+              {expanded && (
+                <label className="mt-2 block rounded-md border border-slate-200 bg-slate-50 p-3">
+                  <div className="mb-1 text-xs font-medium text-slate-500">Операция</div>
+                  <select
+                    className={inputCls}
+                    value={entry.point.task || DEFAULT_POINT_TASK}
+                    onChange={(event) => onUpdatePointTask(entry.index, event.target.value)}
+                  >
+                    {POINT_TASKS.map((task) => <option key={task} value={task}>{task}</option>)}
+                  </select>
+                </label>
+              )}
+            </div>
+          );
+        })}
+        {!visitEntries.length && <div className="text-sm text-slate-500">Точек посещения пока нет.</div>}
+      </div>
+      <button type="button" onClick={onClearVisitPoints} className={`${dangerButtonCls} mt-3 w-full`}>
+        <Trash2 size={15} /> Очистить маршрутные
+      </button>
+    </div>
+  );
+
+  const renderChargePoints = () => (
+    <div className={panelCls}>
+      <SectionTitle
+        icon={BatteryCharging}
+        title="Станции зарядки"
+        action={<span className="text-xs font-semibold text-slate-500">{chargeEntries.length} шт.</span>}
+      />
+      <div className="mt-3 space-y-2">
+        {chargeEntries.map((entry) => (
+          <div
+            key={entry.index}
+            className={`${pointRowCls} ${hoveredPointIndex === entry.index ? "border-amber-300 bg-amber-50" : ""}`}
+            onMouseEnter={() => onHoverPoint(entry.index)}
+            onMouseLeave={() => onHoverPoint(null)}
+          >
+            <div className="truncate text-sm font-semibold text-slate-950">
+              C{entry.order} ({entry.point.x.toFixed(2)}, {entry.point.y.toFixed(2)})
+            </div>
+            <button
+              type="button"
+              title="Удалить зарядку"
+              aria-label="Удалить зарядку"
+              onClick={() => onDeletePoint(entry.index)}
+              className="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-md border border-rose-200 bg-rose-50 p-0 text-rose-700 hover:bg-rose-100"
+            >
+              <X size={15} />
+            </button>
+          </div>
+        ))}
+        {!chargeEntries.length && <div className="text-sm text-slate-500">Станций зарядки пока нет.</div>}
+      </div>
+      <button type="button" onClick={onClearChargePoints} className={`${dangerButtonCls} mt-3 w-full`}>
+        <Trash2 size={15} /> Очистить зарядки
+      </button>
+    </div>
+  );
+
+  const renderRouteTab = () => (
+    <div className="space-y-3">
+      <div className={panelCls}>
+        <SectionTitle icon={Route} title="Планирование маршрута" />
+        <p className="mt-2 text-sm leading-5 text-slate-600">
+          Добавляйте точки посещения, станции зарядки и ограничивающие зоны. Теперь расчёт учитывает покрытие пола, массу груза и заданную скорость.
         </p>
+        <div className="mt-3 rounded-md border border-teal-200 bg-teal-50 px-3 py-2 text-xs leading-5 text-teal-800">
+          Маршрут строится с зазором {ROUTE_CLEARANCE_MARGIN.toFixed(2)} м от контура, а целевые точки держатся минимум на {SAFE_POINT_MARGIN.toFixed(2)} м от запретной зоны.
+        </div>
       </div>
 
-      <div className={cardCls}>
-        <div className="flex items-center justify-between gap-3">
-          <h3 className="text-sm font-semibold">Легенда и обзор</h3>
-          <span
-            className={`inline-flex rounded-full px-2.5 py-1 text-[11px] font-semibold ${
-              routeBlocked ? "bg-rose-100 text-rose-700" : "bg-teal-100 text-teal-700"
+      <div className={panelCls}>
+        <SectionTitle icon={Zap} title="Действия" />
+        <div className="mt-3 grid grid-cols-2 gap-2">
+          <button
+            type="button"
+            onClick={onOptimizeRoute}
+            disabled={isOptimizing}
+            className={`inline-flex h-11 items-center justify-center gap-2 rounded-md px-3 text-sm font-semibold text-white shadow-sm transition ${
+              isOptimizing ? "cursor-wait bg-orange-400" : "bg-orange-600 hover:bg-orange-700"
             }`}
           >
-            {routeBlocked ? "маршрут задевает контур" : "маршрут свободен"}
-          </span>
-        </div>
-
-        <div className="mt-3 grid grid-cols-1 gap-2 text-xs text-stone-700">
-          <div className="flex items-center gap-2">
-            <span className="inline-block h-3 w-3 rounded-full bg-rose-600" />
-            <span>Точки посещения</span>
-          </div>
-          <div className="flex items-center gap-2">
-            <span className="inline-block h-3 w-3 rounded-full bg-amber-500" />
-            <span>Станции зарядки</span>
-          </div>
-          <div className="flex items-center gap-2">
-            <span className="inline-block h-3 w-3 rotate-45 bg-blue-600" />
-            <span>Ограничивающая зона</span>
-          </div>
-          <div className="flex items-center gap-2">
-            <span className="inline-block h-3 w-3 rounded-full bg-yellow-500" />
-            <span>Автосдвинутая безопасная точка</span>
-          </div>
-          <div className="flex items-center gap-2">
-            <span
-              className={`inline-block h-[3px] w-8 rounded-full ${
-                routeBlocked ? "bg-rose-600" : "bg-teal-700"
-              }`}
-            />
-            <span>Линия маршрута</span>
-          </div>
-        </div>
-
-        <div className="mt-4 grid grid-cols-2 gap-2 text-xs">
-          <div className="rounded-xl border border-stone-200 bg-stone-50 px-3 py-2">
-            <div className="text-stone-500">Маршрутных точек</div>
-            <div className="mt-1 text-base font-semibold text-stone-900">{visitCount}</div>
-          </div>
-          <div className="rounded-xl border border-stone-200 bg-stone-50 px-3 py-2">
-            <div className="text-stone-500">Станций зарядки</div>
-            <div className="mt-1 text-base font-semibold text-stone-900">{chargeCount}</div>
-          </div>
-          <div className="rounded-xl border border-stone-200 bg-stone-50 px-3 py-2">
-            <div className="text-stone-500">Запретных зон</div>
-            <div className="mt-1 text-base font-semibold text-stone-900">{zoneCount}</div>
-          </div>
-          <div className="rounded-xl border border-stone-200 bg-stone-50 px-3 py-2">
-            <div className="text-stone-500">Готовых контуров</div>
-            <div className="mt-1 text-base font-semibold text-stone-900">{polygonCount}</div>
-          </div>
-          <div className="rounded-xl border border-stone-200 bg-stone-50 px-3 py-2 col-span-2">
-            <div className="text-stone-500">Точек с автосдвигом</div>
-            <div className="mt-1 text-base font-semibold text-stone-900">{adjustedVisitCount}</div>
-          </div>
-        </div>
-
-        <div className="mt-3 rounded-xl border border-stone-200 bg-stone-50 px-3 py-2 text-xs text-stone-700">
-          Активная зона: <span className="font-semibold text-stone-900">{activeZoneName}</span>
-        </div>
-      </div>
-
-      <div className={cardCls}>
-        <div className="text-xs text-stone-600 mb-2">Режим добавления точки</div>
-        <div className="grid grid-cols-2 gap-2">
-          {POINT_KIND_OPTIONS.map((option) => {
-            const active = activePointKind === option.key;
-            return (
-              <button
-                key={option.key}
-                onClick={() => onActivePointKindChange(option.key)}
-                className={`rounded-2xl border px-3 py-3 text-left transition ${
-                  active
-                    ? `${option.border} ${option.bg} shadow-sm`
-                    : "border-stone-200 bg-white hover:bg-stone-50"
-                }`}
-              >
-                <div
-                  className={`text-xs uppercase tracking-[0.2em] ${
-                    active ? option.text : "text-stone-400"
-                  }`}
-                >
-                  {option.shortLabel}
-                </div>
-                <div className="mt-1 text-sm font-semibold">{option.label}</div>
-              </button>
-            );
-          })}
-        </div>
-        <div className="mt-3 grid grid-cols-1 gap-2 text-xs">
-          <button onClick={onClearVisitPoints} className={subtleButtonCls}>
-            Очистить маршрутные
+            <Play size={16} />
+            {isOptimizing ? "Строим" : "Построить"}
           </button>
-          <button onClick={onClearChargePoints} className={subtleButtonCls}>
-            Очистить зарядки
+          <button
+            type="button"
+            onClick={onSendRoute}
+            disabled={isOptimizing}
+            className={`inline-flex h-11 items-center justify-center gap-2 rounded-md px-3 text-sm font-semibold text-white shadow-sm transition ${
+              isOptimizing ? "cursor-not-allowed bg-teal-400" : "bg-teal-700 hover:bg-teal-800"
+            }`}
+          >
+            <Radio size={16} />
+            Отправить
           </button>
-          <button onClick={onClearLimitPoints} className={subtleButtonCls}>
-            Очистить зоны
+          <button
+            type="button"
+            onClick={onAddRandomObstacle}
+            disabled={isOptimizing}
+            className={`col-span-2 inline-flex h-10 items-center justify-center gap-2 rounded-md border px-3 text-sm font-semibold shadow-sm transition ${
+              isOptimizing
+                ? "cursor-not-allowed border-sky-100 bg-sky-50 text-sky-400"
+                : "border-sky-200 bg-sky-50 text-sky-800 hover:bg-sky-100"
+            }`}
+          >
+            <Shield size={16} />
+            Добавить случайное препятствие
+          </button>
+          <button
+            type="button"
+            onClick={onClearObstacles}
+            disabled={isOptimizing}
+            className={`col-span-2 inline-flex h-10 items-center justify-center gap-2 rounded-md border px-3 text-sm font-semibold shadow-sm transition ${
+              isOptimizing
+                ? "cursor-not-allowed border-rose-100 bg-rose-50 text-rose-300"
+                : "border-rose-200 bg-rose-50 text-rose-700 hover:bg-rose-100"
+            }`}
+          >
+            <Trash2 size={16} />
+            Очистить препятствия
           </button>
         </div>
       </div>
 
-      <div className={cardCls}>
-        <div className="text-xs text-stone-600 mb-1">Задача маршрута</div>
-        <select
-          className={inputCls}
-          value={routeTaskKey}
-          onChange={(event) => onRouteTaskChange(event.target.value)}
-        >
-          {TASK_OPTIONS.map((task) => (
-            <option key={task.key} value={task.key}>
-              {task.label}
-            </option>
-          ))}
-        </select>
-        <div className="text-xs text-stone-600 mt-3 mb-1">Алгоритм</div>
-        <select
-          className={inputCls}
-          value={algorithmKey}
-          onChange={(event) => onAlgorithmChange(event.target.value)}
-        >
-          {ALGORITHM_OPTIONS.map((option) => (
-            <option key={option.key} value={option.key}>
-              {option.label}
-            </option>
-          ))}
-        </select>
-        {status && (
-          <div className={`mt-3 text-sm ${routeBlocked ? "text-rose-700" : "text-emerald-700"}`}>
-            {status}
-          </div>
-        )}
+      {renderVisitPoints()}
+
+      <div className={panelCls}>
+        <SectionTitle icon={Upload} title="Импорт графа" />
+        <p className="mt-2 text-xs leading-5 text-slate-600">
+          Загрузите JSON с точками, зарядками и ограничивающими зонами.
+        </p>
+        <button type="button" onClick={handleImportClick} className={`${subtleButtonCls} mt-3 w-full`}>
+          <Upload size={16} />
+          Загрузить граф
+        </button>
+        <input
+          ref={fileInputRef}
+          type="file"
+          accept=".json,application/json"
+          onChange={handleFileChange}
+          className="hidden"
+        />
       </div>
 
-      <div className={cardCls}>
-        <h3 className="text-sm font-semibold mb-3">Энергия и динамика</h3>
-        <label>
-          <div className="text-xs text-stone-600 mb-1">Запас хода (энерго-ед.)</div>
-          <input
-            type="text"
-            inputMode="numeric"
-            value={batteryRangeInput}
+    </div>
+  );
+
+  const renderAlgorithmTab = () => (
+    <div className="space-y-3">
+      <div className={panelCls}>
+        <SectionTitle icon={Settings2} title="Задача и алгоритм" />
+        <label className="mt-3 block">
+          <div className="mb-1 text-xs font-medium text-slate-500">Задача маршрута</div>
+          <select
             className={inputCls}
-            onChange={(event) => onBatteryRangeChange(event.target.value)}
-            onBlur={onBatteryRangeBlur}
-          />
+            value={routeTaskKey}
+            onChange={(event) => onRouteTaskChange(event.target.value)}
+          >
+            {TASK_OPTIONS.map((task) => (
+              <option key={task.key} value={task.key}>
+                {task.label}
+              </option>
+            ))}
+          </select>
         </label>
-
-        <div className="mt-3 grid grid-cols-2 gap-2">
-          <label className="col-span-1">
-            <div className="text-xs text-stone-600 mb-1">Скорость, м/с</div>
-            <input
-              type="text"
-              inputMode="decimal"
-              value={cruiseSpeedInput}
-              className={inputCls}
-              onChange={(event) => onCruiseSpeedChange(event.target.value)}
-              onBlur={onCruiseSpeedBlur}
-            />
-          </label>
-          <label className="col-span-1">
-            <div className="text-xs text-stone-600 mb-1">Масса груза, кг</div>
-            <input
-              type="text"
-              inputMode="decimal"
-              value={payloadInput}
-              className={inputCls}
-              onChange={(event) => onPayloadChange(event.target.value)}
-              onBlur={onPayloadBlur}
-            />
-          </label>
-        </div>
-
-        <div className="mt-3 rounded-xl border border-stone-200 bg-stone-50 px-3 py-2 text-xs text-stone-700 space-y-1">
-          <div>Энергия маршрута: <span className="font-semibold">{routeEnergyStats.routeEnergy.toFixed(1)}</span></div>
-          <div>Время прохода: <span className="font-semibold">{formatSeconds(routeEnergyStats.estimatedTimeSec)}</span></div>
-          <div>Лимит по покрытию: <span className="font-semibold">{routeEnergyStats.limitingMaxSpeedMps.toFixed(2)} м/с</span></div>
-          <div>Риск проскальзывания: <span className="font-semibold">{(routeEnergyStats.averageSlipRisk * 100).toFixed(1)}%</span></div>
-        </div>
-
-        <div className="mt-3 rounded-xl border border-sky-200 bg-sky-50 px-3 py-2 text-xs text-sky-800">
-          Карта покрытий влияет на расход, допустимую скорость и риски в поворотах.
-        </div>
-
-        {energyWarning && (
-          <div className="mt-3 rounded-xl border border-rose-200 bg-rose-50 px-3 py-2 text-xs text-rose-700">
-            {energyWarning}
-          </div>
-        )}
+        <label className="mt-3 block">
+          <div className="mb-1 text-xs font-medium text-slate-500">Алгоритм</div>
+          <select
+            className={inputCls}
+            value={algorithmKey}
+            onChange={(event) => onAlgorithmChange(event.target.value)}
+          >
+            {ALGORITHM_OPTIONS.map((option) => (
+              <option key={option.key} value={option.key}>
+                {option.label}
+              </option>
+            ))}
+          </select>
+        </label>
       </div>
 
-      <div className={cardCls}>
-        <h3 className="text-sm font-semibold mb-3">Покрытия карты</h3>
-        <div className="space-y-2 text-xs">
-          {SURFACE_PROFILE_OPTIONS.map((profile) => (
-            (() => {
-              const runtime = describeSurfaceRuntime(profile, {
-                speedMps: parseLooseInput(cruiseSpeedInput, cruiseSpeedMps),
-                payloadKg: parseLooseInput(payloadInput, payloadKg),
-              });
-              return (
-                <div
-                  key={profile.key}
-                  className="rounded-xl border border-stone-200 bg-stone-50 px-3 py-2"
-                >
-                  <div className="flex items-center gap-2">
-                    <span
-                      className="inline-block h-3 w-3 rounded-full border border-stone-400"
-                      style={{ background: profile.fill }}
-                    />
-                    <span className="font-semibold text-stone-800">{profile.label}</span>
-                  </div>
-                  <div className="mt-1 text-stone-600">
-                    скорость {runtime.requestedSpeedMps.toFixed(2)} м/с (лимит {runtime.surfaceMaxSpeedMps.toFixed(2)}, факт{" "}
-                    {runtime.effectiveSpeedMps.toFixed(2)})
-                  </div>
-                  <div className="text-stone-600">
-                    расход x{runtime.energyMultiplier.toFixed(2)} (база x{profile.energyPerMeter.toFixed(2)})
-                  </div>
-                </div>
-              );
-            })()
-          ))}
-        </div>
-      </div>
-
-      <div className={cardCls}>
-        <h3 className="text-sm font-semibold mb-3">Параметры алгоритма</h3>
-        <div className="space-y-3">
+      <div className={panelCls}>
+        <SectionTitle icon={SlidersHorizontal} title="Параметры" />
+        <div className="mt-3 space-y-3">
           {algorithmFields.map((field) => (
-            <label key={field.key}>
-              <div className="text-xs text-stone-600 mb-1">{field.label}</div>
+            <label key={field.key} className="block">
+              <div className="mb-1 text-xs font-medium text-slate-500">{field.label}</div>
               <input
                 type="number"
                 min={field.min}
@@ -366,68 +368,121 @@ export default function PlannerLeftSidebar({
           ))}
         </div>
       </div>
+    </div>
+  );
 
-      <div className={cardCls}>
-        <div className="mb-3 rounded-xl border border-teal-200 bg-teal-50 px-3 py-2 text-xs text-teal-800">
-          Маршрут строится с зазором {ROUTE_CLEARANCE_MARGIN.toFixed(2)} м от контура,
-          а целевые точки держатся минимум на {SAFE_POINT_MARGIN.toFixed(2)} м от запретной зоны.
+  const renderEnergyTab = () => (
+    <div className="space-y-3">
+      <div className={panelCls}>
+        <SectionTitle icon={BatteryCharging} title="Входные данные" />
+        <label className="mt-3 block">
+          <div className="mb-1 text-xs font-medium text-slate-500">Запас хода, энерго-ед.</div>
+          <input
+            type="text"
+            inputMode="numeric"
+            value={batteryRangeInput}
+            className={inputCls}
+            onChange={(event) => onBatteryRangeChange(event.target.value)}
+            onBlur={onBatteryRangeBlur}
+          />
+        </label>
+        <div className="mt-3 grid grid-cols-2 gap-2">
+          <label className="block">
+            <div className="mb-1 text-xs font-medium text-slate-500">Скорость, м/с</div>
+            <input
+              type="text"
+              inputMode="decimal"
+              value={cruiseSpeedInput}
+              className={inputCls}
+              onChange={(event) => onCruiseSpeedChange(event.target.value)}
+              onBlur={onCruiseSpeedBlur}
+            />
+          </label>
+          <label className="block">
+            <div className="mb-1 text-xs font-medium text-slate-500">Груз, кг</div>
+            <input
+              type="text"
+              inputMode="decimal"
+              value={payloadInput}
+              className={inputCls}
+              onChange={(event) => onPayloadChange(event.target.value)}
+              onBlur={onPayloadBlur}
+            />
+          </label>
         </div>
-        <button
-          onClick={onOptimizeRoute}
-          disabled={isOptimizing}
-          className={`w-full h-11 rounded-xl text-white font-semibold transition ${
-            isOptimizing ? "bg-orange-400 cursor-wait" : "bg-orange-600 hover:bg-orange-700"
-          }`}
-        >
-          {isOptimizing ? "Строим маршрут..." : "Построить маршрут"}
-        </button>
-        <button
-          onClick={onSendRoute}
-          disabled={isOptimizing}
-          className={`mt-2 w-full h-11 rounded-xl text-white font-semibold transition ${
-            isOptimizing ? "bg-emerald-400 cursor-not-allowed" : "bg-emerald-600 hover:bg-emerald-700"
-          }`}
-        >
-          Отправить маршрут
-        </button>
-        <button
-          onClick={onAddRandomObstacle}
-          disabled={isOptimizing}
-          className={`mt-2 w-full h-11 rounded-xl text-white font-semibold transition ${
-            isOptimizing ? "bg-sky-400 cursor-not-allowed" : "bg-sky-600 hover:bg-sky-700"
-          }`}
-        >
-          Добавить случайное препятствие
-        </button>
-        <button onClick={onClearAll} className={`mt-2 w-full h-11 ${neutralButtonCls}`}>
-          Очистить всё
-        </button>
-        {hasRoute && (
-          <p className="mt-3 text-sm">
-            Длина маршрута: <b>{routeLength.toFixed(2)} м</b>
-          </p>
-        )}
       </div>
 
-      <div className={cardCls}>
-        <h3 className="text-sm font-semibold mb-3">Импорт графа</h3>
-        <p className="mb-3 text-xs text-stone-600">
-          Загрузите JSON с точками, зарядками и ограничивающими зонами.
-        </p>
-        <button
-          onClick={handleImportClick}
-          className="w-full rounded-xl border border-stone-300 bg-stone-100 px-3 py-2 text-sm font-semibold text-stone-800 shadow-sm transition hover:bg-stone-200"
-        >
-          Загрузить граф
-        </button>
-        <input
-          ref={fileInputRef}
-          type="file"
-          accept=".json,application/json"
-          onChange={handleFileChange}
-          className="hidden"
-        />
+      <div className={panelCls}>
+        <SectionTitle icon={Layers3} title="Покрытия карты" />
+        <div className="mt-3 space-y-2">
+          {SURFACE_PROFILE_OPTIONS.map((profile) => {
+            const runtime = describeSurfaceRuntime(profile, {
+              speedMps: parseLooseInput(cruiseSpeedInput, cruiseSpeedMps),
+              payloadKg: parseLooseInput(payloadInput, payloadKg),
+            });
+            return (
+              <div key={profile.key} className="rounded-md border border-slate-200 bg-slate-50 px-3 py-2 text-xs">
+                <div className="flex items-center gap-2">
+                  <span
+                    className="inline-block h-3 w-3 rounded-sm border border-slate-400"
+                    style={{ background: profile.fill }}
+                  />
+                  <span className="font-semibold text-slate-900">{profile.label}</span>
+                </div>
+                <div className="mt-1 text-slate-600">
+                  скорость {runtime.requestedSpeedMps.toFixed(2)} м/с, факт {runtime.effectiveSpeedMps.toFixed(2)}
+                </div>
+                <div className="text-slate-600">
+                  расход x{runtime.energyMultiplier.toFixed(2)}, база x{profile.energyPerMeter.toFixed(2)}
+                </div>
+              </div>
+            );
+          })}
+        </div>
       </div>
-    </aside>
+
+      {renderChargePoints()}
+
+      <div className={panelCls}>
+        <SectionTitle icon={Gauge} title="Расчет маршрута" />
+        <div className="mt-3 grid grid-cols-2 gap-2">
+          <div className="rounded-md border border-slate-200 bg-slate-50 p-3">
+            <div className="text-xs text-slate-500">Энергия</div>
+            <div className="mt-1 text-lg font-bold text-amber-700">
+              {routeEnergyStats.routeEnergy.toFixed(1)}
+            </div>
+          </div>
+          <div className="rounded-md border border-slate-200 bg-slate-50 p-3">
+            <div className="text-xs text-slate-500">Время</div>
+            <div className="mt-1 text-lg font-bold text-teal-700">
+              {formatSeconds(routeEnergyStats.estimatedTimeSec)}
+            </div>
+          </div>
+          <div className="rounded-md border border-slate-200 bg-slate-50 p-3">
+            <div className="text-xs text-slate-500">Лимит</div>
+            <div className="mt-1 text-lg font-bold text-slate-950">
+              {routeEnergyStats.limitingMaxSpeedMps.toFixed(2)}
+            </div>
+          </div>
+          <div className="rounded-md border border-slate-200 bg-slate-50 p-3">
+            <div className="text-xs text-slate-500">Риск</div>
+            <div className="mt-1 text-lg font-bold text-rose-700">
+              {(routeEnergyStats.averageSlipRisk * 100).toFixed(1)}%
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+
+
+  const content = {
+    route: renderRouteTab(),
+    algorithm: renderAlgorithmTab(),
+    energy: renderEnergyTab(),
+  }[activeTab];
+
+  return (
+    <div className="h-full min-h-0 overflow-auto p-4">{content}</div>
   );
 }
