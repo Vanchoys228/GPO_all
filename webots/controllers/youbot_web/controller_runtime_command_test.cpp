@@ -2,6 +2,7 @@
 
 #include <cmath>
 #include <stdio.h>
+#include <string.h>
 
 #define TEST_EPS 1e-9
 
@@ -45,6 +46,19 @@ int main(void) {
   if (!command.has_spawn_obstacle || command.has_start_mapping_survey) return 12;
   if (!nearly_equal(command.size_x, 0.8) || !nearly_equal(command.size_y, 0.8)) return 13;
   if (!nearly_equal(command.height, 0.6)) return 14;
+
+  file = fopen(path, "w");
+  if (!file) return 15;
+  fprintf(file, "id 44\ntype transfer_object\nmission_id transfer-1\n");
+  fprintf(file, "object_id demo-box\ndestination_x 4.5\ndestination_y -2.25\n");
+  fprintf(file, "scene_revision revision-7\n");
+  fclose(file);
+  if (!controller_runtime_command_load_file(path, &limits, &command)) return 16;
+  remove(path);
+  if (!command.has_transfer_object || strcmp(command.object_id, "demo-box") != 0) return 17;
+  if (!nearly_equal(command.destination_x, 4.5) ||
+      !nearly_equal(command.destination_y, -2.25)) return 18;
+  if (strcmp(command.scene_revision, "revision-7") != 0) return 19;
 
   return 0;
 }

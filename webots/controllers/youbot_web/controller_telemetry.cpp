@@ -23,6 +23,25 @@ static const char *json_bool(int value) {
   return value ? "true" : "false";
 }
 
+static const char *transfer_status(ControllerObjectTransferStatus status) {
+  switch (status) {
+    case CONTROLLER_TRANSFER_RUNNING: return "running";
+    case CONTROLLER_TRANSFER_HOLDING_FOR_RECOVERY: return "holding_for_recovery";
+    case CONTROLLER_TRANSFER_COMPLETED: return "completed";
+    case CONTROLLER_TRANSFER_FAILED: return "failed";
+    case CONTROLLER_TRANSFER_CANCELLED: return "cancelled";
+    case CONTROLLER_TRANSFER_ACCEPTED: return "accepted";
+    default: return "idle";
+  }
+}
+
+static const char *transfer_stage(ControllerObjectTransferStage stage) {
+  static const char *names[] = {"none", "approaching_object", "aligning", "lowering_arm",
+      "grasping", "lifting", "transporting", "placing", "releasing", "returning_arm"};
+  return stage >= CONTROLLER_TRANSFER_STAGE_NONE && stage <= CONTROLLER_TRANSFER_RETURNING_ARM
+      ? names[stage] : "none";
+}
+
 int controller_telemetry_write_snapshot(
     const char *temp_path,
     const char *state_path,
@@ -114,6 +133,17 @@ int controller_telemetry_write_snapshot(
   fprintf(file, "  \"cameraMap\": {\n    \"cellCount\": %d,\n    \"obstacleCellCount\": %d,\n    \"freeCellCount\": %d,\n    \"cellSize\": %.4f,\n    \"mapFile\": \"camera_map.json\",\n    \"jsonFile\": \"camera_map.json\",\n    \"excelCsvFile\": \"camera_map.csv\"\n  },\n",
           snapshot->camera_map_cell_count, snapshot->camera_map_obstacle_cell_count,
           snapshot->camera_map_free_cell_count, snapshot->camera_map_cell_size);
+  const ControllerObjectTransferState *transfer = snapshot->object_transfer;
+  fprintf(file, "  \"objectTransfer\": {\n");
+  fprintf(file, "    \"missionId\": \"%s\",\n", safe_command_id(transfer ? transfer->mission_id : ""));
+  fprintf(file, "    \"objectId\": \"%s\",\n", transfer ? transfer->object_id : "");
+  fprintf(file, "    \"status\": \"%s\",\n", transfer_status(transfer ? transfer->status : CONTROLLER_TRANSFER_IDLE));
+  fprintf(file, "    \"stage\": \"%s\",\n", transfer_stage(transfer ? transfer->stage : CONTROLLER_TRANSFER_STAGE_NONE));
+  fprintf(file, "    \"progress\": %d,\n", transfer ? transfer->progress : 0);
+  fprintf(file, "    \"attached\": %s,\n", json_bool(transfer && transfer->attached));
+  fprintf(file, "    \"destination\": {\"x\": %.6f, \"y\": %.6f},\n",
+      transfer ? transfer->destination_x : 0.0, transfer ? transfer->destination_y : 0.0);
+  fprintf(file, "    \"errorCode\": \"%s\"\n  },\n", transfer ? transfer->error_code : "");
   fprintf(file, "  \"route\": {\n    \"source\": \"route.csv\",\n    \"waypoints\": [\n");
   for (int i = 0; i < snapshot->route_waypoint_count; ++i) {
     const Waypoint *waypoint = &snapshot->route_waypoints[i];

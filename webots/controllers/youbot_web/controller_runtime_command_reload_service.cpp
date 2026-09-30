@@ -24,6 +24,12 @@ void controller_runtime_command_reload_service_init(
   service->last_processed_id = -1;
 }
 
+void controller_runtime_command_reload_service_set_transfer_handler(
+    ControllerRuntimeCommandReloadService *service,
+    void (*handler)(const RuntimeCommand *command)) {
+  if (service) service->transfer_command = handler;
+}
+
 ControllerRuntimeCommandReloadResult controller_runtime_command_reload_service_run(
     ControllerRuntimeCommandReloadService *service,
     int step_counter,
@@ -48,6 +54,11 @@ ControllerRuntimeCommandReloadResult controller_runtime_command_reload_service_r
     return CONTROLLER_RUNTIME_COMMAND_RELOAD_DUPLICATE;
   }
   service->last_processed_id = command.id;
+
+  if (command.has_transfer_object || command.has_recover_transfer || command.has_resume_transfer) {
+    if (service->transfer_command) service->transfer_command(&command);
+    return CONTROLLER_RUNTIME_COMMAND_RELOAD_APPLIED;
+  }
 
   if (command.has_cancel_mission) {
     strcpy(service->runtime->cancelled_mission_id, command.mission_id);

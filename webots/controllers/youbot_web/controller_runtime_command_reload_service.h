@@ -21,6 +21,7 @@ typedef struct {
   ControllerRuntime *runtime;
   ControllerSurveyIntegrationOps survey_ops;
   void (*spawn_obstacle)(const RuntimeCommand *command);
+  void (*transfer_command)(const RuntimeCommand *command);
   long long last_modified;
   long long last_processed_id;
 } ControllerRuntimeCommandReloadService;
@@ -37,5 +38,8 @@ ControllerRuntimeCommandReloadResult controller_runtime_command_reload_service_r
     ControllerRuntimeCommandReloadService *service,
     int step_counter,
     int reload_interval);
+void controller_runtime_command_reload_service_set_transfer_handler(
+    ControllerRuntimeCommandReloadService *service,
+    void (*handler)(const RuntimeCommand *command));
 
 #endif

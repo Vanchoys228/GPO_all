@@ -4,6 +4,7 @@ import PlannerSurfaceZonesSection from "./sections/PlannerSurfaceZonesSection";
 import PlannerRouteControlsSection from "./sections/PlannerRouteControlsSection";
 import PlannerImportSection from "./sections/PlannerImportSection";
 import PlannerSetupSection from "./sections/PlannerSetupSection";
+import PlannerObjectTransferSection from "./sections/PlannerObjectTransferSection";
 
 
 export default function PlannerLeftSidebar({
@@ -30,6 +31,7 @@ export default function PlannerLeftSidebar({
   onOptimizeRoute,
   onSendRoute,
   onAddRandomObstacle,
+  onStartObjectTransfer,
   onClearAll,
   hasRoute,
   routeLength,
@@ -91,6 +93,7 @@ export default function PlannerLeftSidebar({
 
       <div className="min-h-0 min-w-0 max-w-full flex-1 overflow-x-hidden overflow-y-auto overscroll-contain p-4 space-y-4 [scrollbar-gutter:stable]">
       <PlannerMissionStatus mission={mission} onCancel={onCancelMission} />
+      <PlannerObjectTransferSection onStartTransfer={onStartObjectTransfer} />
       <PlannerSetupSection
         activePointKind={activePointKind}
         activeZoneName={activeZoneName}
