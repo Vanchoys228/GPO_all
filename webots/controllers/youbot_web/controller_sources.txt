@@ -62,6 +62,8 @@ controller_navigation_session.cpp
 controller_navigation_state.cpp
 controller_navigation_tracking.cpp
 controller_navigation_zone_guard.cpp
+controller_object_transfer_service.cpp
+controller_operation_coordinator.cpp
 controller_obstacle_map.cpp
 controller_paths.cpp
 controller_perception_runtime.cpp
