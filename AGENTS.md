@@ -4,14 +4,16 @@
 This repository is a Vite + React frontend with optional WebSocket bridge utilities.
 
 - `src/`: application code.
-- `src/pages/`: page-level views (`Dashboard.jsx`, `RoutePlanner.jsx`).
-- `src/components/`: reusable UI pieces (`Navbar.jsx`, `MapCanvas.jsx`).
-- `src/lib/`: shared helpers (`telemetry.js`).
-- `public/`: static runtime assets (`map.png`, `vite.svg`).
+- `src/pages/`: page-level views (`Dashboard.jsx`, `Home.jsx`).
+- `src/components/`: reusable presentation components.
+- `src/features/planner/`: planner hooks, model, services, and workspace composition.
+- `src/lib/`: shared planning, telemetry, geometry, and runtime helpers.
+- `public/`: static runtime assets when the frontend needs them.
 - Root configs: `vite.config.js`, `eslint.config.js`, `tailwind.config.js`, `postcss.config.js`.
-- Runtime bridge scripts: `ws-bridge.cjs` and `telemetry-server.cjs`.
+- `bridge/`: independently runnable planning, route, and telemetry services.
+- Runtime entrypoints: `ws-bridge.cjs` and `telemetry-server.cjs`.
 
-`Program.cs` and `bnts-frontend.csproj` exist, but current frontend development is driven by Node/Vite.
+Frontend development and production builds are driven by Node/Vite.
 
 ## Build, Test, and Development Commands
 - `npm install`: install dependencies.

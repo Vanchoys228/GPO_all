@@ -9,7 +9,6 @@ import {
 
 export const INITIAL_ZONE = { id: "zone-1", name: "Зона 1", closed: false };
 export const DRAG_HIT_RADIUS = 14;
-const LOOP_EPS = 1e-6;
 
 const buildZoneEntries = (limitZones) =>
   limitZones.map((zone, zoneIndex) => ({
@@ -163,33 +162,7 @@ export const buildPlannerModel = ({
   };
 };
 
-const samePoint = (left, right) =>
-  Math.abs(left.x - right.x) <= LOOP_EPS && Math.abs(left.y - right.y) <= LOOP_EPS;
-
-export const rotateClosedRouteToNearestPoint = (route, anchor) => {
-  if (!route.length) return route;
-
-  const closed = route.length > 1 && samePoint(route[0], route[route.length - 1]);
-  const cycle = closed ? route.slice(0, -1) : route.slice();
-  if (!cycle.length) return route;
-
-  let bestIndex = 0;
-  let bestDistance = Number.POSITIVE_INFINITY;
-  for (let index = 0; index < cycle.length; index += 1) {
-    const dx = cycle[index].x - anchor.x;
-    const dy = cycle[index].y - anchor.y;
-    const distance = Math.hypot(dx, dy);
-    if (distance < bestDistance) {
-      bestDistance = distance;
-      bestIndex = index;
-    }
-  }
-
-  const rotated = bestIndex === 0 ? cycle : cycle.slice(bestIndex).concat(cycle.slice(0, bestIndex));
-
-  if (!closed) return rotated;
-  return rotated.concat([rotated[0]]);
-};
+export { rotateClosedRouteToNearestPoint } from "../../shared/planning/routeAnchor.js";
 
 export const getRouteAnchor = (telemetry) => ({
   x: Number.isFinite(telemetry?.x) ? telemetry.x : 0,

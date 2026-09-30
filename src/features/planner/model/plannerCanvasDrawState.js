@@ -1,0 +1,20 @@
+export const createPlannerCanvasDrawState = ({
+  plannerModel,
+  optimizedRoute,
+  hoveredPointIndex,
+  telemetry,
+  fallbackObstacleMap,
+  fallbackCameraMap,
+}) => ({
+  visitEntries: plannerModel.visitEntries,
+  chargeEntries: plannerModel.chargeEntries,
+  plannedVisitEntryMap: plannerModel.plannedVisitEntryMap,
+  zoneEntries: plannerModel.zoneEntries,
+  surfaceZones: plannerModel.surfaceZones,
+  optimizedRoute,
+  obstacleTrace: telemetry.obstacleTrace || [],
+  obstacleMap: telemetry.obstacleMap || fallbackObstacleMap,
+  cameraMap: telemetry.cameraMap || fallbackCameraMap,
+  routeBlocked: plannerModel.routeBlocked,
+  hoveredPointIndex,
+});

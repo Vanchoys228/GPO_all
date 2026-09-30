@@ -1,5 +1,5 @@
 @echo off
-setlocal
+setlocal EnableExtensions EnableDelayedExpansion
 
 set "VCVARS="
 if exist "C:\Program Files\Microsoft Visual Studio\2022\Community\VC\Auxiliary\Build\vcvars64.bat" (
@@ -32,14 +32,24 @@ if not exist "%WEBOTS_HOME%\include\controller\c\webots\robot.h" (
 )
 
 set "CONTROLLER_DIR=%~dp0"
-if not exist "%CONTROLLER_DIR%build" mkdir "%CONTROLLER_DIR%build"
-if not exist "%CONTROLLER_DIR%build\obj" mkdir "%CONTROLLER_DIR%build\obj"
+pushd "%CONTROLLER_DIR%"
+if not exist "build" mkdir "build"
+if not exist "build\obj" mkdir "build\obj"
 
-cl /nologo /std:c11 /O2 /I"%WEBOTS_HOME%\include\controller\c" ^
-  "%CONTROLLER_DIR%youbot_web.c" ^
-  /Fe:"%CONTROLLER_DIR%youbot_web.exe" ^
-  /Fo"%CONTROLLER_DIR%build\obj\\" ^
+set "SOURCE_ARGS="
+for /f "usebackq delims=" %%S in ("controller_sources.txt") do (
+  if not "%%S"=="" set "SOURCE_ARGS=!SOURCE_ARGS! %%S"
+)
+
+cl /nologo /std:c++20 /EHsc /O2 /I"%WEBOTS_HOME%\include\controller\c" ^
+  !SOURCE_ARGS! ^
+  /Fe:"youbot_web.exe" ^
+  /Fo"build\obj\\" ^
   /link /LIBPATH:"%WEBOTS_HOME%\lib\controller" Controller.lib
-if errorlevel 1 exit /b 1
+if errorlevel 1 (
+  popd
+  exit /b 1
+)
 
 echo Built: "%CONTROLLER_DIR%youbot_web.exe"
+popd

@@ -8,6 +8,7 @@ pnpm-debug.log*
 lerna-debug.log*
 
 node_modules
+.worktrees/
 dist
 dist-ssr
 bin
@@ -15,9 +16,13 @@ obj
 native/build
 webots/controllers/youbot_web/build
 webots/controllers/youbot_web/*.exe
+webots/controllers/youbot_web/*.obj
 web_state/*.json
 web_state/*.csv
 web_state/*.txt
+web_state/*.jpg
+webots/worlds/.*.wbproj
+webots/worlds/.*.jpg
 *.local
 
 # Editor directories and files
@@ -30,3 +35,17 @@ web_state/*.txt
 *.njsproj
 *.sln
 *.sw?
+
+# Private service state
+.env
+.env.*
+!.env.example
+secrets/
+backups/
+native/build-tests/
+data/
+web_state/missions/
+web_state/gateway-journal/
+
+web_state/runtime-project/
+public/webots/wwi/

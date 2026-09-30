@@ -4,26 +4,37 @@
   "version": "0.0.0",
   "type": "module",
   "scripts": {
+    "prepare:viewer": "node scripts/prepare-webots-viewer.mjs",
     "dev": "vite --host 127.0.0.1",
     "bridge": "node ws-bridge.cjs",
+    "service:planning": "node bridge/processes/run-planning-service.cjs",
+    "service:route": "node bridge/processes/run-route-service.cjs",
+    "service:telemetry": "node bridge/processes/run-telemetry-service.cjs",
     "telemetry:mock": "node telemetry-server.cjs",
     "native:build": "native\\build_msvc.bat",
+    "native:test": "native\\run_tests_msvc.bat",
+    "native:build:linux": "cmake -S native -B native/build -DCMAKE_BUILD_TYPE=Release && cmake --build native/build --config Release --parallel",
     "webots:build": "webots\\controllers\\youbot_web\\build_youbot_web.bat",
     "build": "vite build",
     "lint": "eslint .",
     "test": "vitest run",
     "test:bridge": "node scripts/bridge-smoke-test.mjs",
-    "preview": "vite preview"
+    "test:webots": "webots\\controllers\\youbot_web\\run_controller_tests.bat",
+    "preview": "vite preview",
+    "test:services": "node scripts/services-smoke-test.mjs",
+    "service:gateway": "node bridge/processes/run-gateway-service.cjs",
+    "test:simulation": "node scripts/simulation-smoke-test.mjs",
+    "start:container": "node scripts/start-container-stack.mjs",
+    "start": "node scripts/start-stack.mjs",
+    "test:docker": "node scripts/docker-smoke-test.mjs"
   },
   "dependencies": {
     "dotenv": "^17.3.1",
-    "papaparse": "^5.5.3",
     "react": "^19.2.0",
     "react-dom": "^19.2.0",
     "react-router-dom": "^7.15.1",
-    "read-excel-file": "^9.0.10",
     "ws": "^8.18.3",
-    "xlsx": "^0.18.5"
+    "xlsx": "https://cdn.sheetjs.com/xlsx-0.20.3/xlsx-0.20.3.tgz"
   },
   "devDependencies": {
     "@eslint/js": "^9.39.1",
@@ -35,9 +46,13 @@
     "eslint-plugin-react-hooks": "^7.0.1",
     "eslint-plugin-react-refresh": "^0.4.24",
     "globals": "^16.5.0",
+    "jsdom": "^29.1.1",
     "postcss": "^8.5.6",
     "tailwindcss": "^3.4.18",
     "vite": "^7.2.4",
     "vitest": "^4.1.1"
+  },
+  "engines": {
+    "node": ">=22.19.0"
   }
 }

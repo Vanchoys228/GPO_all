@@ -1,0 +1,1250 @@
+{
+  "version": "R2025a",
+  "entries": [
+    {
+      "path": "Animation.js",
+      "url": "https://raw.githubusercontent.com/cyberbotics/webots/R2025a/resources/web/wwi/Animation.js",
+      "gitSha": "9ee41b9d1ff0ae1ee5ef42a9639fa73629fc8045"
+    },
+    {
+      "path": "AnimationSlider.js",
+      "url": "https://raw.githubusercontent.com/cyberbotics/webots/R2025a/resources/web/wwi/AnimationSlider.js",
+      "gitSha": "256fd46e8c1af9ca6b5d9f91a485f3d5b04c0d06"
+    },
+    {
+      "path": "DefaultUrl.js",
+      "url": "https://raw.githubusercontent.com/cyberbotics/webots/R2025a/resources/web/wwi/DefaultUrl.js",
+      "gitSha": "814adf298b22a9db5e0dae49a4f69536a141c876"
+    },
+    {
+      "path": "FloatingCustomWindow.js",
+      "url": "https://raw.githubusercontent.com/cyberbotics/webots/R2025a/resources/web/wwi/FloatingCustomWindow.js",
+      "gitSha": "09ca9f9ba77a27f10cc900f922a551ba0164b486"
+    },
+    {
+      "path": "FloatingIde.js",
+      "url": "https://raw.githubusercontent.com/cyberbotics/webots/R2025a/resources/web/wwi/FloatingIde.js",
+      "gitSha": "50aa36c78ff6e8931e03a432f06f27fc50b98468"
+    },
+    {
+      "path": "FloatingProtoParameterWindow.js",
+      "url": "https://raw.githubusercontent.com/cyberbotics/webots/R2025a/resources/web/wwi/FloatingProtoParameterWindow.js",
+      "gitSha": "416598e812288081e3f815e9b8d8dded158186ad"
+    },
+    {
+      "path": "FloatingRobotWindow.js",
+      "url": "https://raw.githubusercontent.com/cyberbotics/webots/R2025a/resources/web/wwi/FloatingRobotWindow.js",
+      "gitSha": "2d6c062bbf371e8c5249f8ff32efc780727d97d6"
+    },
+    {
+      "path": "FloatingWindow.js",
+      "url": "https://raw.githubusercontent.com/cyberbotics/webots/R2025a/resources/web/wwi/FloatingWindow.js",
+      "gitSha": "71d55e8c2c6316cce093d03d567e7218cdf2607c"
+    },
+    {
+      "path": "ImageLoader.js",
+      "url": "https://raw.githubusercontent.com/cyberbotics/webots/R2025a/resources/web/wwi/ImageLoader.js",
+      "gitSha": "ae0014577765766bd6737a48810cb642d9415f00"
+    },
+    {
+      "path": "InformationPanel.js",
+      "url": "https://raw.githubusercontent.com/cyberbotics/webots/R2025a/resources/web/wwi/InformationPanel.js",
+      "gitSha": "c6802bbda5f785731d049fbb04787a90e3d54a4d"
+    },
+    {
+      "path": "MeshLoader.js",
+      "url": "https://raw.githubusercontent.com/cyberbotics/webots/R2025a/resources/web/wwi/MeshLoader.js",
+      "gitSha": "104f332182ff4b60ddb9fb4c24b18a5a3bec97a3"
+    },
+    {
+      "path": "MouseEvents.js",
+      "url": "https://raw.githubusercontent.com/cyberbotics/webots/R2025a/resources/web/wwi/MouseEvents.js",
+      "gitSha": "db737f94dc75d75dbee8bfb840b1b0bcd1e6ef80"
+    },
+    {
+      "path": "MultimediaClient.js",
+      "url": "https://raw.githubusercontent.com/cyberbotics/webots/R2025a/resources/web/wwi/MultimediaClient.js",
+      "gitSha": "f6644ac8aecdeea78bbba8e7b400706e3abcfb0d"
+    },
+    {
+      "path": "NodeSelectorWindow.js",
+      "url": "https://raw.githubusercontent.com/cyberbotics/webots/R2025a/resources/web/wwi/NodeSelectorWindow.js",
+      "gitSha": "c13389ffab4e6293a1a2632116c07f9e2fb29939"
+    },
+    {
+      "path": "Parser.js",
+      "url": "https://raw.githubusercontent.com/cyberbotics/webots/R2025a/resources/web/wwi/Parser.js",
+      "gitSha": "91be160caf37c0749320765791b859b940444140"
+    },
+    {
+      "path": "Progress.js",
+      "url": "https://raw.githubusercontent.com/cyberbotics/webots/R2025a/resources/web/wwi/Progress.js",
+      "gitSha": "7b93cbaf474f3284656ce9cb76316592d98ae158"
+    },
+    {
+      "path": "ProtoManager.js",
+      "url": "https://raw.githubusercontent.com/cyberbotics/webots/R2025a/resources/web/wwi/ProtoManager.js",
+      "gitSha": "f176d6f9ba31683f76b67a8c2833378b7b3db56b"
+    },
+    {
+      "path": "RobotWindow.js",
+      "url": "https://raw.githubusercontent.com/cyberbotics/webots/R2025a/resources/web/wwi/RobotWindow.js",
+      "gitSha": "e8e92bb35663160b16a7c25ab2338a6f06ade62a"
+    },
+    {
+      "path": "Selector.js",
+      "url": "https://raw.githubusercontent.com/cyberbotics/webots/R2025a/resources/web/wwi/Selector.js",
+      "gitSha": "bb65966d9c7543ab2a937c34527730537d93b890"
+    },
+    {
+      "path": "Server.js",
+      "url": "https://raw.githubusercontent.com/cyberbotics/webots/R2025a/resources/web/wwi/Server.js",
+      "gitSha": "0d3a2f1bae070f9c8dcec8f5f0f351e7149b554c"
+    },
+    {
+      "path": "Stream.js",
+      "url": "https://raw.githubusercontent.com/cyberbotics/webots/R2025a/resources/web/wwi/Stream.js",
+      "gitSha": "f4bedc555b2578452f55e04d100961497526ece7"
+    },
+    {
+      "path": "Terminal.js",
+      "url": "https://raw.githubusercontent.com/cyberbotics/webots/R2025a/resources/web/wwi/Terminal.js",
+      "gitSha": "1212767a61296f49195050c093553fccdbff7013"
+    },
+    {
+      "path": "Toolbar.js",
+      "url": "https://raw.githubusercontent.com/cyberbotics/webots/R2025a/resources/web/wwi/Toolbar.js",
+      "gitSha": "69d6093857460f0e5fc7c01376847f7acc530081"
+    },
+    {
+      "path": "W3dScene.js",
+      "url": "https://raw.githubusercontent.com/cyberbotics/webots/R2025a/resources/web/wwi/W3dScene.js",
+      "gitSha": "d0aaa7dc06ed5957a80789f5b4d2da4d88dd0f71"
+    },
+    {
+      "path": "WebotsView.js",
+      "url": "https://raw.githubusercontent.com/cyberbotics/webots/R2025a/resources/web/wwi/WebotsView.js",
+      "gitSha": "f3f074f99c482dd9403b38fdfeaaee9c56cdd66e"
+    },
+    {
+      "path": "WrenRenderer.js",
+      "url": "https://raw.githubusercontent.com/cyberbotics/webots/R2025a/resources/web/wwi/WrenRenderer.js",
+      "gitSha": "8ead6606ee6696edef989bacb06ae998a26b42e6"
+    },
+    {
+      "path": "css/animation_slider.css",
+      "url": "https://raw.githubusercontent.com/cyberbotics/webots/R2025a/resources/web/wwi/css/animation_slider.css",
+      "gitSha": "74ec241385f83d5ec47b86ee7b8955213f1ea9b2"
+    },
+    {
+      "path": "css/fonts.css",
+      "url": "https://raw.githubusercontent.com/cyberbotics/webots/R2025a/resources/web/wwi/css/fonts.css",
+      "gitSha": "5aed4877efd573cbb06e7fa18180c8f5642999e1"
+    },
+    {
+      "path": "css/monitor.css",
+      "url": "https://raw.githubusercontent.com/cyberbotics/webots/R2025a/resources/web/wwi/css/monitor.css",
+      "gitSha": "d9fcd34af15bf2d40b00e4f846aef871c3e28301"
+    },
+    {
+      "path": "css/progress.css",
+      "url": "https://raw.githubusercontent.com/cyberbotics/webots/R2025a/resources/web/wwi/css/progress.css",
+      "gitSha": "a788ebe453a02c30bb48da993a2a4ae4e4b4b5e3"
+    },
+    {
+      "path": "css/toolbar.css",
+      "url": "https://raw.githubusercontent.com/cyberbotics/webots/R2025a/resources/web/wwi/css/toolbar.css",
+      "gitSha": "fd3754699fb64eeb160c3579d140a0e7e0da21cb"
+    },
+    {
+      "path": "css/wwi_mobile.css",
+      "url": "https://raw.githubusercontent.com/cyberbotics/webots/R2025a/resources/web/wwi/css/wwi_mobile.css",
+      "gitSha": "347ff11f4be96754d5727b936c23dd9e9b8f4eab"
+    },
+    {
+      "path": "dependencies/ansi_up.js",
+      "url": "https://raw.githubusercontent.com/cyberbotics/webots/R2025a/resources/web/wwi/dependencies/ansi_up.js",
+      "gitSha": "fe99db780a73a2091e39bb48624adb67d2bc37ed"
+    },
+    {
+      "path": "dependencies/assimpjs.js",
+      "url": "https://raw.githubusercontent.com/cyberbotics/webots/R2025a/resources/web/wwi/dependencies/assimpjs.js",
+      "gitSha": "1e17d34f94532a0e1f844b65a2ae072f514ed2d7"
+    },
+    {
+      "path": "dependencies/assimpjs.wasm",
+      "url": "https://raw.githubusercontent.com/cyberbotics/webots/R2025a/resources/web/wwi/dependencies/assimpjs.wasm",
+      "gitSha": "bb1e30c43e3aab91241b87f29d60bc0367d65b6a"
+    },
+    {
+      "path": "dependencies/glm-js.min.js",
+      "url": "https://raw.githubusercontent.com/cyberbotics/webots/R2025a/resources/web/wwi/dependencies/glm-js.min.js",
+      "gitSha": "8142db782689f48f32027e35fbe99af546721a34"
+    },
+    {
+      "path": "dependencies/libtess.min.js",
+      "url": "https://raw.githubusercontent.com/cyberbotics/webots/R2025a/resources/web/wwi/dependencies/libtess.min.js",
+      "gitSha": "20216c3195179139e24692e0c2fcfb89461fd034"
+    },
+    {
+      "path": "dependencies/quaternion.min.js",
+      "url": "https://raw.githubusercontent.com/cyberbotics/webots/R2025a/resources/web/wwi/dependencies/quaternion.min.js",
+      "gitSha": "1caada33cd73008db8207250d8c15beb1ad21060"
+    },
+    {
+      "path": "fonts/Arial Black.woff2",
+      "url": "https://raw.githubusercontent.com/cyberbotics/webots/R2025a/resources/web/wwi/fonts/Arial Black.woff2",
+      "gitSha": "f054e4de8e0cd2d1377b0b999c7a03d920f38321"
+    },
+    {
+      "path": "fonts/Ariali.woff2",
+      "url": "https://raw.githubusercontent.com/cyberbotics/webots/R2025a/resources/web/wwi/fonts/Ariali.woff2",
+      "gitSha": "e6b933d72b854287ca59d8d6c9330bf846220ae1"
+    },
+    {
+      "path": "fonts/Code2000.woff2",
+      "url": "https://raw.githubusercontent.com/cyberbotics/webots/R2025a/resources/web/wwi/fonts/Code2000.woff2",
+      "gitSha": "5df8a4cb72615a1a53f5dc638fc24f4cc15424e4"
+    },
+    {
+      "path": "fonts/Code2001.woff2",
+      "url": "https://raw.githubusercontent.com/cyberbotics/webots/R2025a/resources/web/wwi/fonts/Code2001.woff2",
+      "gitSha": "5fbe72be5e051d06d294675321fd89d9c1415b99"
+    },
+    {
+      "path": "fonts/Code2002.woff2",
+      "url": "https://raw.githubusercontent.com/cyberbotics/webots/R2025a/resources/web/wwi/fonts/Code2002.woff2",
+      "gitSha": "63d4f43063922d8f7f214e60810a217f5a71135d"
+    },
+    {
+      "path": "fonts/Comic Sans MS.woff2",
+      "url": "https://raw.githubusercontent.com/cyberbotics/webots/R2025a/resources/web/wwi/fonts/Comic Sans MS.woff2",
+      "gitSha": "6ad95e011d8fbdaa775f023cbe12d015fb8478b9"
+    },
+    {
+      "path": "fonts/Georgia.woff2",
+      "url": "https://raw.githubusercontent.com/cyberbotics/webots/R2025a/resources/web/wwi/fonts/Georgia.woff2",
+      "gitSha": "b5a39ffd53273cb52bd96a34e49666cd8c261260"
+    },
+    {
+      "path": "fonts/Impact.woff2",
+      "url": "https://raw.githubusercontent.com/cyberbotics/webots/R2025a/resources/web/wwi/fonts/Impact.woff2",
+      "gitSha": "2941b74ff6a2010504b46ce190b30d2a1a768f2f"
+    },
+    {
+      "path": "fonts/Lucida Console.woff2",
+      "url": "https://raw.githubusercontent.com/cyberbotics/webots/R2025a/resources/web/wwi/fonts/Lucida Console.woff2",
+      "gitSha": "9e1d1f6ba0d08d765c59b7192cd700924b1abc1c"
+    },
+    {
+      "path": "fonts/Lucida Sans Unicode.woff2",
+      "url": "https://raw.githubusercontent.com/cyberbotics/webots/R2025a/resources/web/wwi/fonts/Lucida Sans Unicode.woff2",
+      "gitSha": "6d2809bf45b2635a943e3bafa96edd878e4be7fe"
+    },
+    {
+      "path": "fonts/Palatino Linotype.woff2",
+      "url": "https://raw.githubusercontent.com/cyberbotics/webots/R2025a/resources/web/wwi/fonts/Palatino Linotype.woff2",
+      "gitSha": "73e34743348bf37faabe313fd6a9fed8d29cd441"
+    },
+    {
+      "path": "fonts/Raleway-Light.woff2",
+      "url": "https://raw.githubusercontent.com/cyberbotics/webots/R2025a/resources/web/wwi/fonts/Raleway-Light.woff2",
+      "gitSha": "f575d8f8ac889dae9fd4145f8329cc6614ca0db3"
+    },
+    {
+      "path": "fonts/SIL-Open-Font-License.txt",
+      "url": "https://raw.githubusercontent.com/cyberbotics/webots/R2025a/resources/web/wwi/fonts/SIL-Open-Font-License.txt",
+      "gitSha": "458026d72fe76514864e29ffda5b1067cd8a97b3"
+    },
+    {
+      "path": "fonts/Tahoma.woff2",
+      "url": "https://raw.githubusercontent.com/cyberbotics/webots/R2025a/resources/web/wwi/fonts/Tahoma.woff2",
+      "gitSha": "91fb3bf73d84b5560cbfe66372b32398c56d7d84"
+    },
+    {
+      "path": "fonts/Trebuchet MS.woff2",
+      "url": "https://raw.githubusercontent.com/cyberbotics/webots/R2025a/resources/web/wwi/fonts/Trebuchet MS.woff2",
+      "gitSha": "8dcdb21709aa01af6c27f80c26d903217c062ac5"
+    },
+    {
+      "path": "fonts/Verdana.woff2",
+      "url": "https://raw.githubusercontent.com/cyberbotics/webots/R2025a/resources/web/wwi/fonts/Verdana.woff2",
+      "gitSha": "2684fa5c8db80b1d28d9fd1ee0d9fcb454a5a486"
+    },
+    {
+      "path": "fullscreen_handler.js",
+      "url": "https://raw.githubusercontent.com/cyberbotics/webots/R2025a/resources/web/wwi/fullscreen_handler.js",
+      "gitSha": "015abb87716f23be91aa7d33611db51fe6c35b60"
+    },
+    {
+      "path": "hdr_loader.js",
+      "url": "https://raw.githubusercontent.com/cyberbotics/webots/R2025a/resources/web/wwi/hdr_loader.js",
+      "gitSha": "b24c5ad92d898160f2b20eba4ecf24f4cf312c33"
+    },
+    {
+      "path": "images/documentation/help_console_window.png",
+      "url": "https://raw.githubusercontent.com/cyberbotics/webots/R2025a/resources/web/wwi/images/documentation/help_console_window.png",
+      "gitSha": "96c951be586da741e3f975775b2a62fe6ed7bdeb"
+    },
+    {
+      "path": "images/documentation/help_editor_menu.png",
+      "url": "https://raw.githubusercontent.com/cyberbotics/webots/R2025a/resources/web/wwi/images/documentation/help_editor_menu.png",
+      "gitSha": "420a2c8d57f1c5ad983fe511e680cd7c3c4556e2"
+    },
+    {
+      "path": "images/documentation/help_editor_window.png",
+      "url": "https://raw.githubusercontent.com/cyberbotics/webots/R2025a/resources/web/wwi/images/documentation/help_editor_window.png",
+      "gitSha": "11955257e3c370b4d0fb94905361e49b180cf040"
+    },
+    {
+      "path": "images/documentation/help_info_window.png",
+      "url": "https://raw.githubusercontent.com/cyberbotics/webots/R2025a/resources/web/wwi/images/documentation/help_info_window.png",
+      "gitSha": "2c0b151bf1ca90bb7673fb65144f8dee439cb028"
+    },
+    {
+      "path": "images/documentation/help_robot_window.png",
+      "url": "https://raw.githubusercontent.com/cyberbotics/webots/R2025a/resources/web/wwi/images/documentation/help_robot_window.png",
+      "gitSha": "71930ff0502d75e29c70d7028aa68010c1f1399e"
+    },
+    {
+      "path": "images/documentation/help_simulation_time.png",
+      "url": "https://raw.githubusercontent.com/cyberbotics/webots/R2025a/resources/web/wwi/images/documentation/help_simulation_time.png",
+      "gitSha": "3c3d85c20665b958973a0a9911b97ef9ac027dc4"
+    },
+    {
+      "path": "images/documentation/help_web_interface.png",
+      "url": "https://raw.githubusercontent.com/cyberbotics/webots/R2025a/resources/web/wwi/images/documentation/help_web_interface.png",
+      "gitSha": "5b301bed5626ff826e58465f2a54fe4a626bcbb7"
+    },
+    {
+      "path": "images/documentation/help_web_interface_with_run.png",
+      "url": "https://raw.githubusercontent.com/cyberbotics/webots/R2025a/resources/web/wwi/images/documentation/help_web_interface_with_run.png",
+      "gitSha": "8cef30ccc09bb0313c45ec0f20a0807efc2a685e"
+    },
+    {
+      "path": "images/documentation/help_world_selection.png",
+      "url": "https://raw.githubusercontent.com/cyberbotics/webots/R2025a/resources/web/wwi/images/documentation/help_world_selection.png",
+      "gitSha": "3c469f69520791c136058b582f3a9a5129e55a4d"
+    },
+    {
+      "path": "images/icons.svg",
+      "url": "https://raw.githubusercontent.com/cyberbotics/webots/R2025a/resources/web/wwi/images/icons.svg",
+      "gitSha": "05b6a36e0536ca588f236195de170ae72e5c2e53"
+    },
+    {
+      "path": "images/icons/arrow_left.svg",
+      "url": "https://raw.githubusercontent.com/cyberbotics/webots/R2025a/resources/web/wwi/images/icons/arrow_left.svg",
+      "gitSha": "76d7cd6ed95a3f96fee541f122afe427395028ef"
+    },
+    {
+      "path": "images/icons/clear.svg",
+      "url": "https://raw.githubusercontent.com/cyberbotics/webots/R2025a/resources/web/wwi/images/icons/clear.svg",
+      "gitSha": "c95c59da088940793f315f2356bacc4cec67ff8d"
+    },
+    {
+      "path": "images/icons/fullscreen.svg",
+      "url": "https://raw.githubusercontent.com/cyberbotics/webots/R2025a/resources/web/wwi/images/icons/fullscreen.svg",
+      "gitSha": "3fff6cf0928714980a98124f804ac5cf40df7f00"
+    },
+    {
+      "path": "images/icons/ide.svg",
+      "url": "https://raw.githubusercontent.com/cyberbotics/webots/R2025a/resources/web/wwi/images/icons/ide.svg",
+      "gitSha": "0044ade1e6acb18103acf2a76ca4c8dede7b4472"
+    },
+    {
+      "path": "images/icons/info.svg",
+      "url": "https://raw.githubusercontent.com/cyberbotics/webots/R2025a/resources/web/wwi/images/icons/info.svg",
+      "gitSha": "6492bfa8b34c4da095bf18042373a5405d7e83ef"
+    },
+    {
+      "path": "images/icons/proto_parameter.svg",
+      "url": "https://raw.githubusercontent.com/cyberbotics/webots/R2025a/resources/web/wwi/images/icons/proto_parameter.svg",
+      "gitSha": "63253c4a8b9d6f0e4ec7258e948757f0f2041833"
+    },
+    {
+      "path": "images/icons/quit.svg",
+      "url": "https://raw.githubusercontent.com/cyberbotics/webots/R2025a/resources/web/wwi/images/icons/quit.svg",
+      "gitSha": "b767dd431fdb88838a5dfc008f93a1ca7d736083"
+    },
+    {
+      "path": "images/icons/reload.svg",
+      "url": "https://raw.githubusercontent.com/cyberbotics/webots/R2025a/resources/web/wwi/images/icons/reload.svg",
+      "gitSha": "aa005efa4339ee198319f3cb622256b622730146"
+    },
+    {
+      "path": "images/icons/reset.svg",
+      "url": "https://raw.githubusercontent.com/cyberbotics/webots/R2025a/resources/web/wwi/images/icons/reset.svg",
+      "gitSha": "3ad25ccaa7e2b4848bbd0fb9b47c74411447f58b"
+    },
+    {
+      "path": "images/icons/robot-window.svg",
+      "url": "https://raw.githubusercontent.com/cyberbotics/webots/R2025a/resources/web/wwi/images/icons/robot-window.svg",
+      "gitSha": "aa7c4fe533422fb23d2f601eb8764cd723cf9103"
+    },
+    {
+      "path": "images/icons/settings.svg",
+      "url": "https://raw.githubusercontent.com/cyberbotics/webots/R2025a/resources/web/wwi/images/icons/settings.svg",
+      "gitSha": "101d262039fcfb88e3241d2f90112dbd9dd3638c"
+    },
+    {
+      "path": "images/icons/step.svg",
+      "url": "https://raw.githubusercontent.com/cyberbotics/webots/R2025a/resources/web/wwi/images/icons/step.svg",
+      "gitSha": "28a5ac740adca232d6e3f8bd2795d9e3447d7ce2"
+    },
+    {
+      "path": "images/icons/terminal.svg",
+      "url": "https://raw.githubusercontent.com/cyberbotics/webots/R2025a/resources/web/wwi/images/icons/terminal.svg",
+      "gitSha": "0da8985fb480bab1778777671a43e4d6a311921c"
+    },
+    {
+      "path": "images/icons/webots-view.svg",
+      "url": "https://raw.githubusercontent.com/cyberbotics/webots/R2025a/resources/web/wwi/images/icons/webots-view.svg",
+      "gitSha": "8b35fe0086654e6f9385a01bb90075e0be3b68af"
+    },
+    {
+      "path": "images/icons/windowed.svg",
+      "url": "https://raw.githubusercontent.com/cyberbotics/webots/R2025a/resources/web/wwi/images/icons/windowed.svg",
+      "gitSha": "589654658dd8167400f31f60c0868d2baf5226d2"
+    },
+    {
+      "path": "images/icons/world-selection.svg",
+      "url": "https://raw.githubusercontent.com/cyberbotics/webots/R2025a/resources/web/wwi/images/icons/world-selection.svg",
+      "gitSha": "737a14c81bba40cc17f461a13a6f37c930f4ed94"
+    },
+    {
+      "path": "images/loading/default_thumbnail.png",
+      "url": "https://raw.githubusercontent.com/cyberbotics/webots/R2025a/resources/web/wwi/images/loading/default_thumbnail.png",
+      "gitSha": "43517c962fd25fcbfd36c0e952cfe19b91b1acde"
+    },
+    {
+      "path": "images/loading/load_animation.gif",
+      "url": "https://raw.githubusercontent.com/cyberbotics/webots/R2025a/resources/web/wwi/images/loading/load_animation.gif",
+      "gitSha": "859fe1bdf2927187cf5464dfa38065a9478e27b1"
+    },
+    {
+      "path": "nodes/WbAbstractAppearance.js",
+      "url": "https://raw.githubusercontent.com/cyberbotics/webots/R2025a/resources/web/wwi/nodes/WbAbstractAppearance.js",
+      "gitSha": "b7b61e4f2a50196a2db9944934f37ae6d60d85b6"
+    },
+    {
+      "path": "nodes/WbAbstractCamera.js",
+      "url": "https://raw.githubusercontent.com/cyberbotics/webots/R2025a/resources/web/wwi/nodes/WbAbstractCamera.js",
+      "gitSha": "def59e14ba1dbdfcae2ffd3b2aceedfe11729a09"
+    },
+    {
+      "path": "nodes/WbAccelerometer.js",
+      "url": "https://raw.githubusercontent.com/cyberbotics/webots/R2025a/resources/web/wwi/nodes/WbAccelerometer.js",
+      "gitSha": "89efb0f77a4fa0e82d5a92dbee73d5e7d24506ff"
+    },
+    {
+      "path": "nodes/WbAltimeter.js",
+      "url": "https://raw.githubusercontent.com/cyberbotics/webots/R2025a/resources/web/wwi/nodes/WbAltimeter.js",
+      "gitSha": "959f8687d68fe0446427792f36df937f287fff7b"
+    },
+    {
+      "path": "nodes/WbAppearance.js",
+      "url": "https://raw.githubusercontent.com/cyberbotics/webots/R2025a/resources/web/wwi/nodes/WbAppearance.js",
+      "gitSha": "14d9891239cc5ec64caa268c5603d0a55f858d7a"
+    },
+    {
+      "path": "nodes/WbBackground.js",
+      "url": "https://raw.githubusercontent.com/cyberbotics/webots/R2025a/resources/web/wwi/nodes/WbBackground.js",
+      "gitSha": "7ab9c9c58aeceff67c5fbc34060901f9ba2ad0d4"
+    },
+    {
+      "path": "nodes/WbBallJoint.js",
+      "url": "https://raw.githubusercontent.com/cyberbotics/webots/R2025a/resources/web/wwi/nodes/WbBallJoint.js",
+      "gitSha": "f5dcf2b4a550b480b6ce4b73dc9659cfc0005f50"
+    },
+    {
+      "path": "nodes/WbBallJointParameters.js",
+      "url": "https://raw.githubusercontent.com/cyberbotics/webots/R2025a/resources/web/wwi/nodes/WbBallJointParameters.js",
+      "gitSha": "0ab46659b4f84f3c4fc37972f7bdd61aaaf203a7"
+    },
+    {
+      "path": "nodes/WbBaseNode.js",
+      "url": "https://raw.githubusercontent.com/cyberbotics/webots/R2025a/resources/web/wwi/nodes/WbBaseNode.js",
+      "gitSha": "4c8e30c0dbc6c964cbf0d29e08588ae329d6fec9"
+    },
+    {
+      "path": "nodes/WbBillboard.js",
+      "url": "https://raw.githubusercontent.com/cyberbotics/webots/R2025a/resources/web/wwi/nodes/WbBillboard.js",
+      "gitSha": "12b193c55a600c34363c2686fd575221385b0290"
+    },
+    {
+      "path": "nodes/WbBox.js",
+      "url": "https://raw.githubusercontent.com/cyberbotics/webots/R2025a/resources/web/wwi/nodes/WbBox.js",
+      "gitSha": "3bc4009b5ae6791389ffe24e5116d180c0820581"
+    },
+    {
+      "path": "nodes/WbBrake.js",
+      "url": "https://raw.githubusercontent.com/cyberbotics/webots/R2025a/resources/web/wwi/nodes/WbBrake.js",
+      "gitSha": "4f77c12dda53e4ff3a808599ce7d224923c74d45"
+    },
+    {
+      "path": "nodes/WbCadShape.js",
+      "url": "https://raw.githubusercontent.com/cyberbotics/webots/R2025a/resources/web/wwi/nodes/WbCadShape.js",
+      "gitSha": "889044a23d4b30839d90b32ecbe60e6fda6eb8f5"
+    },
+    {
+      "path": "nodes/WbCamera.js",
+      "url": "https://raw.githubusercontent.com/cyberbotics/webots/R2025a/resources/web/wwi/nodes/WbCamera.js",
+      "gitSha": "dd47cc17925daa358a0e82cb3ba927538b105981"
+    },
+    {
+      "path": "nodes/WbCapsule.js",
+      "url": "https://raw.githubusercontent.com/cyberbotics/webots/R2025a/resources/web/wwi/nodes/WbCapsule.js",
+      "gitSha": "b74cccd8ef182b88c24add62929636552957ae4e"
+    },
+    {
+      "path": "nodes/WbCharger.js",
+      "url": "https://raw.githubusercontent.com/cyberbotics/webots/R2025a/resources/web/wwi/nodes/WbCharger.js",
+      "gitSha": "42e69995c4923c30aa44481441ab51d4fa68f59f"
+    },
+    {
+      "path": "nodes/WbColor.js",
+      "url": "https://raw.githubusercontent.com/cyberbotics/webots/R2025a/resources/web/wwi/nodes/WbColor.js",
+      "gitSha": "26ef1eedbbf9d412478a2486368adb2a9b7dec7e"
+    },
+    {
+      "path": "nodes/WbCompass.js",
+      "url": "https://raw.githubusercontent.com/cyberbotics/webots/R2025a/resources/web/wwi/nodes/WbCompass.js",
+      "gitSha": "34faf779ca449ee3a088a7cb0905f553c9355087"
+    },
+    {
+      "path": "nodes/WbCone.js",
+      "url": "https://raw.githubusercontent.com/cyberbotics/webots/R2025a/resources/web/wwi/nodes/WbCone.js",
+      "gitSha": "0045872f308f537a7d19491090415d850141ae18"
+    },
+    {
+      "path": "nodes/WbConnector.js",
+      "url": "https://raw.githubusercontent.com/cyberbotics/webots/R2025a/resources/web/wwi/nodes/WbConnector.js",
+      "gitSha": "d20c587cb4384bba099091fbc640dde20f7e76b1"
+    },
+    {
+      "path": "nodes/WbCoordinate.js",
+      "url": "https://raw.githubusercontent.com/cyberbotics/webots/R2025a/resources/web/wwi/nodes/WbCoordinate.js",
+      "gitSha": "bff1e1b2999be8daca708a3cce134f951916e80e"
+    },
+    {
+      "path": "nodes/WbCylinder.js",
+      "url": "https://raw.githubusercontent.com/cyberbotics/webots/R2025a/resources/web/wwi/nodes/WbCylinder.js",
+      "gitSha": "f8519a8f2da81c31010268d8b9edcdf10c167b6d"
+    },
+    {
+      "path": "nodes/WbDevice.js",
+      "url": "https://raw.githubusercontent.com/cyberbotics/webots/R2025a/resources/web/wwi/nodes/WbDevice.js",
+      "gitSha": "36b6f1a7e1f997fe4ed0881fdbcdb8d6e4a80370"
+    },
+    {
+      "path": "nodes/WbDirectionalLight.js",
+      "url": "https://raw.githubusercontent.com/cyberbotics/webots/R2025a/resources/web/wwi/nodes/WbDirectionalLight.js",
+      "gitSha": "cee2512c7d23daf9306f2f767096bf4255aef813"
+    },
+    {
+      "path": "nodes/WbDisplay.js",
+      "url": "https://raw.githubusercontent.com/cyberbotics/webots/R2025a/resources/web/wwi/nodes/WbDisplay.js",
+      "gitSha": "733fc2e6b8deb1803b14630bfa41bb47a95a357d"
+    },
+    {
+      "path": "nodes/WbDistanceSensor.js",
+      "url": "https://raw.githubusercontent.com/cyberbotics/webots/R2025a/resources/web/wwi/nodes/WbDistanceSensor.js",
+      "gitSha": "535fc13f303ea830f5d75537a4312a7bad6208c8"
+    },
+    {
+      "path": "nodes/WbElevationGrid.js",
+      "url": "https://raw.githubusercontent.com/cyberbotics/webots/R2025a/resources/web/wwi/nodes/WbElevationGrid.js",
+      "gitSha": "c65bb9b618efcdb356f773b29bae6aa98d851091"
+    },
+    {
+      "path": "nodes/WbEmitter.js",
+      "url": "https://raw.githubusercontent.com/cyberbotics/webots/R2025a/resources/web/wwi/nodes/WbEmitter.js",
+      "gitSha": "a4d45f11a33de3c5503f360f622ac33ef0519d97"
+    },
+    {
+      "path": "nodes/WbFog.js",
+      "url": "https://raw.githubusercontent.com/cyberbotics/webots/R2025a/resources/web/wwi/nodes/WbFog.js",
+      "gitSha": "752c6c7992210741b389a82b728e25c81d501d03"
+    },
+    {
+      "path": "nodes/WbGeometry.js",
+      "url": "https://raw.githubusercontent.com/cyberbotics/webots/R2025a/resources/web/wwi/nodes/WbGeometry.js",
+      "gitSha": "a917616fe261239b95ce2fb34bc47463c218f4cc"
+    },
+    {
+      "path": "nodes/WbGps.js",
+      "url": "https://raw.githubusercontent.com/cyberbotics/webots/R2025a/resources/web/wwi/nodes/WbGps.js",
+      "gitSha": "6bfa16eea1f9e8dec3bb5dabc38022796490bc4d"
+    },
+    {
+      "path": "nodes/WbGroup.js",
+      "url": "https://raw.githubusercontent.com/cyberbotics/webots/R2025a/resources/web/wwi/nodes/WbGroup.js",
+      "gitSha": "9861f202013fd2bd82df222dd5a09a15c8b3a0d7"
+    },
+    {
+      "path": "nodes/WbGyro.js",
+      "url": "https://raw.githubusercontent.com/cyberbotics/webots/R2025a/resources/web/wwi/nodes/WbGyro.js",
+      "gitSha": "cb9ba8832104f00298ec6c4020bf093d626113d1"
+    },
+    {
+      "path": "nodes/WbHinge2Joint.js",
+      "url": "https://raw.githubusercontent.com/cyberbotics/webots/R2025a/resources/web/wwi/nodes/WbHinge2Joint.js",
+      "gitSha": "73134490927fa53cde1bc4f9fc6ac116d3a10c26"
+    },
+    {
+      "path": "nodes/WbHingeJoint.js",
+      "url": "https://raw.githubusercontent.com/cyberbotics/webots/R2025a/resources/web/wwi/nodes/WbHingeJoint.js",
+      "gitSha": "201800f61da482d4bfc7b813f87f0290cc492b74"
+    },
+    {
+      "path": "nodes/WbHingeJointParameters.js",
+      "url": "https://raw.githubusercontent.com/cyberbotics/webots/R2025a/resources/web/wwi/nodes/WbHingeJointParameters.js",
+      "gitSha": "18d1a1c70a67d402a4b3c3765f702556a6dd62a6"
+    },
+    {
+      "path": "nodes/WbImage.js",
+      "url": "https://raw.githubusercontent.com/cyberbotics/webots/R2025a/resources/web/wwi/nodes/WbImage.js",
+      "gitSha": "a2077c6e5bb22adc3e1b0cb0242f35b99fa93317"
+    },
+    {
+      "path": "nodes/WbImageTexture.js",
+      "url": "https://raw.githubusercontent.com/cyberbotics/webots/R2025a/resources/web/wwi/nodes/WbImageTexture.js",
+      "gitSha": "f9300ec3b702c284a817ce3d9128978fd2923840"
+    },
+    {
+      "path": "nodes/WbIndexedFaceSet.js",
+      "url": "https://raw.githubusercontent.com/cyberbotics/webots/R2025a/resources/web/wwi/nodes/WbIndexedFaceSet.js",
+      "gitSha": "2f9171fe972945a2ab8bbf6457d3ff9aade7ba18"
+    },
+    {
+      "path": "nodes/WbIndexedLineSet.js",
+      "url": "https://raw.githubusercontent.com/cyberbotics/webots/R2025a/resources/web/wwi/nodes/WbIndexedLineSet.js",
+      "gitSha": "a8eeda6574008c4df268e0fe06be087c4162b27b"
+    },
+    {
+      "path": "nodes/WbInertialUnit.js",
+      "url": "https://raw.githubusercontent.com/cyberbotics/webots/R2025a/resources/web/wwi/nodes/WbInertialUnit.js",
+      "gitSha": "da2e0a67749e3a424108b36a6d9f971051e48bf3"
+    },
+    {
+      "path": "nodes/WbJoint.js",
+      "url": "https://raw.githubusercontent.com/cyberbotics/webots/R2025a/resources/web/wwi/nodes/WbJoint.js",
+      "gitSha": "619e2b1561e3d6e09060d8c6af2f6fccedbd6b9d"
+    },
+    {
+      "path": "nodes/WbJointParameters.js",
+      "url": "https://raw.githubusercontent.com/cyberbotics/webots/R2025a/resources/web/wwi/nodes/WbJointParameters.js",
+      "gitSha": "7b88cc4b88f4661a35bf31ba3267b2f32e5fe953"
+    },
+    {
+      "path": "nodes/WbLed.js",
+      "url": "https://raw.githubusercontent.com/cyberbotics/webots/R2025a/resources/web/wwi/nodes/WbLed.js",
+      "gitSha": "de16c00fe091358fbf40586124af9086f5946a07"
+    },
+    {
+      "path": "nodes/WbLidar.js",
+      "url": "https://raw.githubusercontent.com/cyberbotics/webots/R2025a/resources/web/wwi/nodes/WbLidar.js",
+      "gitSha": "61f0c82f588a2bd4b256e9ba51c98ec72541d109"
+    },
+    {
+      "path": "nodes/WbLight.js",
+      "url": "https://raw.githubusercontent.com/cyberbotics/webots/R2025a/resources/web/wwi/nodes/WbLight.js",
+      "gitSha": "fdb474dc888d43543dad42c901e0bb647900a584"
+    },
+    {
+      "path": "nodes/WbLightSensor.js",
+      "url": "https://raw.githubusercontent.com/cyberbotics/webots/R2025a/resources/web/wwi/nodes/WbLightSensor.js",
+      "gitSha": "bda77955a9b1e75f2d76a133207781dd44dccd68"
+    },
+    {
+      "path": "nodes/WbLinearMotor.js",
+      "url": "https://raw.githubusercontent.com/cyberbotics/webots/R2025a/resources/web/wwi/nodes/WbLinearMotor.js",
+      "gitSha": "65c855e0adee1f07372e4af0b0220c89de3803dd"
+    },
+    {
+      "path": "nodes/WbLogicalDevice.js",
+      "url": "https://raw.githubusercontent.com/cyberbotics/webots/R2025a/resources/web/wwi/nodes/WbLogicalDevice.js",
+      "gitSha": "cad6476c2728a1a7ad3e96b594d0269c67c6a758"
+    },
+    {
+      "path": "nodes/WbLookupTable.js",
+      "url": "https://raw.githubusercontent.com/cyberbotics/webots/R2025a/resources/web/wwi/nodes/WbLookupTable.js",
+      "gitSha": "a7355a08f146036233775355f50e5d179c10a442"
+    },
+    {
+      "path": "nodes/WbMaterial.js",
+      "url": "https://raw.githubusercontent.com/cyberbotics/webots/R2025a/resources/web/wwi/nodes/WbMaterial.js",
+      "gitSha": "ed73f50980f77135ff0fc73ddbe95ed741c0308b"
+    },
+    {
+      "path": "nodes/WbMesh.js",
+      "url": "https://raw.githubusercontent.com/cyberbotics/webots/R2025a/resources/web/wwi/nodes/WbMesh.js",
+      "gitSha": "1571b41aabb4d64b7a408428658f419357ab3e41"
+    },
+    {
+      "path": "nodes/WbMotor.js",
+      "url": "https://raw.githubusercontent.com/cyberbotics/webots/R2025a/resources/web/wwi/nodes/WbMotor.js",
+      "gitSha": "f114d9b0216edd3369fb1910be7428476904873b"
+    },
+    {
+      "path": "nodes/WbNormal.js",
+      "url": "https://raw.githubusercontent.com/cyberbotics/webots/R2025a/resources/web/wwi/nodes/WbNormal.js",
+      "gitSha": "5d1a5b63236f755aeffa99c0f0e880dec07e4b3a"
+    },
+    {
+      "path": "nodes/WbPbrAppearance.js",
+      "url": "https://raw.githubusercontent.com/cyberbotics/webots/R2025a/resources/web/wwi/nodes/WbPbrAppearance.js",
+      "gitSha": "27854b7c845d20c1cd016ba40e6b580934697fc5"
+    },
+    {
+      "path": "nodes/WbPen.js",
+      "url": "https://raw.githubusercontent.com/cyberbotics/webots/R2025a/resources/web/wwi/nodes/WbPen.js",
+      "gitSha": "a7adacf40debb24e4f0e9de063c86c1685e677c2"
+    },
+    {
+      "path": "nodes/WbPlane.js",
+      "url": "https://raw.githubusercontent.com/cyberbotics/webots/R2025a/resources/web/wwi/nodes/WbPlane.js",
+      "gitSha": "091343e89a5fb96c6894c8eb75789e7845d8c942"
+    },
+    {
+      "path": "nodes/WbPointLight.js",
+      "url": "https://raw.githubusercontent.com/cyberbotics/webots/R2025a/resources/web/wwi/nodes/WbPointLight.js",
+      "gitSha": "f4e91e5faf85b8c19cef72dc1aac49d0af8beab1"
+    },
+    {
+      "path": "nodes/WbPointSet.js",
+      "url": "https://raw.githubusercontent.com/cyberbotics/webots/R2025a/resources/web/wwi/nodes/WbPointSet.js",
+      "gitSha": "a1abe83543edd13369d220b023c4f25887d653a1"
+    },
+    {
+      "path": "nodes/WbPose.js",
+      "url": "https://raw.githubusercontent.com/cyberbotics/webots/R2025a/resources/web/wwi/nodes/WbPose.js",
+      "gitSha": "b51a01b4d68bc19dc04e82bc7182b71d2357b050"
+    },
+    {
+      "path": "nodes/WbPositionSensor.js",
+      "url": "https://raw.githubusercontent.com/cyberbotics/webots/R2025a/resources/web/wwi/nodes/WbPositionSensor.js",
+      "gitSha": "3e88926ba35d2431f6abdad408ff8347172f4521"
+    },
+    {
+      "path": "nodes/WbPropeller.js",
+      "url": "https://raw.githubusercontent.com/cyberbotics/webots/R2025a/resources/web/wwi/nodes/WbPropeller.js",
+      "gitSha": "da412799a4f7df1836b9faca063dca559ce31b75"
+    },
+    {
+      "path": "nodes/WbRadar.js",
+      "url": "https://raw.githubusercontent.com/cyberbotics/webots/R2025a/resources/web/wwi/nodes/WbRadar.js",
+      "gitSha": "dd91f774d58c0a33b62d977a38d8c99c5f55d506"
+    },
+    {
+      "path": "nodes/WbRangeFinder.js",
+      "url": "https://raw.githubusercontent.com/cyberbotics/webots/R2025a/resources/web/wwi/nodes/WbRangeFinder.js",
+      "gitSha": "79889cc07aca54755808c037e4e3f65815c39628"
+    },
+    {
+      "path": "nodes/WbReceiver.js",
+      "url": "https://raw.githubusercontent.com/cyberbotics/webots/R2025a/resources/web/wwi/nodes/WbReceiver.js",
+      "gitSha": "f7e5b9dd83786d068992ab9c6de21f87c0d2f200"
+    },
+    {
+      "path": "nodes/WbRotationalMotor.js",
+      "url": "https://raw.githubusercontent.com/cyberbotics/webots/R2025a/resources/web/wwi/nodes/WbRotationalMotor.js",
+      "gitSha": "ed0b720dbec7f814d6e1d6e3bf8fa099f867a2be"
+    },
+    {
+      "path": "nodes/WbScene.js",
+      "url": "https://raw.githubusercontent.com/cyberbotics/webots/R2025a/resources/web/wwi/nodes/WbScene.js",
+      "gitSha": "f575cf2647e487c5a59f057f7b5bd245d3b3b4d4"
+    },
+    {
+      "path": "nodes/WbShape.js",
+      "url": "https://raw.githubusercontent.com/cyberbotics/webots/R2025a/resources/web/wwi/nodes/WbShape.js",
+      "gitSha": "c7879af12ae8fa64dff2af813b6c2e682ff50fc0"
+    },
+    {
+      "path": "nodes/WbSliderJoint.js",
+      "url": "https://raw.githubusercontent.com/cyberbotics/webots/R2025a/resources/web/wwi/nodes/WbSliderJoint.js",
+      "gitSha": "d45404223d3bbd913df2fb3008506037d85c5733"
+    },
+    {
+      "path": "nodes/WbSlot.js",
+      "url": "https://raw.githubusercontent.com/cyberbotics/webots/R2025a/resources/web/wwi/nodes/WbSlot.js",
+      "gitSha": "7ae6ffd463f191db8b910b38aa0248ba246e5cde"
+    },
+    {
+      "path": "nodes/WbSolid.js",
+      "url": "https://raw.githubusercontent.com/cyberbotics/webots/R2025a/resources/web/wwi/nodes/WbSolid.js",
+      "gitSha": "f639467b4c4418fd6312bcf1a07796986c81d944"
+    },
+    {
+      "path": "nodes/WbSpeaker.js",
+      "url": "https://raw.githubusercontent.com/cyberbotics/webots/R2025a/resources/web/wwi/nodes/WbSpeaker.js",
+      "gitSha": "3a6aebeac1d03acd4672cebd46e70858f4db2073"
+    },
+    {
+      "path": "nodes/WbSphere.js",
+      "url": "https://raw.githubusercontent.com/cyberbotics/webots/R2025a/resources/web/wwi/nodes/WbSphere.js",
+      "gitSha": "b604136bafe4a551fafd093237ad6b9d25878f53"
+    },
+    {
+      "path": "nodes/WbSpotLight.js",
+      "url": "https://raw.githubusercontent.com/cyberbotics/webots/R2025a/resources/web/wwi/nodes/WbSpotLight.js",
+      "gitSha": "46cc17007c74578bcc572ec171db618b4a08db3e"
+    },
+    {
+      "path": "nodes/WbTextureCoordinate.js",
+      "url": "https://raw.githubusercontent.com/cyberbotics/webots/R2025a/resources/web/wwi/nodes/WbTextureCoordinate.js",
+      "gitSha": "da999f63b3eb3d2472e1a7b16f0b390ce425ee0b"
+    },
+    {
+      "path": "nodes/WbTextureTransform.js",
+      "url": "https://raw.githubusercontent.com/cyberbotics/webots/R2025a/resources/web/wwi/nodes/WbTextureTransform.js",
+      "gitSha": "bdd2fc229d5bd5643160214569f58d71136545a1"
+    },
+    {
+      "path": "nodes/WbTouchSensor.js",
+      "url": "https://raw.githubusercontent.com/cyberbotics/webots/R2025a/resources/web/wwi/nodes/WbTouchSensor.js",
+      "gitSha": "b50f4af128d11a80d8338e05a46b2245e88a6903"
+    },
+    {
+      "path": "nodes/WbTrack.js",
+      "url": "https://raw.githubusercontent.com/cyberbotics/webots/R2025a/resources/web/wwi/nodes/WbTrack.js",
+      "gitSha": "dd889c1f617b1f94658fd5b216e11463b3c6de28"
+    },
+    {
+      "path": "nodes/WbTrackWheel.js",
+      "url": "https://raw.githubusercontent.com/cyberbotics/webots/R2025a/resources/web/wwi/nodes/WbTrackWheel.js",
+      "gitSha": "00cc0ae57522be3e6fe5c241f19d5ebc6e184437"
+    },
+    {
+      "path": "nodes/WbTransform.js",
+      "url": "https://raw.githubusercontent.com/cyberbotics/webots/R2025a/resources/web/wwi/nodes/WbTransform.js",
+      "gitSha": "adbad627fad156c452c4ce8f350f63244471a521"
+    },
+    {
+      "path": "nodes/WbTriangleMeshGeometry.js",
+      "url": "https://raw.githubusercontent.com/cyberbotics/webots/R2025a/resources/web/wwi/nodes/WbTriangleMeshGeometry.js",
+      "gitSha": "886883e191b25a8475a9f1726c70b3e5bec46535"
+    },
+    {
+      "path": "nodes/WbVacuumGripper.js",
+      "url": "https://raw.githubusercontent.com/cyberbotics/webots/R2025a/resources/web/wwi/nodes/WbVacuumGripper.js",
+      "gitSha": "4eea89592cda38d549e3ae8bac02b123eb2ee768"
+    },
+    {
+      "path": "nodes/WbViewpoint.js",
+      "url": "https://raw.githubusercontent.com/cyberbotics/webots/R2025a/resources/web/wwi/nodes/WbViewpoint.js",
+      "gitSha": "731923853c73a74e379f507014beb50260afa3af"
+    },
+    {
+      "path": "nodes/WbWorld.js",
+      "url": "https://raw.githubusercontent.com/cyberbotics/webots/R2025a/resources/web/wwi/nodes/WbWorld.js",
+      "gitSha": "8de7b71876c4b566872a29055a5e8497c0fb091f"
+    },
+    {
+      "path": "nodes/utils/WbBeltPosition.js",
+      "url": "https://raw.githubusercontent.com/cyberbotics/webots/R2025a/resources/web/wwi/nodes/utils/WbBeltPosition.js",
+      "gitSha": "26c0b158b4b90770b9ea8e47aec93bcbbe973829"
+    },
+    {
+      "path": "nodes/utils/WbBoundingSphere.js",
+      "url": "https://raw.githubusercontent.com/cyberbotics/webots/R2025a/resources/web/wwi/nodes/utils/WbBoundingSphere.js",
+      "gitSha": "d7c248e300645a38dbc0ac46d6c7d06b2730686e"
+    },
+    {
+      "path": "nodes/utils/WbFieldChecker.js",
+      "url": "https://raw.githubusercontent.com/cyberbotics/webots/R2025a/resources/web/wwi/nodes/utils/WbFieldChecker.js",
+      "gitSha": "11f9ab72f7205d8d11ef277710bef1d2afc055f5"
+    },
+    {
+      "path": "nodes/utils/WbMatrix3.js",
+      "url": "https://raw.githubusercontent.com/cyberbotics/webots/R2025a/resources/web/wwi/nodes/utils/WbMatrix3.js",
+      "gitSha": "6891286b8f25f24c4d5cd315cb87657f7cdeac9e"
+    },
+    {
+      "path": "nodes/utils/WbMatrix4.js",
+      "url": "https://raw.githubusercontent.com/cyberbotics/webots/R2025a/resources/web/wwi/nodes/utils/WbMatrix4.js",
+      "gitSha": "16741db5ad6dd8970c81a00f09b44d7c135bd7ea"
+    },
+    {
+      "path": "nodes/utils/WbPathSegment.js",
+      "url": "https://raw.githubusercontent.com/cyberbotics/webots/R2025a/resources/web/wwi/nodes/utils/WbPathSegment.js",
+      "gitSha": "18cb4f2203b3b82bb25c1338a66816a4e2e19eb1"
+    },
+    {
+      "path": "nodes/utils/WbQuaternion.js",
+      "url": "https://raw.githubusercontent.com/cyberbotics/webots/R2025a/resources/web/wwi/nodes/utils/WbQuaternion.js",
+      "gitSha": "13623e78eb0429fa9fafe5a0c7a423a563793c0b"
+    },
+    {
+      "path": "nodes/utils/WbRay.js",
+      "url": "https://raw.githubusercontent.com/cyberbotics/webots/R2025a/resources/web/wwi/nodes/utils/WbRay.js",
+      "gitSha": "d6967dc4e4c9686d9703f5f446f713268fb02273"
+    },
+    {
+      "path": "nodes/utils/WbTriangleMesh.js",
+      "url": "https://raw.githubusercontent.com/cyberbotics/webots/R2025a/resources/web/wwi/nodes/utils/WbTriangleMesh.js",
+      "gitSha": "98b818c0c5ac886e5a2abcdfe57581e319476b28"
+    },
+    {
+      "path": "nodes/utils/WbVector2.js",
+      "url": "https://raw.githubusercontent.com/cyberbotics/webots/R2025a/resources/web/wwi/nodes/utils/WbVector2.js",
+      "gitSha": "c541e443b30851bdd4b6ad147cd3ad67e8aafb6a"
+    },
+    {
+      "path": "nodes/utils/WbVector3.js",
+      "url": "https://raw.githubusercontent.com/cyberbotics/webots/R2025a/resources/web/wwi/nodes/utils/WbVector3.js",
+      "gitSha": "e8774d72fea9d03ad9b28b9463da2e80322c403b"
+    },
+    {
+      "path": "nodes/utils/WbVector4.js",
+      "url": "https://raw.githubusercontent.com/cyberbotics/webots/R2025a/resources/web/wwi/nodes/utils/WbVector4.js",
+      "gitSha": "70cfb7ca9a275282687b4f229e7a1cf020e47699"
+    },
+    {
+      "path": "nodes/utils/WbWrenMeshBuffers.js",
+      "url": "https://raw.githubusercontent.com/cyberbotics/webots/R2025a/resources/web/wwi/nodes/utils/WbWrenMeshBuffers.js",
+      "gitSha": "03e45609fe3a3545fa27f674525ffb3ea2f523b2"
+    },
+    {
+      "path": "nodes/utils/constants.js",
+      "url": "https://raw.githubusercontent.com/cyberbotics/webots/R2025a/resources/web/wwi/nodes/utils/constants.js",
+      "gitSha": "36b3e85b92c760ead80bc1e4fb58913ade7d29b5"
+    },
+    {
+      "path": "nodes/utils/id_provider.js",
+      "url": "https://raw.githubusercontent.com/cyberbotics/webots/R2025a/resources/web/wwi/nodes/utils/id_provider.js",
+      "gitSha": "9e89862c670effeb969d88b9e66c5bf09b0879d0"
+    },
+    {
+      "path": "nodes/utils/math_utilities.js",
+      "url": "https://raw.githubusercontent.com/cyberbotics/webots/R2025a/resources/web/wwi/nodes/utils/math_utilities.js",
+      "gitSha": "db3a9eae4e807b6b1effc181b33331c474bd7691"
+    },
+    {
+      "path": "nodes/utils/node_utilities.js",
+      "url": "https://raw.githubusercontent.com/cyberbotics/webots/R2025a/resources/web/wwi/nodes/utils/node_utilities.js",
+      "gitSha": "ce7ab53af63ea81c2113c2e1a6fd8b6f90e79183"
+    },
+    {
+      "path": "nodes/utils/utils.js",
+      "url": "https://raw.githubusercontent.com/cyberbotics/webots/R2025a/resources/web/wwi/nodes/utils/utils.js",
+      "gitSha": "f6c3be5cd921a6f164c0f1c7f50031dd158f7330"
+    },
+    {
+      "path": "nodes/wb_node_type.js",
+      "url": "https://raw.githubusercontent.com/cyberbotics/webots/R2025a/resources/web/wwi/nodes/wb_node_type.js",
+      "gitSha": "8dab02acc21c9b22f38be49bb64db4ac39c16084"
+    },
+    {
+      "path": "nodes/wb_preferences.js",
+      "url": "https://raw.githubusercontent.com/cyberbotics/webots/R2025a/resources/web/wwi/nodes/wb_preferences.js",
+      "gitSha": "0bd0daf83cb25e32f7497a47176add99082f0af6"
+    },
+    {
+      "path": "protoVisualizer/Field.js",
+      "url": "https://raw.githubusercontent.com/cyberbotics/webots/R2025a/resources/web/wwi/protoVisualizer/Field.js",
+      "gitSha": "173c2b53339667f0f8069c8a5d82b945caec8411"
+    },
+    {
+      "path": "protoVisualizer/FieldModel.js",
+      "url": "https://raw.githubusercontent.com/cyberbotics/webots/R2025a/resources/web/wwi/protoVisualizer/FieldModel.js",
+      "gitSha": "15d73479f52113fe1cb9eb400cf5925b98d79fe8"
+    },
+    {
+      "path": "protoVisualizer/Node.js",
+      "url": "https://raw.githubusercontent.com/cyberbotics/webots/R2025a/resources/web/wwi/protoVisualizer/Node.js",
+      "gitSha": "3207b1b54d4310b20eeba1652c049f76556748cf"
+    },
+    {
+      "path": "protoVisualizer/Parameter.js",
+      "url": "https://raw.githubusercontent.com/cyberbotics/webots/R2025a/resources/web/wwi/protoVisualizer/Parameter.js",
+      "gitSha": "bdfd1fe98e46628147aa876ec81f9c462376a3e7"
+    },
+    {
+      "path": "protoVisualizer/TemplateEngine.js",
+      "url": "https://raw.githubusercontent.com/cyberbotics/webots/R2025a/resources/web/wwi/protoVisualizer/TemplateEngine.js",
+      "gitSha": "770f77be2047336f5884b8c4265367e8aadc5370"
+    },
+    {
+      "path": "protoVisualizer/Token.js",
+      "url": "https://raw.githubusercontent.com/cyberbotics/webots/R2025a/resources/web/wwi/protoVisualizer/Token.js",
+      "gitSha": "9764f26f4ec3a85702100d579a0d9db0de164cd8"
+    },
+    {
+      "path": "protoVisualizer/Tokenizer.js",
+      "url": "https://raw.githubusercontent.com/cyberbotics/webots/R2025a/resources/web/wwi/protoVisualizer/Tokenizer.js",
+      "gitSha": "24ea3f2b9dd651beb8e5878f3cc6b610d6bd8651"
+    },
+    {
+      "path": "protoVisualizer/Vrml.js",
+      "url": "https://raw.githubusercontent.com/cyberbotics/webots/R2025a/resources/web/wwi/protoVisualizer/Vrml.js",
+      "gitSha": "4b43af5a9f893376aa03279eb2c1ee22c5b1dabe"
+    },
+    {
+      "path": "protoVisualizer/scripts/basenode_encoder.py",
+      "url": "https://raw.githubusercontent.com/cyberbotics/webots/R2025a/resources/web/wwi/protoVisualizer/scripts/basenode_encoder.py",
+      "gitSha": "25ab72a530fbd5dc202d41b9ab76e48e77b32a4f"
+    },
+    {
+      "path": "protoVisualizer/templating/jsTemplate.js",
+      "url": "https://raw.githubusercontent.com/cyberbotics/webots/R2025a/resources/web/wwi/protoVisualizer/templating/jsTemplate.js",
+      "gitSha": "2017a60591ca0c87dbe71f57a3b5ef76bf604c7b"
+    },
+    {
+      "path": "protoVisualizer/templating/modules/webots/wbgeometry.js",
+      "url": "https://raw.githubusercontent.com/cyberbotics/webots/R2025a/resources/web/wwi/protoVisualizer/templating/modules/webots/wbgeometry.js",
+      "gitSha": "8ae2500acf6c371aa9d82594e62e02f4bc6cc667"
+    },
+    {
+      "path": "protoVisualizer/templating/modules/webots/wbrandom.js",
+      "url": "https://raw.githubusercontent.com/cyberbotics/webots/R2025a/resources/web/wwi/protoVisualizer/templating/modules/webots/wbrandom.js",
+      "gitSha": "a5628fecf6cf4e0948996d7b0d016031f167f465"
+    },
+    {
+      "path": "protoVisualizer/templating/modules/webots/wbrotation.js",
+      "url": "https://raw.githubusercontent.com/cyberbotics/webots/R2025a/resources/web/wwi/protoVisualizer/templating/modules/webots/wbrotation.js",
+      "gitSha": "3abaa3ab8aad44a5117d7186e9d27193c01130b9"
+    },
+    {
+      "path": "protoVisualizer/templating/modules/webots/wbutility.js",
+      "url": "https://raw.githubusercontent.com/cyberbotics/webots/R2025a/resources/web/wwi/protoVisualizer/templating/modules/webots/wbutility.js",
+      "gitSha": "6646487a3207ec7f0f9c6f43ad09416145d296ac"
+    },
+    {
+      "path": "protoVisualizer/templating/modules/webots/wbvector2.js",
+      "url": "https://raw.githubusercontent.com/cyberbotics/webots/R2025a/resources/web/wwi/protoVisualizer/templating/modules/webots/wbvector2.js",
+      "gitSha": "bc52a90a3d590afa6c12c93aeecd72b6258c2375"
+    },
+    {
+      "path": "protoVisualizer/templating/modules/webots/wbvector3.js",
+      "url": "https://raw.githubusercontent.com/cyberbotics/webots/R2025a/resources/web/wwi/protoVisualizer/templating/modules/webots/wbvector3.js",
+      "gitSha": "f39661a6de8d716bc22f877fa608ed09a867f1cc"
+    },
+    {
+      "path": "protoVisualizer/test_proto_viewer.html",
+      "url": "https://raw.githubusercontent.com/cyberbotics/webots/R2025a/resources/web/wwi/protoVisualizer/test_proto_viewer.html",
+      "gitSha": "7df9aaacd1df6e82889a6c8995d4b4564bd1afa3"
+    },
+    {
+      "path": "protoVisualizer/vrml_type.js",
+      "url": "https://raw.githubusercontent.com/cyberbotics/webots/R2025a/resources/web/wwi/protoVisualizer/vrml_type.js",
+      "gitSha": "7e3f12a7c0d39b3b1ff8b7cb308a4eaf1aa686b1"
+    },
+    {
+      "path": "proto_viewer.js",
+      "url": "https://raw.githubusercontent.com/cyberbotics/webots/R2025a/resources/web/wwi/proto_viewer.js",
+      "gitSha": "06848601d034f8bcf4f8547a48f1237b1fc0271d"
+    },
+    {
+      "path": "request_methods.js",
+      "url": "https://raw.githubusercontent.com/cyberbotics/webots/R2025a/resources/web/wwi/request_methods.js",
+      "gitSha": "9b13416f4004b85570fa74fbefd68f386fa6cc72"
+    },
+    {
+      "path": "system_info.js",
+      "url": "https://raw.githubusercontent.com/cyberbotics/webots/R2025a/resources/web/wwi/system_info.js",
+      "gitSha": "265051433e9127e03f5b303b6f14677c6fc5168f"
+    },
+    {
+      "path": "viewer.js",
+      "url": "https://raw.githubusercontent.com/cyberbotics/webots/R2025a/resources/web/wwi/viewer.js",
+      "gitSha": "d6e67ffb75aa429a35444c228fe7c58b8e5d62d9"
+    },
+    {
+      "path": "webots.js",
+      "url": "https://raw.githubusercontent.com/cyberbotics/webots/R2025a/resources/web/wwi/webots.js",
+      "gitSha": "b5142b1a4c8f65abec85629c8dbfc124d249718f"
+    },
+    {
+      "path": "wren/WbTesselator.js",
+      "url": "https://raw.githubusercontent.com/cyberbotics/webots/R2025a/resources/web/wwi/wren/WbTesselator.js",
+      "gitSha": "69f62990b723e7874d84faa175fd2df344e142ac"
+    },
+    {
+      "path": "wren/WbWrenAbstractPostProcessingEffect.js",
+      "url": "https://raw.githubusercontent.com/cyberbotics/webots/R2025a/resources/web/wwi/wren/WbWrenAbstractPostProcessingEffect.js",
+      "gitSha": "ffa50a56fa7a320b0019e8c2b4206c6349f026ca"
+    },
+    {
+      "path": "wren/WbWrenBloom.js",
+      "url": "https://raw.githubusercontent.com/cyberbotics/webots/R2025a/resources/web/wwi/wren/WbWrenBloom.js",
+      "gitSha": "e57e0c5ad58fe2d29fbd2efe6be86937d3d03684"
+    },
+    {
+      "path": "wren/WbWrenGtao.js",
+      "url": "https://raw.githubusercontent.com/cyberbotics/webots/R2025a/resources/web/wwi/wren/WbWrenGtao.js",
+      "gitSha": "cb7f2bd49e711c905299c55ce7253a05fbbd2d19"
+    },
+    {
+      "path": "wren/WbWrenHdr.js",
+      "url": "https://raw.githubusercontent.com/cyberbotics/webots/R2025a/resources/web/wwi/wren/WbWrenHdr.js",
+      "gitSha": "a7ed3314f2c8e2da02735bbe087f6fa98db1e0aa"
+    },
+    {
+      "path": "wren/WbWrenPicker.js",
+      "url": "https://raw.githubusercontent.com/cyberbotics/webots/R2025a/resources/web/wwi/wren/WbWrenPicker.js",
+      "gitSha": "97b07c56db3457519d9a2995226fc6c834ec4daa"
+    },
+    {
+      "path": "wren/WbWrenPostProcessingEffects.js",
+      "url": "https://raw.githubusercontent.com/cyberbotics/webots/R2025a/resources/web/wwi/wren/WbWrenPostProcessingEffects.js",
+      "gitSha": "17eb5f394826bc0f677603c7bf7e04493b7114f5"
+    },
+    {
+      "path": "wren/WbWrenRenderingContext.js",
+      "url": "https://raw.githubusercontent.com/cyberbotics/webots/R2025a/resources/web/wwi/wren/WbWrenRenderingContext.js",
+      "gitSha": "cd4a09017b07927b9c66a4858c79868490a48d4a"
+    },
+    {
+      "path": "wren/WbWrenShaders.js",
+      "url": "https://raw.githubusercontent.com/cyberbotics/webots/R2025a/resources/web/wwi/wren/WbWrenShaders.js",
+      "gitSha": "be7f8eb566d8bde1bed667e003ae95ee205416c6"
+    },
+    {
+      "path": "wren/WbWrenSmaa.js",
+      "url": "https://raw.githubusercontent.com/cyberbotics/webots/R2025a/resources/web/wwi/wren/WbWrenSmaa.js",
+      "gitSha": "d23f5d839aec928ed51d9391c02cd4a1d0cf85e1"
+    },
+    {
+      "path": "wrenjs.js",
+      "url": "https://cyberbotics.com/wwi/R2025a/wrenjs.js",
+      "sha256": "deb8dbde9465e90562ef46668d2014b331ede8fb1b1d4ebb6377aa214b79556b"
+    },
+    {
+      "path": "wrenjs.wasm",
+      "url": "https://cyberbotics.com/wwi/R2025a/wrenjs.wasm",
+      "sha256": "72770c92912d47757cf3de7f1447a11d7fba2344aa8e0ef9e9b0bf417e723b56"
+    },
+    {
+      "path": "wrenjs.data",
+      "url": "https://cyberbotics.com/wwi/R2025a/wrenjs.data",
+      "sha256": "544350205fd8929d2c5ab6be93ef6b61dc72f9639436b7de32bee3c6371002ae"
+    },
+    {
+      "path": "enum.js",
+      "url": "https://cyberbotics.com/wwi/R2025a/enum.js",
+      "sha256": "87301ae67e3169ca2d89b352c7a93c57def5f0cb990469fb7d38687455cb6f1d"
+    },
+    {
+      "path": "LICENSE",
+      "url": "https://raw.githubusercontent.com/cyberbotics/webots/R2025a/LICENSE",
+      "sha256": "51b88fd3e9e24edcdce1dd145a4fca2dcd12911407f00b06dfa6ff600f9733c1"
+    },
+    {
+      "path": "images/webots-logo.png",
+      "url": "https://cyberbotics.com/assets/images/webots.png",
+      "sha256": "d5f10ace7034741f8646cb5978b82d78a2ef9ffb1771a757ca25fb185ccced0a"
+    },
+    {
+      "path": "images/missing_texture.png",
+      "url": "https://cyberbotics.com/wwi/images/missing_texture.png",
+      "sha256": "79165b59234c0600d697eb59076fabd6e36d3fe759d1616d01b1409bbadb6a8b"
+    },
+    {
+      "path": "images/post_processing/smaa_area_texture.png",
+      "url": "https://cyberbotics.com/wwi/R2025a/images/post_processing/smaa_area_texture.png",
+      "sha256": "b5a8e3bb3fbf11136d1411c6b7454f4469358559352987a074e22047582c0625"
+    },
+    {
+      "path": "images/post_processing/smaa_search_texture.png",
+      "url": "https://cyberbotics.com/wwi/R2025a/images/post_processing/smaa_search_texture.png",
+      "sha256": "025eb54fb8c4c2858a7d6d9743b88919fe5f9c661329c447a8f1e28971ae7403"
+    },
+    {
+      "path": "images/post_processing/gtao_noise_texture.png",
+      "url": "https://cyberbotics.com/wwi/R2025a/images/post_processing/gtao_noise_texture.png",
+      "sha256": "9c9c7f8a555a732c2efee525d8ef4c663e27d046d8f995c70419dec8f858f763"
+    },
+    {
+      "path": "world-assets/projects/default/worlds/textures/cubic/mountains_back.hdr",
+      "url": "https://raw.githubusercontent.com/cyberbotics/webots/R2025a/projects/default/worlds/textures/cubic/mountains_back.hdr",
+      "sha256": "86487374bf4f44ae5406e02ab577c5c65177b4598c9bb1b7471611b7c6235104"
+    },
+    {
+      "path": "world-assets/projects/default/worlds/textures/cubic/mountains_back.jpg",
+      "url": "https://raw.githubusercontent.com/cyberbotics/webots/R2025a/projects/default/worlds/textures/cubic/mountains_back.jpg",
+      "sha256": "3e7992243a6cdbcea93b9be2c6ff795117f5de1d1ac4a58a817d0493702c5650"
+    },
+    {
+      "path": "world-assets/projects/default/worlds/textures/cubic/mountains_bottom.hdr",
+      "url": "https://raw.githubusercontent.com/cyberbotics/webots/R2025a/projects/default/worlds/textures/cubic/mountains_bottom.hdr",
+      "sha256": "261b4c8941c1ac409c1d24b81b042481b49ab54c72e533fb3e5b58f503e97366"
+    },
+    {
+      "path": "world-assets/projects/default/worlds/textures/cubic/mountains_bottom.jpg",
+      "url": "https://raw.githubusercontent.com/cyberbotics/webots/R2025a/projects/default/worlds/textures/cubic/mountains_bottom.jpg",
+      "sha256": "dab398a830d90303b6f6564e43c5da8ca969f5686c5af036a0c7566f40f708c9"
+    },
+    {
+      "path": "world-assets/projects/default/worlds/textures/cubic/mountains_front.hdr",
+      "url": "https://raw.githubusercontent.com/cyberbotics/webots/R2025a/projects/default/worlds/textures/cubic/mountains_front.hdr",
+      "sha256": "8ddb2bb7db3968d2341ff8684691ab48899c058f728bc8445e66beae10044a2c"
+    },
+    {
+      "path": "world-assets/projects/default/worlds/textures/cubic/mountains_front.jpg",
+      "url": "https://raw.githubusercontent.com/cyberbotics/webots/R2025a/projects/default/worlds/textures/cubic/mountains_front.jpg",
+      "sha256": "a9af978e54b75e696e08a7b42dbe0e4406a7979d09a650f46740ae59593a6d6b"
+    },
+    {
+      "path": "world-assets/projects/default/worlds/textures/cubic/mountains_left.hdr",
+      "url": "https://raw.githubusercontent.com/cyberbotics/webots/R2025a/projects/default/worlds/textures/cubic/mountains_left.hdr",
+      "sha256": "01a576c90f6f73c6373ed8eee42ba9c81542be4f0b65510920f01a0229b1a8b9"
+    },
+    {
+      "path": "world-assets/projects/default/worlds/textures/cubic/mountains_left.jpg",
+      "url": "https://raw.githubusercontent.com/cyberbotics/webots/R2025a/projects/default/worlds/textures/cubic/mountains_left.jpg",
+      "sha256": "74e642490d4327fe3f526baaedfc4c73bde7ca5a94cdc422476b4024e3a026b1"
+    },
+    {
+      "path": "world-assets/projects/default/worlds/textures/cubic/mountains_right.hdr",
+      "url": "https://raw.githubusercontent.com/cyberbotics/webots/R2025a/projects/default/worlds/textures/cubic/mountains_right.hdr",
+      "sha256": "91cc406d56b3a0773e2ef91d0c8ca4e2412ea74d1cc9442a08a866b6fc65ecfb"
+    },
+    {
+      "path": "world-assets/projects/default/worlds/textures/cubic/mountains_right.jpg",
+      "url": "https://raw.githubusercontent.com/cyberbotics/webots/R2025a/projects/default/worlds/textures/cubic/mountains_right.jpg",
+      "sha256": "1b650b4984c16007a45cd90f83a1c1d3a572451e80413e4abb6a56ec053497ef"
+    },
+    {
+      "path": "world-assets/projects/default/worlds/textures/cubic/mountains_top.hdr",
+      "url": "https://raw.githubusercontent.com/cyberbotics/webots/R2025a/projects/default/worlds/textures/cubic/mountains_top.hdr",
+      "sha256": "ad20354918869f20a5b2bc27d757b3556020bb74be2d6e5f680f75b17fa69cd3"
+    },
+    {
+      "path": "world-assets/projects/default/worlds/textures/cubic/mountains_top.jpg",
+      "url": "https://raw.githubusercontent.com/cyberbotics/webots/R2025a/projects/default/worlds/textures/cubic/mountains_top.jpg",
+      "sha256": "90ae5a9d6ecce742a08afa604988876a33a8a664ac120d33c8f358741e172559"
+    },
+    {
+      "path": "world-assets/projects/appearances/protos/textures/parquetry/chequered_parquetry_roughness.jpg",
+      "url": "https://raw.githubusercontent.com/cyberbotics/webots/R2025a/projects/appearances/protos/textures/parquetry/chequered_parquetry_roughness.jpg",
+      "sha256": "a4ff9820d8e1fdfff9d5facb0df650bfd528537d36b52dbd8f0973c5cd5601db"
+    },
+    {
+      "path": "world-assets/projects/appearances/protos/textures/parquetry/chequered_parquetry_base_color.jpg",
+      "url": "https://raw.githubusercontent.com/cyberbotics/webots/R2025a/projects/appearances/protos/textures/parquetry/chequered_parquetry_base_color.jpg",
+      "sha256": "e8743835bcc4919913a8c08269e8966d206ac55436043d307a4c652863d6f9fd"
+    },
+    {
+      "path": "world-assets/projects/appearances/protos/textures/parquetry/chequered_parquetry_normal.jpg",
+      "url": "https://raw.githubusercontent.com/cyberbotics/webots/R2025a/projects/appearances/protos/textures/parquetry/chequered_parquetry_normal.jpg",
+      "sha256": "a6b0afa30a90f5e81bf2122ae945e4644b3e48a77f39ea2e50a13293aee06173"
+    },
+    {
+      "path": "world-assets/projects/appearances/protos/textures/parquetry/chequered_parquetry_occlusion.jpg",
+      "url": "https://raw.githubusercontent.com/cyberbotics/webots/R2025a/projects/appearances/protos/textures/parquetry/chequered_parquetry_occlusion.jpg",
+      "sha256": "ed8035831dba336f506ded7a64e6aaf20ed41bfc9c58fb6d5bd63536bc7867e3"
+    },
+    {
+      "path": "world-assets/projects/robots/kuka/youbot/protos/textures/kuka_black.png",
+      "url": "https://raw.githubusercontent.com/cyberbotics/webots/R2025a/projects/robots/kuka/youbot/protos/textures/kuka_black.png",
+      "sha256": "bf5a61c6a115fd4c4c14d3c44ae02a82f3641dc76b13672c983f505aac4d9237"
+    },
+    {
+      "path": "world-assets/projects/robots/kuka/youbot/protos/textures/kuka_alpha.png",
+      "url": "https://raw.githubusercontent.com/cyberbotics/webots/R2025a/projects/robots/kuka/youbot/protos/textures/kuka_alpha.png",
+      "sha256": "335b0fc54dca64d026565e5da98892f578e80a17689eea6d5bf693dc935811f7"
+    }
+  ]
+}
