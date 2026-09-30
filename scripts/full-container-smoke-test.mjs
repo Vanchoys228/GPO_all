@@ -42,6 +42,7 @@ try {
   const telemetrySocket=await connect("ws://127.0.0.1:9001");
   telemetrySocket.on("message",data=>{const event=JSON.parse(data);if(event.type==="telemetry.event")telemetry=event.payload;});
   await until(()=>telemetry?.perception?.camera?.frameDataUrl,"robot camera");
+  assert.equal(telemetry.perception.camera.obstacleVisible,false,"the empty floor must not be classified as an obstacle");
   assert.equal(telemetry.navigation.status,"waiting_for_route","fresh stack must not move before a mission");
   const streaming=await connect("ws://127.0.0.1:8080/simulation/");
   let sceneLoaded=false, model="", updates=0, simulationMode;

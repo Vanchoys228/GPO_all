@@ -15,6 +15,8 @@ void controller_navigation_perception_prepare(
           ? input->camera_range
           : config->camera_range_fallback;
   output->camera_visual_front_obstacle =
+      input->lidar_available &&
+      input->lidar_context->unexpected_front_hit_count > 0 &&
       input->camera_visible &&
       fabs(input->camera_angle) <
           fmax(input->camera_fov, config->camera_min_fov) *

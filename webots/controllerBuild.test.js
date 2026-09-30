@@ -236,7 +236,8 @@ describe("Webots controller build configuration", () => {
     const adapter = readFileSync(`${controllerDirectory}/controller_webots_camera_range.c`, "utf8");
 
     expect(source).toContain("controller_webots_camera_range_from_lidar(");
-    expect(adapter).toContain("controller_camera_fusion_estimate_range(");
+    expect(source).toContain("controller_webots_camera_confirmed_range_from_lidar(");
+    expect(adapter).toContain("controller_camera_fusion_confirmed_range(");
     expect(source).not.toContain("double best_angle_error = CAMERA_RANGE_SEARCH_WINDOW_RAD");
   });
 

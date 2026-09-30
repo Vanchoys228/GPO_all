@@ -22,14 +22,16 @@
 Полный запуск, включая Webots, gateway и просмотр симуляции в браузере:
 
 ```sh
-docker compose -p gpo-full -f compose.yaml -f compose.simulator.yaml up --build -d --wait --wait-timeout 180
+npm install
+npm run start:container
 ```
 
 Откройте http://127.0.0.1:8080/dashboard и нажмите «Показать симуляцию» в правой панели.
 Внешний вид работает через W3D (нужен WebGL2 в браузере); камера робота передаётся отдельно.
-На хосте нужен только Docker; [подробности, остановка и данные](docs/FULL-CONTAINER.md).
-Эта команда использует CPU. [GPU-режим и кнопки скорости](docs/SIMULATION-PERFORMANCE.md)
-доступны через дополнительную конфигурацию для Windows/WSLg.
+На хосте нужны Docker и Node.js. Скрипт сам использует GPU через WSLg, когда
+Docker имеет к нему доступ, и безопасно переходит на CPU в остальных случаях.
+[Подробности, остановка и данные](docs/FULL-CONTAINER.md),
+[GPU-режим и кнопки скорости](docs/SIMULATION-PERFORMANCE.md).
 Приведённый ниже `npm start` — альтернативный режим с Webots на Windows.
 
 - Ставить точки посещения на координатной карте.

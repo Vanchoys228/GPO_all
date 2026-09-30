@@ -27,10 +27,19 @@ static ControllerNavigationPerceptionConfig config(void) {
 }
 
 int main(void) {
-  LidarObstacleContext lidar = {0};
+  LidarObstacleContext lidar = {
+      .unexpected_front_min_range = 0.6,
+      .unexpected_center_min_range = 0.6,
+      .unexpected_left_front_min_range = 5.0,
+      .unexpected_right_front_min_range = 5.0,
+      .unexpected_left_min_range = 5.0,
+      .unexpected_right_min_range = 5.0,
+      .expected_front_min_range = 5.0,
+  };
   ControllerNavigationPerceptionConfig perception_config = config();
   ControllerNavigationPerceptionInput input = {
       .lidar_context = &lidar,
+      .lidar_available = 1,
       .camera_visible = 1,
       .camera_angle = 0.0,
       .camera_fov = 1.0,
@@ -39,6 +48,7 @@ int main(void) {
       .camera_detection_count = 1,
       .camera_center_offset = 0.3,
   };
+  lidar.unexpected_front_hit_count = 1;
   ControllerNavigationPerceptionOutput output = {0};
   controller_navigation_perception_prepare(
       &input, &perception_config, &output);
@@ -70,6 +80,14 @@ int main(void) {
   controller_navigation_perception_prepare(
       &input, &perception_config, &output);
   if (output.camera_preferred_turn_sign != 0.0) return 8;
+
+  input.camera_center_offset = 0.3;
+  input.camera_score = 0.8;
+  input.camera_detection_count = 5;
+  lidar.unexpected_front_hit_count = 0;
+  controller_navigation_perception_prepare(
+      &input, &perception_config, &output);
+  if (output.camera_visual_front_obstacle || output.avoidance.should_start_avoidance) return 9;
 
   return 0;
 }

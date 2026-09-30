@@ -128,11 +128,26 @@ static void update_obstacle_hint(ControllerCameraRuntime *runtime) {
       .update_step = step,
   };
   if (result.visible) {
-    observation.visible = 1;
-    observation.center_offset = result.center_offset;
-    observation.angle = result.angle;
-    observation.range = estimate_range(runtime, observation.angle, result.fallback_range_m);
-    observation.detection_count = result.detection_count;
+    double confirmed_range = 0.0;
+    const int lidar_confirmed = controller_webots_camera_confirmed_range_from_lidar(
+        runtime->sensors,
+        runtime->perception->lidar.available,
+        runtime->perception->lidar.resolution,
+        runtime->perception->lidar.fov,
+        result.angle,
+        runtime->config.range_search_window,
+        runtime->config.min_trace_range,
+        runtime->config.max_trace_range,
+        &confirmed_range);
+    observation.visible = lidar_confirmed;
+    observation.center_offset = lidar_confirmed ? result.center_offset : 0.0;
+    observation.angle = lidar_confirmed ? result.angle : 0.0;
+    observation.range = lidar_confirmed ? confirmed_range : 0.0;
+    observation.detection_count = lidar_confirmed ? result.detection_count : 0;
+    if (!lidar_confirmed) {
+      controller_perception_runtime_update_camera(runtime->perception, &observation);
+      return;
+    }
     if (runtime->operations.merge_free_ray) {
       runtime->operations.merge_free_ray(
           runtime->operations.context, observation.angle, observation.range, 2);

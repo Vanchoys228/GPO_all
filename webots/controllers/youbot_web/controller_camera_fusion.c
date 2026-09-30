@@ -2,7 +2,7 @@
 
 #include <math.h>
 
-double controller_camera_fusion_estimate_range(
+int controller_camera_fusion_confirmed_range(
     const float *ranges,
     int resolution,
     double lidar_fov,
@@ -10,9 +10,10 @@ double controller_camera_fusion_estimate_range(
     double search_window_rad,
     double min_range,
     double max_range,
-    double fallback_range) {
-  if (!ranges || resolution <= 1 || lidar_fov <= 0.0 || search_window_rad <= 0.0) {
-    return fallback_range;
+    double *confirmed_range) {
+  if (!confirmed_range || !ranges || resolution <= 1 || lidar_fov <= 0.0 ||
+      search_window_rad <= 0.0 || max_range <= min_range) {
+    return 0;
   }
 
   double best_range = max_range;
@@ -33,5 +34,24 @@ double controller_camera_fusion_estimate_range(
     }
   }
 
-  return best_range < max_range ? best_range : fallback_range;
+  if (best_range >= max_range) return 0;
+  *confirmed_range = best_range;
+  return 1;
+}
+
+double controller_camera_fusion_estimate_range(
+    const float *ranges,
+    int resolution,
+    double lidar_fov,
+    double relative_angle,
+    double search_window_rad,
+    double min_range,
+    double max_range,
+    double fallback_range) {
+  double confirmed_range = fallback_range;
+  return controller_camera_fusion_confirmed_range(
+             ranges, resolution, lidar_fov, relative_angle, search_window_rad,
+             min_range, max_range, &confirmed_range)
+             ? confirmed_range
+             : fallback_range;
 }
