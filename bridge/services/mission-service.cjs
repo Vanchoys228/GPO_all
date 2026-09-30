@@ -2,6 +2,7 @@ const { randomUUID } = require("crypto");
 const { validateMissionId, terminalStates } = require("../protocol/mission-contract.cjs");
 const { fingerprint, serviceError } = require("../protocol/service-contract.cjs");
 const { validatePoints } = require("../protocol/route-validation.cjs");
+const { validateTransferCommand } = require("../protocol/transfer-validation.cjs");
 const { prepareRoute } = require("./route-planning.cjs");
 const createMissionService = ({repository, adapter, now = () => new Date().toISOString()}) => {
   let pending = Promise.resolve();
@@ -23,9 +24,13 @@ const createMissionService = ({repository, adapter, now = () => new Date().toISO
     }
     const feedback=await adapter.getFeedback(record.missionId);
     const matching=feedback?.missionId===record.missionId;
-    const rank={persisted:0,accepted:1,running:2,cancelling:3,completed:4,failed:4,cancelled:4};
+    const rank={persisted:0,accepted:1,running:2,holding_for_recovery:3,cancelling:4,completed:5,failed:5,cancelled:5};
     const status=matching && feedback.status in rank && rank[feedback.status]>=rank[record.status] ? feedback.status : record.status;
     const updated={...record,status,feedbackFresh:Boolean(matching && !feedback.cached),connectionError:null,
+      ...(matching ? {stage:feedback.stage ?? null,progress:feedback.progress ?? record.progress,
+        errorCode:feedback.errorCode ?? null,attached:Boolean(feedback.attached),
+        controllerBootId:feedback.controllerBootId ?? record.controllerBootId,
+        objectPose:feedback.objectPose ?? record.objectPose} : {}),
       ...(matching ? {lastFeedbackAt:feedback.observedAt || now()} : {}),
       updatedAt:status!==record.status ? now() : record.updatedAt};
     // Do not rewrite SQLite on every idle poll without a changed observation.
@@ -40,13 +45,16 @@ const createMissionService = ({repository, adapter, now = () => new Date().toISO
     if(!record) {
       const active=(await all()).find(item=>!terminalStates.has(item.status));
       if(active) throw serviceError(409,"mission_active",`Mission ${active.missionId} is active. Cancel it and wait for confirmation before replacing it.`);
-      let command={...payload,route:validatePoints(payload.route),commandId:missionId};
-      if(payload.scene) {
+      const operationType=payload?.type==="transfer_object" ? "object_transfer" : "route";
+      let command;
+      if(operationType==="object_transfer") command={...validateTransferCommand(payload),commandId:missionId};
+      else command={...payload,route:validatePoints(payload.route),commandId:missionId};
+      if(operationType==="route" && payload.scene) {
         const result=await prepareRoute({seedRoute:payload.seedRoute || payload.route,scene:payload.scene});
         command={...command,route:result.route,scene:result.scene,motion:result.scene.motion,sceneRevision:result.sceneRevision,planning:result.planning};
       }
-      if(command.route.length<2) throw serviceError(400,"invalid_route","At least two route points are required.");
-      record={missionId,fingerprint:hash,status:"prepared",createdAt:now(),updatedAt:now(),command};
+      if(operationType==="route" && command.route.length<2) throw serviceError(400,"invalid_route","At least two route points are required.");
+      record={missionId,operationType,fingerprint:hash,status:"prepared",createdAt:now(),updatedAt:now(),command};
       await save(record);
     }
     return deliver(record);
@@ -76,6 +84,18 @@ const createMissionService = ({repository, adapter, now = () => new Date().toISO
     if((await all()).some(record=>!terminalStates.has(record.status))) throw serviceError(409,"mission_active","Scene changes are blocked while a mission is active.");
     return adapter.update(payload,requestId || randomUUID());
   });
-  return {submit,cancel,get,reconcile,update,list:()=>serial(all),drain:()=>pending};
+  const resume = missionId => serial(async()=>{
+    let record=await repository.get(validateMissionId(missionId));
+    if(!record) throw serviceError(404,"not_found","Mission not found.");
+    if(record.operationType!=="object_transfer" || record.status!=="holding_for_recovery") {
+      throw serviceError(409,"not_recoverable","Only a held object transfer can be resumed.");
+    }
+    if(record.resumeDelivered)return record;
+    const resumeRequestId=record.resumeRequestId || randomUUID();
+    if(!record.resumeRequestId)record=await save({...record,resumeRequestId,updatedAt:now()});
+    await adapter.update({type:"resume_transfer",missionId:record.missionId,destination:record.command.destination},resumeRequestId);
+    return save({...record,resumeDelivered:true,connectionError:null,updatedAt:now()});
+  });
+  return {submit,cancel,get,reconcile,update,resume,list:()=>serial(all),drain:()=>pending};
 };
 module.exports={createMissionService};
