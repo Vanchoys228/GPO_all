@@ -52,6 +52,7 @@ void controller_telemetry_service_build_snapshot(
       input->camera_map_cell_size,
       input->route_waypoints,
       input->route_waypoint_count,
+      input->object_transfer,
   };
 }
 

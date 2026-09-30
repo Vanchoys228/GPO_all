@@ -109,4 +109,12 @@ describe("web state store", () => {
     expect(command).toContain("y -16.5");
     expect(command).toContain("size_x 3.5");
   });
+
+  it("commits a transfer scene revision before publishing its command", async () => {
+    const {store}=await createStore();
+    await store.writeTransfer({commandId:"transfer-1",type:"transfer_object",missionId:"transfer-1",objectId:"demo-box",
+      destination:{x:4,y:-2},sceneRevision:"rev-1",scene:{polygons:[],surfaceZones:[]}});
+    expect(await fs.readFile(store.paths.sceneRevision,"utf8")).toBe("rev-1\n");
+    expect(await fs.readFile(store.paths.runtimeCommand,"utf8")).toContain("scene_revision rev-1");
+  });
 });

@@ -48,6 +48,29 @@ TexturedBackgroundLight {
 Floor {
   size 300 300
 }
+DEF DEMO_BOX Solid {
+  translation 1.4 0 0.075
+  children [
+    Shape {
+      appearance PBRAppearance {
+        baseColor 0.92 0.3 0.08
+        roughness 0.55
+        metalness 0
+      }
+      geometry Box {
+        size 0.15 0.15 0.15
+      }
+    }
+  ]
+  name "demo-box"
+  boundingObject Box {
+    size 0.15 0.15 0.15
+  }
+  physics Physics {
+    density -1
+    mass 0.25
+  }
+}
 Youbot {
   hidden position_0_0 -1.1278584212826214e-09
   hidden position_0_1 -8.544116525399659e-10

@@ -41,6 +41,7 @@ export const createLeftSidebarProps = ({ state, runtime, derived, actions }) => 
     onOptimizeRoute: actions.optimizeRoute,
     onSendRoute: actions.sendRoute,
     onAddRandomObstacle: actions.addRandomObstacle,
+    onStartObjectTransfer: actions.startObjectTransfer,
     onClearAll: () => actions.clearPoints?.(),
     hasRoute: (route.optimizedRoute?.length || 0) > 0,
     routeLength: plannerModel.routeLength,

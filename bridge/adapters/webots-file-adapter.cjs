@@ -4,6 +4,10 @@ const path = require("path");
 // The simulator file layout and legacy command vocabulary terminate here.
 const createWebotsFileAdapter = ({artifactStore, stateDir}) => ({
   async submit(command) {
+    if (command.type === "transfer_object") {
+      await artifactStore.writeTransfer(command);
+      return;
+    }
     if (command.scene) {
       await artifactStore.writeLimitZones({zones:command.scene.polygons});
       await artifactStore.writeSurfaceZones({zones:command.scene.surfaceZones});
@@ -15,6 +19,8 @@ const createWebotsFileAdapter = ({artifactStore, stateDir}) => ({
   },
   async update(payload) {
     switch (payload?.type) {
+      case "recover_transfer":
+      case "resume_transfer": await artifactStore.writeRuntimeCommand(payload); break;
       case "limit_zones": await artifactStore.writeLimitZones(payload); break;
       case "surface_zones": await artifactStore.writeSurfaceZones(payload); break;
       case "motion_profile": await artifactStore.writeMotionProfile(payload.motion); break;
@@ -31,6 +37,10 @@ const createWebotsFileAdapter = ({artifactStore, stateDir}) => ({
       const stat = await fs.stat(filename);
       if (Date.now() - stat.mtimeMs > 5000) return null;
       const state = JSON.parse(await fs.readFile(filename,"utf8"));
+      const transfer=state.objectTransfer;
+      if(transfer?.missionId===missionId) {
+        return {...transfer,missionId,status:transfer.status,observedAt:new Date(stat.mtimeMs).toISOString()};
+      }
       if (state.navigation?.missionId !== missionId) return null;
       const navigation = state.navigation || {};
       const status = navigation.status === "mission_cancelled" ? "cancelled" : navigation.status === "route_failed" ? "failed" : navigation.finished === true ? "completed" : navigation.status === "route_loaded" ? "accepted" : "running";

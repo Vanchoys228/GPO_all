@@ -37,6 +37,7 @@ void controller_telemetry_publisher_build(
       output->trace, trace_count, input->obstacle_map_cell_count, input->obstacle_map_cell_size,
       input->camera_map_obstacle_cell_count + input->camera_map_free_cell_count,
       input->camera_map_obstacle_cell_count, input->camera_map_free_cell_count,
-      input->camera_map_cell_size, runtime->route.waypoints, runtime->route.count};
+      input->camera_map_cell_size, runtime->route.waypoints, runtime->route.count,
+      input->object_transfer};
   controller_telemetry_service_build_snapshot(&snapshot_input, &output->snapshot);
 }

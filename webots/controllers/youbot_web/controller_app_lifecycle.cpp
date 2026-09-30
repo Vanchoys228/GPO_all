@@ -12,6 +12,7 @@
 #include "controller_mapping_survey_safety_service.h"
 #include "controller_motion_profile_reload_service.h"
 #include "controller_navigation_runtime.h"
+#include "controller_object_transfer_runtime.h"
 #include "controller_paths.h"
 #include "controller_route_zone_reload_service.h"
 #include "controller_runtime.h"
@@ -147,6 +148,7 @@ static void write_state_snapshot(void) {
       .camera_map_cell_size = CAMERA_MAP_CELL_SIZE,
       .trace_ttl_seconds = LIDAR_TRACE_TTL_SECONDS,
       .trace_min_confidence = LIDAR_TRACE_MIN_CONFIDENCE,
+      .object_transfer = &object_transfer_runtime.service.state,
   };
   ControllerTelemetryPublisherOutput output = {0};
   controller_telemetry_publisher_build(&input, &output);
@@ -155,6 +157,19 @@ static void write_state_snapshot(void) {
 
 static void merge_trace_for_controller_step(void) {
   merge_trace_into_map(wb_robot_get_time());
+}
+
+static void handle_transfer_command(const RuntimeCommand *command) {
+  controller_object_transfer_runtime_command(
+      &object_transfer_runtime, command, wb_robot_get_time());
+}
+
+static void run_control_cycle(void) {
+  double x = 0.0, y = 0.0, heading = 0.0;
+  read_pose(&x, &y, &heading);
+  controller_object_transfer_runtime_step(
+      &object_transfer_runtime, wb_robot_get_time(), x, y, heading);
+  run_navigation_step();
 }
 
 #define STEP_CALLBACK(callback) \
@@ -178,7 +193,7 @@ static void maybe_write_camera_frame_step(void *context) {
   (void)context;
   controller_camera_runtime_publish(&camera_runtime);
 }
-STEP_CALLBACK(run_navigation_step)
+STEP_CALLBACK(run_control_cycle)
 STEP_CALLBACK(update_route_avoidance_metrics)
 STEP_CALLBACK(write_state_snapshot)
 #undef STEP_CALLBACK
@@ -195,7 +210,7 @@ static const ControllerStepCallbacks controller_step_callbacks = {
     maybe_update_camera_perception_step,
     maybe_write_camera_frame_step,
     NULL,
-    run_navigation_step_step,
+    run_control_cycle_step,
     update_route_avoidance_metrics_step,
     write_state_snapshot_step,
 };
@@ -245,6 +260,8 @@ int controller_app_lifecycle_run(int argc, char **argv) {
   };
   reset_robot_pose();
   controller_runtime_init(&controller_runtime);
+  controller_object_transfer_runtime_init(
+      &object_transfer_runtime, &controller_runtime, &webots_devices);
   const ControllerMappingRuntimeConfig mapping_config = {
       .paths = {MAP_PATH, MAP_TEMP_PATH, MAP_CSV_PATH, MAP_CSV_TEMP_PATH,
                 CAMERA_MAP_PATH, CAMERA_MAP_TEMP_PATH, CAMERA_MAP_CSV_PATH,
@@ -320,6 +337,8 @@ int controller_app_lifecycle_run(int argc, char **argv) {
       &controller_runtime,
       &runtime_command_survey_ops,
       spawn_runtime_obstacle);
+  controller_runtime_command_reload_service_set_transfer_handler(
+      &runtime_command_reload_service, handle_transfer_command);
   runtime_command_reload_service.last_modified = get_file_mtime(RUNTIME_COMMAND_PATH);
   runtime_command_reload_service.last_processed_id = controller_runtime_command_latest_id(RUNTIME_COMMAND_PATH);
 

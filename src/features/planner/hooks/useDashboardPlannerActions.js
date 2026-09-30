@@ -101,6 +101,7 @@ export const useDashboardPlannerActions = (state, runtime, derived) => {
     setMapExportPromptOpen: interaction.setMapExportPromptOpen,
     setStatus: route.setStatus,
     telemetry: runtime.telemetry,
+    onMissionSubmitted: runtime.mission?.track,
   });
 
   return { ...routeLifecycle, ...routeSelection, ...editors, ...runtimeActions };
