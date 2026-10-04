@@ -32,6 +32,9 @@ export default function PlannerLeftSidebar({
   onSendRoute,
   onAddRandomObstacle,
   onStartObjectTransfer,
+  onSetManipulatorPose,
+  manipulator,
+  objectTransfer,
   onClearAll,
   hasRoute,
   routeLength,
@@ -93,7 +96,12 @@ export default function PlannerLeftSidebar({
 
       <div className="min-h-0 min-w-0 max-w-full flex-1 overflow-x-hidden overflow-y-auto overscroll-contain p-4 space-y-4 [scrollbar-gutter:stable]">
       <PlannerMissionStatus mission={mission} onCancel={onCancelMission} />
-      <PlannerObjectTransferSection onStartTransfer={onStartObjectTransfer} />
+      <PlannerObjectTransferSection
+        manipulator={manipulator}
+        objectTransfer={objectTransfer}
+        onSetPose={onSetManipulatorPose}
+        onStartTransfer={onStartObjectTransfer}
+      />
       <PlannerSetupSection
         activePointKind={activePointKind}
         activeZoneName={activeZoneName}

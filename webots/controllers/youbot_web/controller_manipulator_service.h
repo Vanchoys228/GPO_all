@@ -34,6 +34,10 @@ typedef struct {
 void controller_manipulator_service_init(ControllerManipulatorService *service);
 ControllerManipulatorTarget controller_manipulator_service_target(
     ControllerManipulatorPose pose);
+const char *controller_manipulator_pose_name(ControllerManipulatorPose pose);
+int controller_manipulator_pose_parse(
+    const char *name, ControllerManipulatorPose *pose);
+const char *controller_manipulator_step_name(ControllerManipulatorStep state);
 void controller_manipulator_service_start(
     ControllerManipulatorService *service,
     ControllerManipulatorPose pose,

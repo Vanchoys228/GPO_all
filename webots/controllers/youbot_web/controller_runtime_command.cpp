@@ -48,12 +48,15 @@ int controller_runtime_command_load_next_file(
       parsed.has_transfer_object = strcmp(token, "transfer_object") == 0;
       parsed.has_recover_transfer = strcmp(token, "recover_transfer") == 0;
       parsed.has_resume_transfer = strcmp(token, "resume_transfer") == 0;
+      parsed.has_manipulator_pose = strcmp(token, "set_manipulator_pose") == 0;
     } else if (sscanf(line, " mission_id %63s", token) == 1) {
       strcpy(parsed.mission_id, token);
     } else if (sscanf(line, " object_id %31s", token) == 1) {
       strcpy(parsed.object_id, token);
     } else if (sscanf(line, " scene_revision %63s", token) == 1) {
       strcpy(parsed.scene_revision, token);
+    } else if (sscanf(line, " pose %23s", token) == 1) {
+      strcpy(parsed.manipulator_pose, token);
     } else if (sscanf(line, " destination_x %lf", &numeric) == 1) {
       parsed.destination_x = numeric;
     } else if (sscanf(line, " destination_y %lf", &numeric) == 1) {
@@ -113,13 +116,15 @@ int controller_runtime_command_load_next_file(
 
   if (parsed.id < 0 ||
       (!parsed.has_spawn_obstacle && !parsed.has_start_mapping_survey && !parsed.has_cancel_mission &&
-       !parsed.has_transfer_object && !parsed.has_recover_transfer && !parsed.has_resume_transfer)) {
+       !parsed.has_transfer_object && !parsed.has_recover_transfer && !parsed.has_resume_transfer &&
+       !parsed.has_manipulator_pose)) {
     return 0;
   }
   if (parsed.has_cancel_mission && !parsed.mission_id[0]) return 0;
   if ((parsed.has_transfer_object || parsed.has_recover_transfer || parsed.has_resume_transfer) &&
       !parsed.mission_id[0]) return 0;
   if (parsed.has_transfer_object && !parsed.object_id[0]) return 0;
+  if (parsed.has_manipulator_pose && !parsed.manipulator_pose[0]) return 0;
   *command = parsed;
   return 1;
 }

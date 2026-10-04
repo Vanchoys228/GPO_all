@@ -26,6 +26,10 @@ void controller_object_transfer_runtime_command(
     ControllerObjectTransferRuntime *runtime,
     const RuntimeCommand *command,
     double now);
+int controller_object_transfer_runtime_set_pose(
+    ControllerObjectTransferRuntime *runtime,
+    const char *pose_name,
+    double now);
 void controller_object_transfer_runtime_step(
     ControllerObjectTransferRuntime *runtime,
     double now,

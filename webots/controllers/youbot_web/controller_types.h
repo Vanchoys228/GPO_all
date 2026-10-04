@@ -86,9 +86,11 @@ typedef struct {
   int has_transfer_object;
   int has_recover_transfer;
   int has_resume_transfer;
+  int has_manipulator_pose;
   char mission_id[64];
   char object_id[32];
   char scene_revision[96];
+  char manipulator_pose[24];
   double destination_x;
   double destination_y;
   int has_field_bounds;

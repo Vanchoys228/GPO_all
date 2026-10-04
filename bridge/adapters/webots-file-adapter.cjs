@@ -25,7 +25,8 @@ const createWebotsFileAdapter = ({artifactStore, stateDir}) => ({
       case "surface_zones": await artifactStore.writeSurfaceZones(payload); break;
       case "motion_profile": await artifactStore.writeMotionProfile(payload.motion); break;
       case "spawn_random_obstacle":
-      case "start_mapping_survey": await artifactStore.writeRuntimeCommand(payload); break;
+      case "start_mapping_survey":
+      case "set_manipulator_pose": await artifactStore.writeRuntimeCommand(payload); break;
       default: return false;
     }
     return true;

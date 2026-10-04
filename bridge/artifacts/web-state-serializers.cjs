@@ -39,6 +39,12 @@ const createMotionProfileText = (motion) => {
 
 const createRuntimeCommandText = (payload) => {
   const commandId = Number(payload?.commandId) > 0 ? Math.trunc(Number(payload.commandId)) : Date.now();
+  if (payload?.type === "set_manipulator_pose") {
+    const allowed = new Set(["transport", "pre_grasp", "grasp", "lift", "place"]);
+    const pose = String(payload.pose || "").trim();
+    if (!allowed.has(pose)) throw new Error("Unsupported manipulator pose.");
+    return `id ${commandId}\ntype set_manipulator_pose\npose ${pose}\n`;
+  }
   if (["transfer_object", "recover_transfer", "resume_transfer"].includes(payload?.type)) {
     const {validateMissionId}=require("../protocol/mission-contract.cjs");
     const missionId=validateMissionId(payload.missionId || payload.commandId);

@@ -7,6 +7,15 @@
 #include <webots/position_sensor.h>
 #include <webots/robot.h>
 
+namespace {
+double clamp_position(double value, double minimum, double maximum) {
+  return value < minimum ? minimum : value > maximum ? maximum : value;
+}
+
+const double kJointMinimum[5] = {-2.9496, -1.5708, -2.6354, -1.7802, -2.9234};
+const double kJointMaximum[5] = {2.9496, 1.5708, 2.5482, 1.7802, 2.9234};
+}
+
 static void init_wheels(ControllerWebotsDevices *devices) {
   char name[16];
   for (int i = 0; i < 4; ++i) {
@@ -68,8 +77,11 @@ void controller_webots_devices_set_manipulator(
     double finger_opening) {
   if (!devices || !joints) return;
   for (int i = 0; i < 5; ++i) {
-    if (devices->arm_joints[i]) wb_motor_set_position(devices->arm_joints[i], joints[i]);
+    if (devices->arm_joints[i])
+      wb_motor_set_position(devices->arm_joints[i],
+                            clamp_position(joints[i], kJointMinimum[i], kJointMaximum[i]));
   }
+  finger_opening = clamp_position(finger_opening, 0.0, 0.0115);
   for (int i = 0; i < 2; ++i) {
     if (devices->gripper_fingers[i])
       wb_motor_set_position(devices->gripper_fingers[i], finger_opening);

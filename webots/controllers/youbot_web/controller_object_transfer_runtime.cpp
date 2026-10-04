@@ -63,6 +63,11 @@ void controller_object_transfer_runtime_command(
     const RuntimeCommand *command,
     double now) {
   if (!runtime || !command) return;
+  if (command->has_manipulator_pose) {
+    controller_object_transfer_runtime_set_pose(
+        runtime, command->manipulator_pose, now);
+    return;
+  }
   if (command->has_resume_transfer || command->has_recover_transfer) {
     controller_object_transfer_service_resume(&runtime->service, now);
     return;
@@ -76,6 +81,21 @@ void controller_object_transfer_runtime_command(
   set_single_waypoint(runtime, object_x - 0.42, object_y, command->mission_id);
 }
 
+int controller_object_transfer_runtime_set_pose(
+    ControllerObjectTransferRuntime *runtime,
+    const char *pose_name,
+    double now) {
+  if (!runtime || !runtime->available ||
+      runtime->service.state.status == CONTROLLER_TRANSFER_RUNNING) return 0;
+  ControllerManipulatorPose pose = CONTROLLER_MANIPULATOR_TRANSPORT;
+  if (!controller_manipulator_pose_parse(pose_name, &pose)) return 0;
+  controller_manipulator_service_start(&runtime->manipulator, pose, now);
+  const ControllerManipulatorTarget target = runtime->manipulator.target;
+  controller_webots_devices_set_manipulator(
+      runtime->devices, target.joints, target.finger_opening);
+  return 1;
+}
+
 void controller_object_transfer_runtime_step(
     ControllerObjectTransferRuntime *runtime,
     double now,
@@ -83,6 +103,12 @@ void controller_object_transfer_runtime_step(
     double robot_y,
     double heading) {
   if (!runtime || runtime->service.state.status != CONTROLLER_TRANSFER_RUNNING) {
+    if (runtime) {
+      double joints[5] = {}, fingers[2] = {};
+      if (controller_webots_devices_read_manipulator(runtime->devices, joints, fingers))
+        controller_manipulator_service_step(
+            &runtime->manipulator, joints, fingers, now);
+    }
     if (runtime && runtime->object.attached)
       controller_webots_object_adapter_update(
           &runtime->object, robot_x, robot_y, heading, 0.35, 0.43);

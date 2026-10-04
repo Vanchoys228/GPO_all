@@ -55,7 +55,8 @@ ControllerRuntimeCommandReloadResult controller_runtime_command_reload_service_r
   }
   service->last_processed_id = command.id;
 
-  if (command.has_transfer_object || command.has_recover_transfer || command.has_resume_transfer) {
+  if (command.has_transfer_object || command.has_recover_transfer ||
+      command.has_resume_transfer || command.has_manipulator_pose) {
     if (service->transfer_command) service->transfer_command(&command);
     return CONTROLLER_RUNTIME_COMMAND_RELOAD_APPLIED;
   }

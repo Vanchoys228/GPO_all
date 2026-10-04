@@ -123,5 +123,14 @@ export const usePlannerRuntimeCommands = ({
     });
   };
 
-  return { addRandomObstacle, startMappingSurvey, startObjectTransfer };
+  const setManipulatorPose = pose => sendRouteChannelPayload(
+    routeSocketRef,
+    { type: "set_manipulator_pose", pose, commandId: Date.now() },
+    {
+      onSent: () => setStatus(`Манипулятор переводится в позу «${pose}».`),
+      onError: error => setStatus(error.message),
+    }
+  );
+
+  return { addRandomObstacle, setManipulatorPose, startMappingSurvey, startObjectTransfer };
 };

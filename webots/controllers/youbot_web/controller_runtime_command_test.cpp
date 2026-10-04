@@ -60,5 +60,14 @@ int main(void) {
       !nearly_equal(command.destination_y, -2.25)) return 18;
   if (strcmp(command.scene_revision, "revision-7") != 0) return 19;
 
+  file = fopen(path, "w");
+  if (!file) return 20;
+  fprintf(file, "id 45\ntype set_manipulator_pose\npose lift\n");
+  fclose(file);
+  if (!controller_runtime_command_load_file(path, &limits, &command)) return 21;
+  remove(path);
+  if (!command.has_manipulator_pose || strcmp(command.manipulator_pose, "lift") != 0)
+    return 22;
+
   return 0;
 }

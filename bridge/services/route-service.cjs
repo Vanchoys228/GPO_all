@@ -23,7 +23,7 @@ const createRouteService = ({ artifactStore, missionService, adapter }) => {
       await artifactStore.writeMotionProfile(payload.motion);
       return { handled: true };
     }
-    if (payload?.type === "spawn_random_obstacle" || payload?.type === "start_mapping_survey") {
+    if (["spawn_random_obstacle", "start_mapping_survey", "set_manipulator_pose"].includes(payload?.type)) {
       await artifactStore.writeRuntimeCommand(payload);
       return { handled: true };
     }

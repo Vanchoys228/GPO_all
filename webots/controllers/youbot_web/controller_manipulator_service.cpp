@@ -29,6 +29,33 @@ ControllerManipulatorTarget controller_manipulator_service_target(
   return kTargets[pose];
 }
 
+const char *controller_manipulator_pose_name(ControllerManipulatorPose pose) {
+  static const char *names[] = {"transport", "pre_grasp", "grasp", "lift", "place"};
+  return pose >= CONTROLLER_MANIPULATOR_TRANSPORT && pose <= CONTROLLER_MANIPULATOR_PLACE
+      ? names[pose] : "transport";
+}
+
+int controller_manipulator_pose_parse(
+    const char *name, ControllerManipulatorPose *pose) {
+  if (!name || !pose) return 0;
+  for (int index = CONTROLLER_MANIPULATOR_TRANSPORT;
+       index <= CONTROLLER_MANIPULATOR_PLACE; ++index) {
+    const ControllerManipulatorPose candidate =
+        static_cast<ControllerManipulatorPose>(index);
+    if (std::strcmp(name, controller_manipulator_pose_name(candidate)) == 0) {
+      *pose = candidate;
+      return 1;
+    }
+  }
+  return 0;
+}
+
+const char *controller_manipulator_step_name(ControllerManipulatorStep state) {
+  static const char *names[] = {"idle", "moving", "reached", "timed_out"};
+  return state >= CONTROLLER_MANIPULATOR_IDLE && state <= CONTROLLER_MANIPULATOR_TIMED_OUT
+      ? names[state] : "idle";
+}
+
 void controller_manipulator_service_start(
     ControllerManipulatorService *service,
     ControllerManipulatorPose pose,

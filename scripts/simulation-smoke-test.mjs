@@ -8,13 +8,17 @@ import path from "node:path";
 import assert from "node:assert/strict";
 import WebSocket from "ws";
 import {createRouteCommand} from "../shared/contracts/index.js";
+import sceneValidation from "../bridge/protocol/scene-validation.cjs";
+const {sceneRevision}=sceneValidation;
 const root=path.resolve(import.meta.dirname,"..");
 const directory=await mkdtemp(path.join(os.tmpdir(),"gpo-physics-"));
 const children=[];
 let socket;
 const delay=ms=>new Promise(resolve=>setTimeout(resolve,ms));
 const freePort=async()=>{const s=createServer();s.listen(0,"127.0.0.1");await once(s,"listening");const p=s.address().port;await new Promise(r=>s.close(r));return p;};
-const [gatewayPort,missionPort,planningPort,telemetryPort,webotsPort]=await Promise.all(Array.from({length:5},freePort));
+const reservedPorts=[];
+while(reservedPorts.length<5){const port=await freePort();if(!reservedPorts.includes(port))reservedPorts.push(port);}
+const [gatewayPort,missionPort,planningPort,telemetryPort,webotsPort]=reservedPorts;
 const stateDir=path.join(directory,"state");
 const env={...process.env,BRIDGE_BIND_HOST:"127.0.0.1",ROUTE_BIND_HOST:"127.0.0.1",TELEMETRY_BIND_HOST:"127.0.0.1",SOLVER_BIND_HOST:"127.0.0.1",GATEWAY_BIND_HOST:"127.0.0.1",GATEWAY_PORT:String(gatewayPort),GATEWAY_URL:`http://127.0.0.1:${gatewayPort}`,GATEWAY_TOKEN:"physics-test",ROUTE_PORT:String(missionPort),SOLVER_PORT:String(planningPort),TELEMETRY_PORT:String(telemetryPort),MISSION_STATE_DIR:path.join(directory,"missions"),WEB_STATE_DIR:stateDir,MOCK_TELEMETRY:"0"};
 const launch=(exe,args)=>{const p=spawn(exe,args,{cwd:root,env,stdio:["ignore","pipe","pipe"],windowsHide:true});p.logs="";p.stdout.on("data",d=>p.logs+=d);p.stderr.on("data",d=>p.logs+=d);children.push(p);return p;};
@@ -40,6 +44,19 @@ try {
   const ack=await send(createRouteCommand({source:"physics-test",requestId:"physics-complete",payload:{type:"route",route,seedRoute:plan.seedRoute,scene}}));assert.equal(ack.ok,true,JSON.stringify(ack));
   await until(async()=>{const m=await getMission("physics-complete");if(m.status==="failed")throw new Error(JSON.stringify(m));return m.status==="completed";},"physical route completion",120000);
   console.log("Real Webots route completed.");
+  const poseAck=await send({type:"set_manipulator_pose",pose:"pre_grasp",commandId:Date.now(),requestId:"physics-pose"});
+  assert.equal(poseAck.ok,true,JSON.stringify(poseAck));
+  await until(async()=>{try{const state=JSON.parse(await readFile(path.join(stateDir,"robot_state.json"),"utf8"));return state.manipulator?.pose==="pre_grasp" && state.manipulator?.state==="reached" && state.manipulator?.joints?.length===5;}catch{return false;}},"physical manipulator pose",30000);
+  console.log("Real Webots manual manipulator pose completed.");
+  const transferScene={polygons:[],surfaceZones:[],chargingStations:[],motion:{cruiseSpeedMps:0.22,payloadKg:0,batteryRange:100}};
+  const transferCommand=createRouteCommand({source:"physics-test",requestId:"physics-transfer",payload:{type:"transfer_object",objectId:"demo-box",destination:{x:2.5,y:0},scene:transferScene,sceneRevision:sceneRevision(transferScene)}});
+  const transferAck=await send(transferCommand);assert.equal(transferAck.ok,true,JSON.stringify(transferAck));
+  await until(async()=>{const m=await getMission("physics-transfer");if(["failed","holding_for_recovery"].includes(m.status))throw new Error(JSON.stringify(m));return m.status==="completed";},"physical object transfer",120000);
+  const transferState=JSON.parse(await readFile(path.join(stateDir,"robot_state.json"),"utf8"));
+  assert.equal(transferState.objectTransfer.status,"completed");
+  assert.equal(transferState.objectTransfer.attached,false);
+  assert.deepEqual(transferState.objectTransfer.destination,{x:2.5,y:0});
+  console.log("Real Webots object transfer completed.");
   const longRoute=[{x:0,y:0},{x:18,y:0}];
   const second=await send(createRouteCommand({source:"physics-test",requestId:"physics-cancel",payload:{type:"route",route:longRoute,scene}}));assert.equal(second.ok,true,JSON.stringify(second));
   await until(async()=>(await getMission("physics-cancel")).status==="running","physical movement",30000);
@@ -51,7 +68,7 @@ try {
   const distance=Math.hypot(last.pose.x-first.pose.x,last.pose.y-first.pose.y);
   assert.ok(distance<0.05,`Robot continued moving after cancel: ${distance}`);
   await mkdir(path.join(root,"output"),{recursive:true});
-  await writeFile(path.join(root,"output/physics-smoke-result.json"),JSON.stringify({completed:true,cancelled:true,postCancelDistance:distance,lastState:last},null,2));
+  await writeFile(path.join(root,"output/physics-smoke-result.json"),JSON.stringify({completed:true,manualManipulatorPoseCompleted:true,objectTransferCompleted:true,cancelled:true,postCancelDistance:distance,lastState:last},null,2));
   console.log(`Real Webots cancellation confirmed; movement after stop ${distance.toFixed(6)} m.`);
 } catch(error) {
   for(const child of children)console.error(child.logs.slice(-8000));

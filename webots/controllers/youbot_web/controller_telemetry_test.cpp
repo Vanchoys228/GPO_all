@@ -29,6 +29,11 @@ int main(void) {
   snapshot.trace_point_count = 1;
   snapshot.route_waypoints = route;
   snapshot.route_waypoint_count = 1;
+  snapshot.manipulator.available = 1;
+  snapshot.manipulator.pose = "lift";
+  snapshot.manipulator.state = "reached";
+  snapshot.manipulator.joints[0] = 0.25;
+  snapshot.manipulator.fingers[0] = 0.001;
 
   if (!controller_telemetry_write_snapshot(temp_path, state_path, &snapshot)) return 1;
   FILE *file = fopen(state_path, "rb");
@@ -48,6 +53,9 @@ int main(void) {
   if (!strstr(json, "\"confidence\": 0.750")) return 9;
   if (!strstr(json, "\"headingDeg\": 90.000")) return 10;
   if (!strstr(json, "\"missionId\": \"mission-42\"")) return 12;
+  if (!strstr(json, "\"manipulator\"")) return 13;
+  if (!strstr(json, "\"pose\": \"lift\"")) return 14;
+  if (!strstr(json, "\"joints\": [0.250000")) return 15;
   free(json);
   if (fopen(temp_path, "rb") != NULL) return 11;
   return 0;

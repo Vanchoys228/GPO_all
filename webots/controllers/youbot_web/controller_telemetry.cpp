@@ -144,6 +144,22 @@ int controller_telemetry_write_snapshot(
   fprintf(file, "    \"destination\": {\"x\": %.6f, \"y\": %.6f},\n",
       transfer ? transfer->destination_x : 0.0, transfer ? transfer->destination_y : 0.0);
   fprintf(file, "    \"errorCode\": \"%s\"\n  },\n", transfer ? transfer->error_code : "");
+  const ControllerTelemetryManipulator *manipulator = &snapshot->manipulator;
+  fprintf(file, "  \"manipulator\": {\n");
+  fprintf(file, "    \"available\": %s,\n", json_bool(manipulator->available));
+  fprintf(file, "    \"pose\": \"%s\",\n", safe_text(manipulator->pose));
+  fprintf(file, "    \"state\": \"%s\",\n", safe_text(manipulator->state));
+  fprintf(file, "    \"joints\": [%.6f, %.6f, %.6f, %.6f, %.6f],\n",
+      manipulator->joints[0], manipulator->joints[1], manipulator->joints[2],
+      manipulator->joints[3], manipulator->joints[4]);
+  fprintf(file, "    \"fingers\": [%.6f, %.6f],\n",
+      manipulator->fingers[0], manipulator->fingers[1]);
+  fprintf(file, "    \"targetJoints\": [%.6f, %.6f, %.6f, %.6f, %.6f],\n",
+      manipulator->target_joints[0], manipulator->target_joints[1],
+      manipulator->target_joints[2], manipulator->target_joints[3],
+      manipulator->target_joints[4]);
+  fprintf(file, "    \"targetFingerOpening\": %.6f\n  },\n",
+      manipulator->target_finger_opening);
   fprintf(file, "  \"route\": {\n    \"source\": \"route.csv\",\n    \"waypoints\": [\n");
   for (int i = 0; i < snapshot->route_waypoint_count; ++i) {
     const Waypoint *waypoint = &snapshot->route_waypoints[i];

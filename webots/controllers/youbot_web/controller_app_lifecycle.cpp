@@ -152,6 +152,19 @@ static void write_state_snapshot(void) {
   };
   ControllerTelemetryPublisherOutput output = {0};
   controller_telemetry_publisher_build(&input, &output);
+  ControllerTelemetryManipulator *manipulator = &output.snapshot.manipulator;
+  manipulator->available = object_transfer_runtime.available;
+  manipulator->pose = controller_manipulator_pose_name(
+      object_transfer_runtime.manipulator.pose);
+  manipulator->state = controller_manipulator_step_name(
+      object_transfer_runtime.manipulator.state);
+  controller_webots_devices_read_manipulator(
+      &webots_devices, manipulator->joints, manipulator->fingers);
+  for (int index = 0; index < 5; ++index)
+    manipulator->target_joints[index] =
+        object_transfer_runtime.manipulator.target.joints[index];
+  manipulator->target_finger_opening =
+      object_transfer_runtime.manipulator.target.finger_opening;
   controller_telemetry_write_snapshot(STATE_TEMP_PATH, STATE_PATH, &output.snapshot);
 }
 

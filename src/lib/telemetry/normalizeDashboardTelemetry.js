@@ -46,6 +46,9 @@ export const normalizeTelemetry = (raw, prev = INITIAL_TELEMETRY) => {
     ...((raw.objectTransfer ?? prev.objectTransfer)
       ? { objectTransfer: raw.objectTransfer ?? prev.objectTransfer }
       : {}),
+    ...((raw.manipulator ?? prev.manipulator)
+      ? { manipulator: raw.manipulator ?? prev.manipulator }
+      : {}),
     obstacleTrace,
     obstacleMap,
     cameraMap,

@@ -2,6 +2,7 @@
 
 #include <assert.h>
 #include <math.h>
+#include <string.h>
 
 int main() {
   ControllerManipulatorService service;
@@ -34,5 +35,12 @@ int main() {
   const ControllerManipulatorTarget transport =
       controller_manipulator_service_target(CONTROLLER_MANIPULATOR_TRANSPORT);
   assert(fabs(transport.joints[2] - pre_grasp.joints[2]) > 0.1);
+  ControllerManipulatorPose parsed_pose = CONTROLLER_MANIPULATOR_TRANSPORT;
+  assert(controller_manipulator_pose_parse("lift", &parsed_pose));
+  assert(parsed_pose == CONTROLLER_MANIPULATOR_LIFT);
+  assert(strcmp(controller_manipulator_pose_name(parsed_pose), "lift") == 0);
+  assert(!controller_manipulator_pose_parse("unsafe", &parsed_pose));
+  assert(strcmp(controller_manipulator_step_name(CONTROLLER_MANIPULATOR_REACHED),
+                "reached") == 0);
   return 0;
 }
