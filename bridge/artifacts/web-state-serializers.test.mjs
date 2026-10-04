@@ -32,6 +32,8 @@ describe("web state serializers", () => {
   it("serializes only supported manipulator poses", () => {
     expect(createRuntimeCommandText({type:"set_manipulator_pose",commandId:13,pose:"pre_grasp"}))
       .toBe("id 13\ntype set_manipulator_pose\npose pre_grasp\n");
+    expect(createRuntimeCommandText({type:"set_manipulator_pose",commandId:14,pose:"platform_lift"}))
+      .toContain("pose platform_lift");
     expect(() => createRuntimeCommandText({type:"set_manipulator_pose",pose:"unsafe"}))
       .toThrow("Unsupported manipulator pose.");
   });

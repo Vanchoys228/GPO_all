@@ -1,14 +1,15 @@
 const labels = {prepared:"Подготовлена, отправка не подтверждена",persisted:"Сохранена, ожидается контроллер",accepted:"Принята контроллером",running:"Выполняется",holding_for_recovery:"Груз удерживается: требуется восстановление",cancelling:"Отмена запрошена, ожидается остановка",completed:"Завершена",failed:"Ошибка исполнения",cancelled:"Отменена"};
 export default function PlannerMissionStatus({mission,onCancel,onResume}) {
   if (!mission) return null;
-  const stages={approaching_object:"Подъезд к объекту",aligning:"Выравнивание",lowering_arm:"Опускание манипулятора",grasping:"Захват",lifting:"Подъём",transporting:"Перевозка",placing:"Размещение",releasing:"Отпускание",returning_arm:"Возврат манипулятора"};
+  const stages={approaching_object:"Подъезд к объекту",aligning:"Выравнивание",lowering_arm:"Опускание манипулятора",grasping:"Захват с пола",lifting:"Подъём",placing_on_platform:"Укладка на платформу",releasing_on_platform:"Освобождение захвата",returning_arm_for_transport:"Складывание руки",transporting:"Перевозка на платформе",picking_from_platform:"Подвод руки к платформе",grasping_from_platform:"Захват с платформы",lifting_from_platform:"Снятие с платформы",placing:"Размещение",releasing:"Отпускание",returning_arm:"Возврат манипулятора"};
   return <section className="rounded-xl border border-slate-200 bg-white p-3 text-sm" aria-label="Состояние миссии">
     <div className="font-semibold">{mission.operationType === "object_transfer" ? "Перенос объекта" : "Исполнение маршрута"}</div>
     <div role="status" className="mt-1">{labels[mission.status] || "Состояние неизвестно"}</div>
     {mission.operationType === "object_transfer" && <>
       <div className="mt-1 text-xs text-slate-600">{stages[mission.stage] || "Подготовка"} · {Math.round(mission.progress || 0)}%</div>
       <div className="mt-2 h-2 overflow-hidden rounded-full bg-slate-200"><div className="h-full bg-orange-500 transition-all" style={{width:`${Math.max(0,Math.min(100,mission.progress || 0))}%`}} /></div>
-      {mission.attached && <div className="mt-1 text-xs font-medium text-emerald-700">Объект в захвате</div>}
+      {mission.attached && !mission.onPlatform && <div className="mt-1 text-xs font-medium text-emerald-700">Объект в захвате</div>}
+      {mission.onPlatform && <div className="mt-1 text-xs font-medium text-blue-700">Объект находится на грузовой платформе</div>}
     </>}
     <div className="mt-1 break-all text-xs text-slate-500">ID: {mission.missionId}</div>
     {mission.connectionError && <div className="mt-1 text-amber-700">Нет связи с сервисом. Показано последнее известное состояние.</div>}

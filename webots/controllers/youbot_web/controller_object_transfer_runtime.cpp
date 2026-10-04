@@ -9,6 +9,24 @@ constexpr double kGraspForwardMinimum = 0.20;
 constexpr double kGraspForwardMaximum = 0.62;
 constexpr double kGraspLateralMaximum = 0.14;
 constexpr double kSafeReleaseRadius = 0.30;
+constexpr double kGripperForwardOffset = 0.35;
+constexpr double kGripperCarryHeight = 0.43;
+constexpr double kPlatformOffset = -0.15;
+constexpr double kPlatformCargoHeight = 0.225;
+
+void object_carry_pose(
+    ControllerObjectTransferStage stage,
+    double *offset,
+    double *height) {
+  const int over_platform =
+      stage == CONTROLLER_TRANSFER_PLACING_ON_PLATFORM ||
+      stage == CONTROLLER_TRANSFER_RELEASING_ON_PLATFORM ||
+      stage == CONTROLLER_TRANSFER_PICKING_FROM_PLATFORM ||
+      stage == CONTROLLER_TRANSFER_GRASPING_FROM_PLATFORM ||
+      stage == CONTROLLER_TRANSFER_LIFTING_FROM_PLATFORM;
+  *offset = over_platform ? kPlatformOffset : kGripperForwardOffset;
+  *height = over_platform ? 0.34 : kGripperCarryHeight;
+}
 
 int object_in_grasp_zone(
     double robot_x,
@@ -51,6 +69,24 @@ void configure_stage(
     case CONTROLLER_TRANSFER_LOWERING_ARM: pose = CONTROLLER_MANIPULATOR_PRE_GRASP; break;
     case CONTROLLER_TRANSFER_GRASPING: pose = CONTROLLER_MANIPULATOR_GRASP; break;
     case CONTROLLER_TRANSFER_LIFTING: pose = CONTROLLER_MANIPULATOR_LIFT; break;
+    case CONTROLLER_TRANSFER_PLACING_ON_PLATFORM:
+      pose = CONTROLLER_MANIPULATOR_PLATFORM_GRASP;
+      break;
+    case CONTROLLER_TRANSFER_RELEASING_ON_PLATFORM:
+      pose = CONTROLLER_MANIPULATOR_PLATFORM_PRE_GRASP;
+      break;
+    case CONTROLLER_TRANSFER_RETURNING_ARM_FOR_TRANSPORT:
+      pose = CONTROLLER_MANIPULATOR_TRANSPORT;
+      break;
+    case CONTROLLER_TRANSFER_PICKING_FROM_PLATFORM:
+      pose = CONTROLLER_MANIPULATOR_PLATFORM_PRE_GRASP;
+      break;
+    case CONTROLLER_TRANSFER_GRASPING_FROM_PLATFORM:
+      pose = CONTROLLER_MANIPULATOR_PLATFORM_GRASP;
+      break;
+    case CONTROLLER_TRANSFER_LIFTING_FROM_PLATFORM:
+      pose = CONTROLLER_MANIPULATOR_PLATFORM_LIFT;
+      break;
     case CONTROLLER_TRANSFER_PLACING: pose = CONTROLLER_MANIPULATOR_PLACE; break;
     case CONTROLLER_TRANSFER_RELEASING: pose = CONTROLLER_MANIPULATOR_PRE_GRASP; break;
     case CONTROLLER_TRANSFER_RETURNING_ARM: pose = CONTROLLER_MANIPULATOR_TRANSPORT; break;
@@ -140,7 +176,9 @@ void controller_object_transfer_runtime_step(
     }
     if (runtime && runtime->object.attached)
       controller_webots_object_adapter_update(
-          &runtime->object, robot_x, robot_y, heading, 0.35, 0.43);
+          &runtime->object, robot_x, robot_y, heading,
+          kGripperForwardOffset, kGripperCarryHeight,
+          kPlatformOffset, kPlatformCargoHeight);
     return;
   }
 
@@ -161,6 +199,7 @@ void controller_object_transfer_runtime_step(
   input.grasp_valid = object_in_grasp_zone(
       robot_x, robot_y, heading, object_x, object_y);
   input.attached = runtime->object.attached;
+  input.on_platform = runtime->object.on_platform;
   input.release_safe = runtime->object.attached &&
       std::hypot(object_x - runtime->service.state.destination_x,
                  object_y - runtime->service.state.destination_y) <=
@@ -173,12 +212,16 @@ void controller_object_transfer_runtime_step(
   const ControllerObjectTransferStage before = runtime->service.state.stage;
   ControllerObjectTransferOutput output = {};
   controller_object_transfer_service_step(&runtime->service, &input, now, &output);
-  if (output.stop_base || (before >= CONTROLLER_TRANSFER_ALIGNING &&
-                           before <= CONTROLLER_TRANSFER_LIFTING) ||
-      before >= CONTROLLER_TRANSFER_PLACING) {
+  if (output.stop_base ||
+      (before != CONTROLLER_TRANSFER_APPROACHING_OBJECT &&
+       before != CONTROLLER_TRANSFER_TRANSPORTING)) {
     controller_webots_devices_reset_wheels(runtime->devices);
   }
   if (output.attach_object) controller_webots_object_adapter_attach(&runtime->object);
+  if (output.store_object_on_platform)
+    controller_webots_object_adapter_store_on_platform(&runtime->object);
+  if (output.take_object_from_platform)
+    controller_webots_object_adapter_take_from_platform(&runtime->object);
   if (output.detach_object) controller_webots_object_adapter_detach(&runtime->object);
 
   if (before != runtime->service.state.stage) {
@@ -190,9 +233,14 @@ void controller_object_transfer_runtime_step(
           runtime->service.state.mission_id);
     }
   }
-  if (runtime->object.attached)
+  if (runtime->object.attached) {
+    double carry_offset = kGripperForwardOffset;
+    double carry_height = kGripperCarryHeight;
+    object_carry_pose(runtime->service.state.stage, &carry_offset, &carry_height);
     controller_webots_object_adapter_update(
-        &runtime->object, robot_x, robot_y, heading, 0.35, 0.43);
+        &runtime->object, robot_x, robot_y, heading,
+        carry_offset, carry_height, kPlatformOffset, kPlatformCargoHeight);
+  }
   if ((runtime->service.state.status == CONTROLLER_TRANSFER_FAILED ||
        runtime->service.state.status == CONTROLLER_TRANSFER_CANCELLED) &&
       !runtime->object.attached &&

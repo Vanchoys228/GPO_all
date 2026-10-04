@@ -10,6 +10,9 @@ const ControllerManipulatorTarget kTargets[] = {
     {{0.0, 0.65, -1.25, 1.45, 0.0}, 0.001},
     {{0.0, 1.15, -1.95, 1.65, 0.0}, 0.001},
     {{0.0, 0.72, -1.35, 1.48, 0.0}, 0.001},
+    {{2.92, 0.82, -1.55, 1.38, 0.0}, 0.011},
+    {{2.92, 0.82, -1.55, 1.38, 0.0}, 0.001},
+    {{2.92, 1.08, -1.82, 1.52, 0.0}, 0.001},
 };
 }
 
@@ -24,14 +27,17 @@ void controller_manipulator_service_init(ControllerManipulatorService *service) 
 
 ControllerManipulatorTarget controller_manipulator_service_target(
     ControllerManipulatorPose pose) {
-  if (pose < CONTROLLER_MANIPULATOR_TRANSPORT || pose > CONTROLLER_MANIPULATOR_PLACE)
+  if (pose < CONTROLLER_MANIPULATOR_TRANSPORT ||
+      pose > CONTROLLER_MANIPULATOR_PLATFORM_LIFT)
     pose = CONTROLLER_MANIPULATOR_TRANSPORT;
   return kTargets[pose];
 }
 
 const char *controller_manipulator_pose_name(ControllerManipulatorPose pose) {
-  static const char *names[] = {"transport", "pre_grasp", "grasp", "lift", "place"};
-  return pose >= CONTROLLER_MANIPULATOR_TRANSPORT && pose <= CONTROLLER_MANIPULATOR_PLACE
+  static const char *names[] = {"transport", "pre_grasp", "grasp", "lift", "place",
+      "platform_pre_grasp", "platform_grasp", "platform_lift"};
+  return pose >= CONTROLLER_MANIPULATOR_TRANSPORT &&
+             pose <= CONTROLLER_MANIPULATOR_PLATFORM_LIFT
       ? names[pose] : "transport";
 }
 
@@ -39,7 +45,7 @@ int controller_manipulator_pose_parse(
     const char *name, ControllerManipulatorPose *pose) {
   if (!name || !pose) return 0;
   for (int index = CONTROLLER_MANIPULATOR_TRANSPORT;
-       index <= CONTROLLER_MANIPULATOR_PLACE; ++index) {
+       index <= CONTROLLER_MANIPULATOR_PLATFORM_LIFT; ++index) {
     const ControllerManipulatorPose candidate =
         static_cast<ControllerManipulatorPose>(index);
     if (std::strcmp(name, controller_manipulator_pose_name(candidate)) == 0) {

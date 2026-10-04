@@ -23,14 +23,27 @@ int main() {
 
   ControllerObjectTransferInput input = ready_input();
   double now = 1.0;
+  int stored_on_platform = 0;
+  int taken_from_platform = 0;
+  int transported_on_platform = 0;
   while (service.state.status != CONTROLLER_TRANSFER_COMPLETED && now < 20.0) {
+    input.on_platform = service.state.on_platform;
     ControllerObjectTransferOutput output = {};
     controller_object_transfer_service_step(&service, &input, now, &output);
+    stored_on_platform |= output.store_object_on_platform;
+    taken_from_platform |= output.take_object_from_platform;
+    transported_on_platform |=
+        service.state.stage == CONTROLLER_TRANSFER_TRANSPORTING &&
+        service.state.on_platform;
     now += 1.0;
   }
   assert(service.state.status == CONTROLLER_TRANSFER_COMPLETED);
   assert(service.state.stage == CONTROLLER_TRANSFER_STAGE_NONE);
   assert(service.state.progress == 100);
+  assert(stored_on_platform);
+  assert(taken_from_platform);
+  assert(transported_on_platform);
+  assert(!service.state.on_platform);
 
   controller_object_transfer_service_init(&service);
   assert(controller_object_transfer_service_start(&service, "transfer-2", "demo-box", 1.0, 1.0, 0.0));
@@ -47,6 +60,7 @@ int main() {
   controller_object_transfer_service_init(&service);
   controller_object_transfer_service_start(&service, "transfer-3", "demo-box", 1.0, 1.0, 0.0);
   service.state.attached = 1;
+  service.state.on_platform = 1;
   input = ready_input();
   input.cancel_requested = 1;
   input.release_safe = 0;
@@ -75,6 +89,7 @@ int main() {
   controller_object_transfer_service_start(
       &service, "transfer-5", "demo-box", 1.0, 1.0, 0.0);
   service.state.attached = 1;
+  service.state.on_platform = 1;
   input = ready_input();
   input.cancel_requested = 1;
   controller_object_transfer_service_step(&service, &input, 1.0, &output);

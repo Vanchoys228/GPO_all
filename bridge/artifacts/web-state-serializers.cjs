@@ -40,7 +40,8 @@ const createMotionProfileText = (motion) => {
 const createRuntimeCommandText = (payload) => {
   const commandId = Number(payload?.commandId) > 0 ? Math.trunc(Number(payload.commandId)) : Date.now();
   if (payload?.type === "set_manipulator_pose") {
-    const allowed = new Set(["transport", "pre_grasp", "grasp", "lift", "place"]);
+    const allowed = new Set(["transport", "pre_grasp", "grasp", "lift", "place",
+      "platform_pre_grasp", "platform_grasp", "platform_lift"]);
     const pose = String(payload.pose || "").trim();
     if (!allowed.has(pose)) throw new Error("Unsupported manipulator pose.");
     return `id ${commandId}\ntype set_manipulator_pose\npose ${pose}\n`;

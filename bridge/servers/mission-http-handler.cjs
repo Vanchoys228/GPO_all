@@ -3,7 +3,7 @@ const {sendJson,sendError}=require("./service-http.cjs");
 const publicMission = mission => ({ok:true,missionId:mission.missionId,operationType:mission.operationType || "route",status:mission.status,
   sceneRevision:mission.command?.sceneRevision,createdAt:mission.createdAt,updatedAt:mission.updatedAt,
   feedbackFresh:mission.feedbackFresh,lastFeedbackAt:mission.lastFeedbackAt,connectionError:mission.connectionError,
-  stage:mission.stage,progress:mission.progress,errorCode:mission.errorCode,attached:mission.attached,
+  stage:mission.stage,progress:mission.progress,errorCode:mission.errorCode,attached:mission.attached,onPlatform:mission.onPlatform,
   controllerBootId:mission.controllerBootId,objectPose:mission.objectPose});
 const createMissionHttpHandler = ({missionService,getStatus,ready=async()=>true}) => async(request,response)=>{
   if(!isAllowedOrigin(request.headers.origin))return sendJson(response,403,{ok:false,error:"Origin is not allowed."});

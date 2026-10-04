@@ -8,7 +8,13 @@ typedef enum {
   CONTROLLER_TRANSFER_LOWERING_ARM,
   CONTROLLER_TRANSFER_GRASPING,
   CONTROLLER_TRANSFER_LIFTING,
+  CONTROLLER_TRANSFER_PLACING_ON_PLATFORM,
+  CONTROLLER_TRANSFER_RELEASING_ON_PLATFORM,
+  CONTROLLER_TRANSFER_RETURNING_ARM_FOR_TRANSPORT,
   CONTROLLER_TRANSFER_TRANSPORTING,
+  CONTROLLER_TRANSFER_PICKING_FROM_PLATFORM,
+  CONTROLLER_TRANSFER_GRASPING_FROM_PLATFORM,
+  CONTROLLER_TRANSFER_LIFTING_FROM_PLATFORM,
   CONTROLLER_TRANSFER_PLACING,
   CONTROLLER_TRANSFER_RELEASING,
   CONTROLLER_TRANSFER_RETURNING_ARM,
@@ -33,6 +39,7 @@ typedef struct {
   ControllerObjectTransferStage stage;
   int progress;
   int attached;
+  int on_platform;
   int gripper_closed;
   int alignment_retries;
   char error_code[64];
@@ -45,6 +52,7 @@ typedef struct {
   int arm_reached;
   int grasp_valid;
   int attached;
+  int on_platform;
   int release_safe;
   int cancel_requested;
 } ControllerObjectTransferInput;
@@ -56,6 +64,8 @@ typedef struct {
   int close_gripper;
   int attach_object;
   int detach_object;
+  int store_object_on_platform;
+  int take_object_from_platform;
 } ControllerObjectTransferOutput;
 
 #endif

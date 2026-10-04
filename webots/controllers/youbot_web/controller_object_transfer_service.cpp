@@ -8,7 +8,8 @@ constexpr double kTimeout = 30.0;
 constexpr double kNavigationTimeout = 180.0;
 
 int progress(ControllerObjectTransferStage stage) {
-  static const int values[] = {0, 5, 15, 25, 35, 45, 60, 78, 88, 95};
+  static const int values[] = {
+      0, 5, 10, 16, 22, 28, 34, 39, 44, 50, 65, 70, 76, 82, 90, 96};
   if (stage < CONTROLLER_TRANSFER_STAGE_NONE ||
       stage > CONTROLLER_TRANSFER_RETURNING_ARM) {
     return 0;
@@ -93,6 +94,8 @@ void controller_object_transfer_service_step(
         return;
       }
       output->detach_object = 1;
+      state->attached = 0;
+      state->on_platform = 0;
     }
     state->status = CONTROLLER_TRANSFER_CANCELLED;
     state->stage = CONTROLLER_TRANSFER_STAGE_NONE;
@@ -140,6 +143,28 @@ void controller_object_transfer_service_step(
     case CONTROLLER_TRANSFER_LIFTING:
       output->request_arm_pose = 1;
       if (input->arm_reached) {
+        enter(state, CONTROLLER_TRANSFER_PLACING_ON_PLATFORM, now);
+      } else if (elapsed > kTimeout) {
+        fail(state, "arm_timeout");
+      }
+      break;
+    case CONTROLLER_TRANSFER_PLACING_ON_PLATFORM:
+      output->request_arm_pose = 1;
+      if (input->arm_reached) {
+        enter(state, CONTROLLER_TRANSFER_RELEASING_ON_PLATFORM, now);
+      } else if (elapsed > kTimeout) {
+        fail(state, "platform_place_timeout");
+      }
+      break;
+    case CONTROLLER_TRANSFER_RELEASING_ON_PLATFORM:
+      output->store_object_on_platform = 1;
+      state->on_platform = 1;
+      state->gripper_closed = 0;
+      enter(state, CONTROLLER_TRANSFER_RETURNING_ARM_FOR_TRANSPORT, now);
+      break;
+    case CONTROLLER_TRANSFER_RETURNING_ARM_FOR_TRANSPORT:
+      output->request_arm_pose = 1;
+      if (input->arm_reached) {
         enter(state, CONTROLLER_TRANSFER_TRANSPORTING, now);
       } else if (elapsed > kTimeout) {
         fail(state, "arm_timeout");
@@ -148,9 +173,36 @@ void controller_object_transfer_service_step(
     case CONTROLLER_TRANSFER_TRANSPORTING:
       output->request_navigation = 1;
       if (input->navigation_reached) {
-        enter(state, CONTROLLER_TRANSFER_PLACING, now);
+        enter(state, CONTROLLER_TRANSFER_PICKING_FROM_PLATFORM, now);
       } else if (elapsed > kNavigationTimeout) {
         fail(state, "navigation_failed");
+      }
+      break;
+    case CONTROLLER_TRANSFER_PICKING_FROM_PLATFORM:
+      output->request_arm_pose = 1;
+      if (input->arm_reached) {
+        enter(state, CONTROLLER_TRANSFER_GRASPING_FROM_PLATFORM, now);
+      } else if (elapsed > kTimeout) {
+        fail(state, "platform_pick_timeout");
+      }
+      break;
+    case CONTROLLER_TRANSFER_GRASPING_FROM_PLATFORM:
+      output->close_gripper = 1;
+      if (input->attached && input->on_platform) {
+        output->take_object_from_platform = 1;
+        state->on_platform = 0;
+        state->gripper_closed = 1;
+        enter(state, CONTROLLER_TRANSFER_LIFTING_FROM_PLATFORM, now);
+      } else if (elapsed > kTimeout) {
+        fail(state, "platform_grasp_failed");
+      }
+      break;
+    case CONTROLLER_TRANSFER_LIFTING_FROM_PLATFORM:
+      output->request_arm_pose = 1;
+      if (input->arm_reached) {
+        enter(state, CONTROLLER_TRANSFER_PLACING, now);
+      } else if (elapsed > kTimeout) {
+        fail(state, "arm_timeout");
       }
       break;
     case CONTROLLER_TRANSFER_PLACING:
@@ -169,6 +221,7 @@ void controller_object_transfer_service_step(
     case CONTROLLER_TRANSFER_RELEASING:
       output->detach_object = 1;
       state->attached = 0;
+      state->on_platform = 0;
       state->gripper_closed = 0;
       enter(state, CONTROLLER_TRANSFER_RETURNING_ARM, now);
       break;
@@ -196,6 +249,10 @@ int controller_object_transfer_service_resume(
   }
   service->state.status = CONTROLLER_TRANSFER_RUNNING;
   service->state.error_code[0] = '\0';
-  enter(&service->state, CONTROLLER_TRANSFER_TRANSPORTING, now);
+  enter(&service->state,
+        service->state.on_platform
+            ? CONTROLLER_TRANSFER_TRANSPORTING
+            : CONTROLLER_TRANSFER_PLACING_ON_PLATFORM,
+        now);
   return 1;
 }

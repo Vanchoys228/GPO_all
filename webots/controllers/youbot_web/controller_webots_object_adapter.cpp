@@ -29,7 +29,26 @@ int controller_webots_object_adapter_position(
 }
 
 void controller_webots_object_adapter_attach(ControllerWebotsObjectAdapter *adapter) {
-  if (adapter) adapter->attached = 1;
+  if (adapter) {
+    adapter->attached = 1;
+    adapter->on_platform = 0;
+  }
+}
+
+void controller_webots_object_adapter_store_on_platform(
+    ControllerWebotsObjectAdapter *adapter) {
+  if (adapter) {
+    adapter->attached = 1;
+    adapter->on_platform = 1;
+  }
+}
+
+void controller_webots_object_adapter_take_from_platform(
+    ControllerWebotsObjectAdapter *adapter) {
+  if (adapter) {
+    adapter->attached = 1;
+    adapter->on_platform = 0;
+  }
 }
 
 void controller_webots_object_adapter_update(
@@ -38,12 +57,15 @@ void controller_webots_object_adapter_update(
     double robot_y,
     double heading,
     double forward_offset,
-    double height) {
+    double height,
+    double platform_offset,
+    double platform_height) {
   if (!adapter || !adapter->attached || !adapter->translation) return;
+  const double offset = adapter->on_platform ? platform_offset : forward_offset;
   const double value[3] = {
-      robot_x + std::cos(heading) * forward_offset,
-      robot_y + std::sin(heading) * forward_offset,
-      height,
+      robot_x + std::cos(heading) * offset,
+      robot_y + std::sin(heading) * offset,
+      adapter->on_platform ? platform_height : height,
   };
   wb_supervisor_field_set_sf_vec3f(adapter->translation, value);
 }
@@ -51,5 +73,6 @@ void controller_webots_object_adapter_update(
 void controller_webots_object_adapter_detach(ControllerWebotsObjectAdapter *adapter) {
   if (!adapter || !adapter->node) return;
   adapter->attached = 0;
+  adapter->on_platform = 0;
   wb_supervisor_node_reset_physics(adapter->node);
 }

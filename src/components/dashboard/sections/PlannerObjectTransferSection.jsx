@@ -6,6 +6,9 @@ const POSES = [
   ["grasp", "Захват"],
   ["lift", "Поднять"],
   ["place", "Поставить"],
+  ["platform_pre_grasp", "Над платформой"],
+  ["platform_grasp", "Захват с платформы"],
+  ["platform_lift", "Подъём с платформы"],
 ];
 
 export default function PlannerObjectTransferSection({ manipulator, objectTransfer, onSetPose, onStartTransfer }) {
