@@ -56,5 +56,29 @@ int main() {
   assert(controller_object_transfer_service_resume(&service, 2.0));
   assert(service.state.status == CONTROLLER_TRANSFER_RUNNING);
   assert(service.state.stage == CONTROLLER_TRANSFER_TRANSPORTING);
+
+  controller_object_transfer_service_init(&service);
+  controller_object_transfer_service_start(
+      &service, "transfer-4", "demo-box", 1.0, 1.0, 0.0);
+  input = ready_input();
+  controller_object_transfer_service_step(&service, &input, 1.0, &output);
+  controller_object_transfer_service_step(&service, &input, 2.0, &output);
+  controller_object_transfer_service_step(&service, &input, 3.0, &output);
+  input.grasp_valid = 0;
+  controller_object_transfer_service_step(&service, &input, 4.0, &output);
+  assert(service.state.stage == CONTROLLER_TRANSFER_GRASPING);
+  controller_object_transfer_service_step(&service, &input, 35.0, &output);
+  assert(service.state.status == CONTROLLER_TRANSFER_FAILED);
+  assert(strcmp(service.state.error_code, "grasp_failed") == 0);
+
+  controller_object_transfer_service_init(&service);
+  controller_object_transfer_service_start(
+      &service, "transfer-5", "demo-box", 1.0, 1.0, 0.0);
+  service.state.attached = 1;
+  input = ready_input();
+  input.cancel_requested = 1;
+  controller_object_transfer_service_step(&service, &input, 1.0, &output);
+  assert(service.state.status == CONTROLLER_TRANSFER_CANCELLED);
+  assert(output.detach_object == 1);
   return 0;
 }

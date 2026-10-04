@@ -152,6 +152,12 @@ static void write_state_snapshot(void) {
   };
   ControllerTelemetryPublisherOutput output = {0};
   controller_telemetry_publisher_build(&input, &output);
+  output.snapshot.object_position_available =
+      controller_webots_object_adapter_position(
+          &object_transfer_runtime.object,
+          &output.snapshot.object_x,
+          &output.snapshot.object_y,
+          &output.snapshot.object_z);
   ControllerTelemetryManipulator *manipulator = &output.snapshot.manipulator;
   manipulator->available = object_transfer_runtime.available;
   manipulator->pose = controller_manipulator_pose_name(

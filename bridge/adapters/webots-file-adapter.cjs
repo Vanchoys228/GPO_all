@@ -40,7 +40,7 @@ const createWebotsFileAdapter = ({artifactStore, stateDir}) => ({
       const state = JSON.parse(await fs.readFile(filename,"utf8"));
       const transfer=state.objectTransfer;
       if(transfer?.missionId===missionId) {
-        return {...transfer,missionId,status:transfer.status,observedAt:new Date(stat.mtimeMs).toISOString()};
+        return {...transfer,missionId,status:transfer.status,objectPose:transfer.position ?? null,observedAt:new Date(stat.mtimeMs).toISOString()};
       }
       if (state.navigation?.missionId !== missionId) return null;
       const navigation = state.navigation || {};

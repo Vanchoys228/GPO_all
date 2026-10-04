@@ -56,7 +56,18 @@ try {
   assert.equal(transferState.objectTransfer.status,"completed");
   assert.equal(transferState.objectTransfer.attached,false);
   assert.deepEqual(transferState.objectTransfer.destination,{x:2.5,y:0});
+  assert.ok(transferState.objectTransfer.position,"Missing transferred object position.");
+  assert.ok(Math.hypot(transferState.objectTransfer.position.x-2.5,transferState.objectTransfer.position.y)<0.3,`Object missed destination: ${JSON.stringify(transferState.objectTransfer.position)}`);
   console.log("Real Webots object transfer completed.");
+  const recoveryCommand=createRouteCommand({source:"physics-test",requestId:"physics-recovery",payload:{type:"transfer_object",objectId:"demo-box",destination:{x:6,y:0},scene:transferScene,sceneRevision:sceneRevision(transferScene)}});
+  const recoveryAck=await send(recoveryCommand);assert.equal(recoveryAck.ok,true,JSON.stringify(recoveryAck));
+  await until(async()=>{const mission=await getMission("physics-recovery");if(mission.status==="failed")throw new Error(JSON.stringify(mission));return mission.stage==="transporting" && mission.attached;} ,"transfer carrying state",60000);
+  const transferCancel=await fetch(`http://127.0.0.1:${missionPort}/api/missions/physics-recovery/cancel`,{method:"POST"});assert.equal(transferCancel.status,202);
+  await until(async()=>(await getMission("physics-recovery")).status==="holding_for_recovery","safe transfer hold",30000);
+  const heldState=JSON.parse(await readFile(path.join(stateDir,"robot_state.json"),"utf8"));assert.equal(heldState.objectTransfer.attached,true);
+  const resume=await fetch(`http://127.0.0.1:${missionPort}/api/missions/physics-recovery/resume`,{method:"POST"});assert.equal(resume.status,202);
+  await until(async()=>{const mission=await getMission("physics-recovery");if(mission.status==="failed")throw new Error(JSON.stringify(mission));return mission.status==="completed";},"recovered object transfer",120000);
+  console.log("Real Webots transfer recovery completed.");
   const longRoute=[{x:0,y:0},{x:18,y:0}];
   const second=await send(createRouteCommand({source:"physics-test",requestId:"physics-cancel",payload:{type:"route",route:longRoute,scene}}));assert.equal(second.ok,true,JSON.stringify(second));
   await until(async()=>(await getMission("physics-cancel")).status==="running","physical movement",30000);
@@ -68,7 +79,7 @@ try {
   const distance=Math.hypot(last.pose.x-first.pose.x,last.pose.y-first.pose.y);
   assert.ok(distance<0.05,`Robot continued moving after cancel: ${distance}`);
   await mkdir(path.join(root,"output"),{recursive:true});
-  await writeFile(path.join(root,"output/physics-smoke-result.json"),JSON.stringify({completed:true,manualManipulatorPoseCompleted:true,objectTransferCompleted:true,cancelled:true,postCancelDistance:distance,lastState:last},null,2));
+  await writeFile(path.join(root,"output/physics-smoke-result.json"),JSON.stringify({completed:true,manualManipulatorPoseCompleted:true,objectTransferCompleted:true,transferRecoveryCompleted:true,cancelled:true,postCancelDistance:distance,lastState:last},null,2));
   console.log(`Real Webots cancellation confirmed; movement after stop ${distance.toFixed(6)} m.`);
 } catch(error) {
   for(const child of children)console.error(child.logs.slice(-8000));

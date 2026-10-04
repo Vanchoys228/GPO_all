@@ -12,10 +12,10 @@ describe("Webots file adapter transfer feedback",()=>{
     directory=await mkdtemp(path.join(os.tmpdir(),"gpo-transfer-feedback-"));
     await writeFile(path.join(directory,"robot_state.json"),JSON.stringify({
       navigation:{missionId:"route-old",finished:true},
-      objectTransfer:{missionId:"transfer-1",status:"running",stage:"transporting",progress:62,attached:true,controllerBootId:"boot-1"},
+      objectTransfer:{missionId:"transfer-1",status:"running",stage:"transporting",progress:62,attached:true,controllerBootId:"boot-1",position:{x:2,y:3,z:0.43}},
     }));
     const adapter=adapterModule.createWebotsFileAdapter({artifactStore:{},stateDir:directory});
-    expect(await adapter.getFeedback("transfer-1")).toMatchObject({missionId:"transfer-1",status:"running",stage:"transporting",progress:62,attached:true});
+    expect(await adapter.getFeedback("transfer-1")).toMatchObject({missionId:"transfer-1",status:"running",stage:"transporting",progress:62,attached:true,objectPose:{x:2,y:3,z:0.43}});
   });
 
   it("writes transfer submissions through the transfer artifact boundary",async()=>{

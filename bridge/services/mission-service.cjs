@@ -25,7 +25,11 @@ const createMissionService = ({repository, adapter, now = () => new Date().toISO
     const feedback=await adapter.getFeedback(record.missionId);
     const matching=feedback?.missionId===record.missionId;
     const rank={persisted:0,accepted:1,running:2,holding_for_recovery:3,cancelling:4,completed:5,failed:5,cancelled:5};
-    const status=matching && feedback.status in rank && rank[feedback.status]>=rank[record.status] ? feedback.status : record.status;
+    const cancellationOutcome = record.status === "cancelling" &&
+      ["cancelled", "holding_for_recovery", "failed"].includes(feedback?.status);
+    const status=matching && feedback.status in rank &&
+      (cancellationOutcome || rank[feedback.status]>=rank[record.status])
+      ? feedback.status : record.status;
     const updated={...record,status,feedbackFresh:Boolean(matching && !feedback.cached),connectionError:null,
       ...(matching ? {stage:feedback.stage ?? null,progress:feedback.progress ?? record.progress,
         errorCode:feedback.errorCode ?? null,attached:Boolean(feedback.attached),
@@ -87,14 +91,17 @@ const createMissionService = ({repository, adapter, now = () => new Date().toISO
   const resume = missionId => serial(async()=>{
     let record=await repository.get(validateMissionId(missionId));
     if(!record) throw serviceError(404,"not_found","Mission not found.");
-    if(record.operationType!=="object_transfer" || record.status!=="holding_for_recovery") {
+    if(record.operationType!=="object_transfer") {
       throw serviceError(409,"not_recoverable","Only a held object transfer can be resumed.");
     }
     if(record.resumeDelivered)return record;
+    if(record.status!=="holding_for_recovery") {
+      throw serviceError(409,"not_recoverable","Only a held object transfer can be resumed.");
+    }
     const resumeRequestId=record.resumeRequestId || randomUUID();
     if(!record.resumeRequestId)record=await save({...record,resumeRequestId,updatedAt:now()});
     await adapter.update({type:"resume_transfer",missionId:record.missionId,destination:record.command.destination},resumeRequestId);
-    return save({...record,resumeDelivered:true,connectionError:null,updatedAt:now()});
+    return save({...record,status:"persisted",resumeDelivered:true,connectionError:null,updatedAt:now()});
   });
   return {submit,cancel,get,reconcile,update,resume,list:()=>serial(all),drain:()=>pending};
 };

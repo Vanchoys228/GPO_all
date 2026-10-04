@@ -99,6 +99,10 @@ typedef struct {
   const Waypoint *route_waypoints;
   int route_waypoint_count;
   const ControllerObjectTransferState *object_transfer;
+  int object_position_available;
+  double object_x;
+  double object_y;
+  double object_z;
   ControllerTelemetryManipulator manipulator;
 } ControllerTelemetrySnapshot;
 

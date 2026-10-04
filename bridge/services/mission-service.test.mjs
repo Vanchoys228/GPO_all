@@ -63,10 +63,20 @@ describe("mission application service", () => {
     adapter.getFeedback.mockResolvedValue({missionId:"transfer-2",status:"holding_for_recovery",stage:"placing",progress:78,errorCode:"unsafe_release",attached:true});
     expect((await service.get("transfer-2")).status).toBe("holding_for_recovery");
     await expect(service.submit(payload,{requestId:"blocked-route"})).rejects.toMatchObject({statusCode:409});
-    await service.resume("transfer-2");
+    expect((await service.resume("transfer-2")).status).toBe("persisted");
     await service.resume("transfer-2");
     expect(adapter.update).toHaveBeenCalledOnce();
     expect(adapter.update).toHaveBeenCalledWith(expect.objectContaining({type:"resume_transfer",missionId:"transfer-2"}),expect.any(String));
+    adapter.getFeedback.mockResolvedValue({missionId:"transfer-2",status:"running",stage:"transporting",progress:60,attached:true});
+    expect((await service.get("transfer-2")).status).toBe("running");
+  });
+  it("moves a cancelled carrying transfer into recovery holding", async () => {
+    const {service,adapter}=await setup();
+    await service.submit(transferPayload,{requestId:"transfer-cancel-hold"});
+    adapter.getFeedback.mockResolvedValue({missionId:"transfer-cancel-hold",status:"running",stage:"transporting",attached:true});
+    await service.get("transfer-cancel-hold");
+    adapter.getFeedback.mockResolvedValue({missionId:"transfer-cancel-hold",status:"holding_for_recovery",stage:"transporting",errorCode:"unsafe_release",attached:true});
+    expect((await service.cancel("transfer-cancel-hold")).status).toBe("holding_for_recovery");
   });
   it("does not allow resume for a route mission", async () => {
     const {service}=await setup();

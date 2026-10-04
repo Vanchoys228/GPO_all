@@ -5,6 +5,25 @@
 #include <cstring>
 
 namespace {
+constexpr double kGraspForwardMinimum = 0.20;
+constexpr double kGraspForwardMaximum = 0.62;
+constexpr double kGraspLateralMaximum = 0.14;
+constexpr double kSafeReleaseRadius = 0.30;
+
+int object_in_grasp_zone(
+    double robot_x,
+    double robot_y,
+    double heading,
+    double object_x,
+    double object_y) {
+  const double dx = object_x - robot_x;
+  const double dy = object_y - robot_y;
+  const double forward = std::cos(heading) * dx + std::sin(heading) * dy;
+  const double lateral = -std::sin(heading) * dx + std::cos(heading) * dy;
+  return forward >= kGraspForwardMinimum && forward <= kGraspForwardMaximum &&
+         std::fabs(lateral) <= kGraspLateralMaximum;
+}
+
 void set_single_waypoint(
     ControllerObjectTransferRuntime *runtime,
     double x,
@@ -69,7 +88,17 @@ void controller_object_transfer_runtime_command(
     return;
   }
   if (command->has_resume_transfer || command->has_recover_transfer) {
-    controller_object_transfer_service_resume(&runtime->service, now);
+    if (controller_object_transfer_service_resume(&runtime->service, now)) {
+      if (std::strcmp(runtime->navigation->cancelled_mission_id,
+                      runtime->service.state.mission_id) == 0) {
+        runtime->navigation->cancelled_mission_id[0] = '\0';
+      }
+      set_single_waypoint(
+          runtime,
+          runtime->service.state.destination_x - 0.35,
+          runtime->service.state.destination_y,
+          runtime->service.state.mission_id);
+    }
     return;
   }
   if (!command->has_transfer_object || !runtime->available) return;
@@ -125,14 +154,17 @@ void controller_object_transfer_runtime_step(
 
   double object_x = 0.0, object_y = 0.0;
   controller_webots_object_adapter_position(&runtime->object, &object_x, &object_y, nullptr);
-  const double object_distance = std::hypot(object_x - robot_x, object_y - robot_y);
   ControllerObjectTransferInput input = {};
   input.navigation_reached = runtime->navigation->route_finished;
   input.base_aligned = input.navigation_reached;
   input.arm_reached = arm_state == CONTROLLER_MANIPULATOR_REACHED;
-  input.grasp_valid = object_distance < 0.8;
+  input.grasp_valid = object_in_grasp_zone(
+      robot_x, robot_y, heading, object_x, object_y);
   input.attached = runtime->object.attached;
-  input.release_safe = 1;
+  input.release_safe = runtime->object.attached &&
+      std::hypot(object_x - runtime->service.state.destination_x,
+                 object_y - runtime->service.state.destination_y) <=
+          kSafeReleaseRadius;
   input.cancel_requested =
       runtime->navigation->cancelled_mission_id[0] &&
       std::strcmp(runtime->navigation->cancelled_mission_id,
@@ -161,4 +193,10 @@ void controller_object_transfer_runtime_step(
   if (runtime->object.attached)
     controller_webots_object_adapter_update(
         &runtime->object, robot_x, robot_y, heading, 0.35, 0.43);
+  if ((runtime->service.state.status == CONTROLLER_TRANSFER_FAILED ||
+       runtime->service.state.status == CONTROLLER_TRANSFER_CANCELLED) &&
+      !runtime->object.attached &&
+      runtime->manipulator.pose != CONTROLLER_MANIPULATOR_TRANSPORT) {
+    controller_object_transfer_runtime_set_pose(runtime, "transport", now);
+  }
 }

@@ -8,6 +8,7 @@ vi.mock("../services/missionClient", () => ({
   getMission:vi.fn(),
   listMissions:vi.fn(async () => []),
   cancelMission:vi.fn(),
+  resumeMission:vi.fn(),
 }));
 let root;
 afterEach(async () => {if(root) await act(async () => root.unmount());root=null;vi.clearAllMocks();vi.useRealTimers();});

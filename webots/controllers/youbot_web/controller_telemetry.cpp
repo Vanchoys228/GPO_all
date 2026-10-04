@@ -143,6 +143,12 @@ int controller_telemetry_write_snapshot(
   fprintf(file, "    \"attached\": %s,\n", json_bool(transfer && transfer->attached));
   fprintf(file, "    \"destination\": {\"x\": %.6f, \"y\": %.6f},\n",
       transfer ? transfer->destination_x : 0.0, transfer ? transfer->destination_y : 0.0);
+  if (snapshot->object_position_available) {
+    fprintf(file, "    \"position\": {\"x\": %.6f, \"y\": %.6f, \"z\": %.6f},\n",
+        snapshot->object_x, snapshot->object_y, snapshot->object_z);
+  } else {
+    fprintf(file, "    \"position\": null,\n");
+  }
   fprintf(file, "    \"errorCode\": \"%s\"\n  },\n", transfer ? transfer->error_code : "");
   const ControllerTelemetryManipulator *manipulator = &snapshot->manipulator;
   fprintf(file, "  \"manipulator\": {\n");

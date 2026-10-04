@@ -1,5 +1,5 @@
 import {useCallback,useEffect,useState} from "react";
-import {getMission,listMissions,cancelMission} from "../services/missionClient";
+import {getMission,listMissions,cancelMission,resumeMission} from "../services/missionClient";
 const terminal = new Set(["completed","failed","cancelled"]);
 export const useMissionTracking = ({onStarted,fetchMission = getMission}) => {
   const [missionId,setMissionId] = useState(null);
@@ -7,6 +7,11 @@ export const useMissionTracking = ({onStarted,fetchMission = getMission}) => {
   const cancel = useCallback(async () => {
     if (!missionId) return;
     try {setState(await cancelMission(missionId));}
+    catch(error) {setState(previous => ({...previous,connectionError:error.message}));}
+  },[missionId]);
+  const resume = useCallback(async () => {
+    if (!missionId) return;
+    try {setState(await resumeMission(missionId));}
     catch(error) {setState(previous => ({...previous,connectionError:error.message}));}
   },[missionId]);
   const track = useCallback(ack => {
@@ -52,5 +57,5 @@ export const useMissionTracking = ({onStarted,fetchMission = getMission}) => {
     poll();
     return () => {controller.abort();clearTimeout(timer);};
   },[missionId,fetchMission,onStarted]);
-  return {state,track,cancel};
+  return {state,track,cancel,resume};
 };
