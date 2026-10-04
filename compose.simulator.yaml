@@ -51,6 +51,7 @@ services:
       WEB_STATE_DIR: /data/webots
       WEBOTS_MODE: "${WEBOTS_MODE:-realtime}"
       WEBOTS_RENDERER: "${WEBOTS_RENDERER:-cpu}"
+      WEBOTS_UI: "${WEBOTS_UI:-browser}"
       WEBOTS_VIEW_FPS: "${WEBOTS_VIEW_FPS:-30}"
     volumes: [simulator-state:/data/webots]
     ports: ['127.0.0.1:1234:1234']

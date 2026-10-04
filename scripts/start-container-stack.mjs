@@ -4,7 +4,7 @@ import path from "node:path";
 const root = path.resolve(import.meta.dirname, "..");
 const project = process.env.STACK_PROJECT || "gpo-full";
 const args = process.argv.slice(2);
-const allowed = new Set(["--no-build", "--cpu", "--gpu"]);
+const allowed = new Set(["--no-build", "--cpu", "--gpu", "--gui"]);
 for (const arg of args) {
   if (!allowed.has(arg)) throw new Error(`Unknown option: ${arg}`);
 }
@@ -59,17 +59,24 @@ if (args.includes("--gpu") && !gpuAvailable) {
   throw new Error("GPU mode requested, but Docker cannot access WSLg /dev/dxg and its graphics mounts.");
 }
 const useGpu = !args.includes("--cpu") && gpuAvailable;
+const useGui = args.includes("--gui");
+if (useGui && !useGpu) {
+  throw new Error("Webots GUI requires Docker Desktop with working WSLg GPU access. Remove --gui to use the browser viewer.");
+}
 
 const renderer = useGpu ? (args.includes("--gpu") ? "gpu" : "auto") : "cpu";
 console.log(useGpu
   ? "GPU доступен: запускаю Webots с аппаратным OpenGL (с автоматическим откатом на CPU)."
   : "Совместимый GPU/WSLg не найден: запускаю Webots на CPU.");
+if (useGui) console.log("Открываю полное окно Webots через WSLg.");
 const started = await run([
   "compose",
   "-p", project,
   ...baseFiles,
   ...(useGpu ? gpuFiles : []),
   "up", "-d", "--wait", "--wait-timeout", "180",
-], { env: { ...process.env, WEBOTS_RENDERER: renderer } });
+], { env: { ...process.env, WEBOTS_RENDERER: renderer, WEBOTS_UI: useGui ? "gui" : "browser" } });
 if (started.code !== 0) process.exit(started.code || 1);
-console.log("Стек готов: http://127.0.0.1:8080/dashboard");
+console.log(useGui
+  ? "Стек готов: окно Webots открыто; dashboard: http://127.0.0.1:8080/dashboard"
+  : "Стек готов: http://127.0.0.1:8080/dashboard");
