@@ -35,7 +35,7 @@ if [ "$renderer" != cpu ]; then
     grep 'OpenGL renderer string:' /tmp/webots-renderer.log
     if [ "$ui" = gui ]; then
       echo 'Webots UI: native WSLg window with full scene'
-      exec webots --batch --stdout --stderr --mode="$mode" --stream=w3d /project/worlds/youbot_only.wbt
+      exec webots --batch --stdout --stderr --mode="$mode" /project/worlds/youbot_only.wbt
     fi
     exec webots --batch --stdout --stderr --mode="$mode" --no-rendering --stream=w3d /project/worlds/youbot_only.wbt
   fi

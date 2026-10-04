@@ -6,9 +6,11 @@
 typedef struct {
   WbNodeRef node;
   WbFieldRef translation;
+  WbFieldRef rotation;
   int attached;
   int on_platform;
-  double height;
+  int pose_initialized;
+  double position[3];
 } ControllerWebotsObjectAdapter;
 
 int controller_webots_object_adapter_init(
