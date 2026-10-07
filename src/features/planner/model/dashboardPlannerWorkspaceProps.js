@@ -32,6 +32,7 @@ export const createLeftSidebarProps = ({ state, runtime, derived, actions }) => 
     status: route.status,
     mission: runtime.mission?.state,
     onCancelMission: runtime.mission?.cancel,
+    onResumeMission: runtime.mission?.resume,
     energyWarning: route.energyWarning,
     routeBlocked: plannerModel.routeBlocked,
     algorithmFields: viewModel.algorithmFields,

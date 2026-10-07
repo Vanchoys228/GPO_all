@@ -22,6 +22,7 @@ export default function PlannerLeftSidebar({
   status,
   mission,
   onCancelMission,
+  onResumeMission,
   energyWarning,
   routeBlocked,
   algorithmFields,
@@ -92,7 +93,7 @@ export default function PlannerLeftSidebar({
       </div>
 
       <div className="min-h-0 min-w-0 max-w-full flex-1 overflow-x-hidden overflow-y-auto overscroll-contain p-4 space-y-4 [scrollbar-gutter:stable]">
-      <PlannerMissionStatus mission={mission} onCancel={onCancelMission} />
+      <PlannerMissionStatus mission={mission} onCancel={onCancelMission} onResume={onResumeMission} />
       <PlannerObjectTransferSection onStartTransfer={onStartObjectTransfer} />
       <PlannerSetupSection
         activePointKind={activePointKind}

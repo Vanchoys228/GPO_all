@@ -25,12 +25,22 @@ const createMissionService = ({repository, adapter, now = () => new Date().toISO
     const feedback=await adapter.getFeedback(record.missionId);
     const matching=feedback?.missionId===record.missionId;
     const rank={persisted:0,accepted:1,running:2,holding_for_recovery:3,cancelling:4,completed:5,failed:5,cancelled:5};
-    const status=matching && feedback.status in rank && rank[feedback.status]>=rank[record.status] ? feedback.status : record.status;
-    const updated={...record,status,feedbackFresh:Boolean(matching && !feedback.cached),connectionError:null,
+    const resumed=record.status==="holding_for_recovery" && feedback?.status==="running" && !feedback.cached && Boolean(record.resumeRequestId);
+    const safelyHeld=record.operationType==="object_transfer" && feedback?.status==="holding_for_recovery";
+    const status=matching && feedback.status in rank && (rank[feedback.status]>=rank[record.status] || resumed || safelyHeld) ? feedback.status : record.status;
+    const validRecoveryEpoch=matching && !feedback.cached && Number.isSafeInteger(feedback.recoveryEpoch) && feedback.recoveryEpoch>=0;
+    const controllerRecoveryEpoch=validRecoveryEpoch ? Math.max(record.controllerRecoveryEpoch || 0,feedback.recoveryEpoch) : record.controllerRecoveryEpoch;
+    const advancedRecovery=validRecoveryEpoch && feedback.recoveryEpoch>(record.controllerRecoveryEpoch || 0);
+    const enteredRecovery=status==="holding_for_recovery" && (record.status!==status || advancedRecovery);
+    const leftRecovery=record.status==="holding_for_recovery" && status!==record.status;
+    const updated={...record,status,controllerRecoveryEpoch,
+      ...(enteredRecovery ? {recoveryEpoch:(record.recoveryEpoch || 0)+1,resumeRequestId:null,resumeDelivered:false} : {}),
+      ...(leftRecovery ? {resumeRequestId:null,resumeDelivered:false} : {}),
+      feedbackFresh:Boolean(matching && !feedback.cached),connectionError:null,
       ...(matching ? {stage:feedback.stage ?? null,progress:feedback.progress ?? record.progress,
-        errorCode:feedback.errorCode ?? null,attached:Boolean(feedback.attached),
+        errorCode:feedback.errorCode ?? null,attached:feedback.attached === undefined ? record.attached : Boolean(feedback.attached),
         controllerBootId:feedback.controllerBootId ?? record.controllerBootId,
-        objectPose:feedback.objectPose ?? record.objectPose} : {}),
+        objectPose:feedback.objectPose ?? record.objectPose,manipulator:feedback.manipulator ?? record.manipulator} : {}),
       ...(matching ? {lastFeedbackAt:feedback.observedAt || now()} : {}),
       updatedAt:status!==record.status ? now() : record.updatedAt};
     // Do not rewrite SQLite on every idle poll without a changed observation.
@@ -89,6 +99,13 @@ const createMissionService = ({repository, adapter, now = () => new Date().toISO
     if(!record) throw serviceError(404,"not_found","Mission not found.");
     if(record.operationType!=="object_transfer" || record.status!=="holding_for_recovery") {
       throw serviceError(409,"not_recoverable","Only a held object transfer can be resumed.");
+    }
+    record=await refresh(record);
+    if(record.status!=="holding_for_recovery") {
+      throw serviceError(409,"not_recoverable","Only a held object transfer can be resumed.");
+    }
+    if(record.attached!==false && record.feedbackFresh && record.manipulator?.attachmentEvidence===false) {
+      throw serviceError(409,"attachment_unconfirmed","Physical attachment is not confirmed. Restore the grip before resuming.");
     }
     if(record.resumeDelivered)return record;
     const resumeRequestId=record.resumeRequestId || randomUUID();

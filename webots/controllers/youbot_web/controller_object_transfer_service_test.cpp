@@ -17,6 +17,25 @@ static ControllerObjectTransferInput ready_input() {
 int main() {
   ControllerObjectTransferService service;
   controller_object_transfer_service_init(&service);
+  controller_object_transfer_service_start(&service, "guarded", "demo-box", 1.0, 0.0, 0.0);
+  service.state.stage = CONTROLLER_TRANSFER_GRASPING;
+  ControllerObjectTransferInput premature = ready_input();
+  premature.arm_reached = 0;
+  ControllerObjectTransferOutput guarded_output = {};
+  controller_object_transfer_service_step(&service, &premature, 0.1, &guarded_output);
+  assert(service.state.stage == CONTROLLER_TRANSFER_GRASPING);
+  assert(!guarded_output.attach_object);
+  service.state.stage=CONTROLLER_TRANSFER_RELEASING;
+  premature.arm_reached=1;
+  premature.release_safe=0;
+  controller_object_transfer_service_step(&service,&premature,0.2,&guarded_output);
+  assert(!guarded_output.detach_object);
+  service.state.stage=CONTROLLER_TRANSFER_TRANSPORTING;
+  service.state.attached=1;
+  premature.attached=0;
+  controller_object_transfer_service_step(&service,&premature,0.3,&guarded_output);
+  assert(service.state.status==CONTROLLER_TRANSFER_HOLDING_FOR_RECOVERY);
+  controller_object_transfer_service_init(&service);
   assert(controller_object_transfer_service_start(
       &service, "transfer-1", "demo-box", 4.0, -2.0, 0.0));
   assert(service.state.stage == CONTROLLER_TRANSFER_APPROACHING_OBJECT);
@@ -55,6 +74,13 @@ int main() {
   assert(strcmp(service.state.error_code, "unsafe_release") == 0);
   assert(controller_object_transfer_service_resume(&service, 2.0));
   assert(service.state.status == CONTROLLER_TRANSFER_RUNNING);
-  assert(service.state.stage == CONTROLLER_TRANSFER_TRANSPORTING);
+  assert(service.state.stage == CONTROLLER_TRANSFER_LIFTING);
+  service.state.status=CONTROLLER_TRANSFER_HOLDING_FOR_RECOVERY;
+  service.state.attached=0;
+  assert(controller_object_transfer_service_resume(&service,3.0));
+  assert(service.state.stage==CONTROLLER_TRANSFER_RETURNING_ARM);
+  assert(service.state.cancel_pending);
+  service.state.status=CONTROLLER_TRANSFER_HOLDING_FOR_RECOVERY;
+  assert(!controller_object_transfer_service_start(&service,"replacement","demo-box",1.0,0.0,4.0));
   return 0;
 }
